@@ -1,4 +1,4 @@
-export type PeriodPreset = "7d" | "30d" | "90d" | "custom";
+export type PeriodPreset = "today" | "7d" | "30d" | "90d" | "all" | "custom";
 
 export interface DateRange {
   preset: PeriodPreset;
@@ -6,16 +6,18 @@ export interface DateRange {
   to: Date;
 }
 
-const PRESET_DAYS: Record<Exclude<PeriodPreset, "custom">, number> = {
+const PRESET_DAYS: Record<"7d" | "30d" | "90d", number> = {
   "7d": 7,
   "30d": 30,
   "90d": 90,
 };
 
+const EPOCH = new Date(0);
+
 /**
  * Resolve um intervalo de datas a partir dos parâmetros de filtro do dashboard
- * e das estatísticas (secção 4 e 20 do CLAUDE.md: 7/30/90 dias ou intervalo
- * personalizado).
+ * e das estatísticas (secção 4 e 20 do CLAUDE.md: hoje, 7/30/90 dias, todo o
+ * período ou intervalo personalizado).
  */
 export function resolveDateRange(params: {
   period?: string;
@@ -33,8 +35,16 @@ export function resolveDateRange(params: {
     }
   }
 
-  const preset: Exclude<PeriodPreset, "custom"> =
-    params.period === "7d" || params.period === "90d" ? params.period : "30d";
+  if (params.period === "today") {
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    return { preset: "today", from: startOfToday, to: endOfToday };
+  }
+
+  if (params.period === "all") {
+    return { preset: "all", from: EPOCH, to: endOfToday };
+  }
+
+  const preset: "7d" | "30d" | "90d" = params.period === "7d" || params.period === "90d" ? params.period : "30d";
 
   const from = new Date(endOfToday);
   from.setDate(from.getDate() - PRESET_DAYS[preset] + 1);

@@ -6,7 +6,9 @@ import { checkRateLimit } from "@/lib/security/rate-limit";
 import { checkParticipationAllowed } from "@/features/play/limits";
 import { getOrCreateVisitorCookieId } from "@/features/play/cookie";
 import { getRequestIp } from "@/features/play/request-ip";
+import { parseUserAgent } from "@/features/play/user-agent";
 import { canTestCampaign } from "@/features/play/test-mode";
+import { headers } from "next/headers";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
 import { computeMemoryScore } from "@/features/memory-game/scoring";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
@@ -128,6 +130,9 @@ export async function startParticipationAction(
   });
   if (!latestVersion) return { ok: false, reason: "not_active" };
 
+  const userAgent = (await headers()).get("user-agent");
+  const { deviceType, browser, os } = parseUserAgent(userAgent);
+
   const participation = await prisma.participation.create({
     data: {
       campaignId: campaign.id,
@@ -143,6 +148,9 @@ export async function startParticipationAction(
       utmTerm: input.utm?.term,
       sessionId: input.sessionId,
       ipAddress: ip,
+      deviceType,
+      browser,
+      os,
     },
   });
 
