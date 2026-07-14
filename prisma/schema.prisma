@@ -7,7 +7,905 @@ datasource db {
   provider = "postgresql"
 }
 
-model Probe {
-  id   String @id @default(cuid())
-  name String
+// Referências a MediaAsset fora das relações de posse direta (logótipos, fundos,
+// imagens de perguntas/respostas/segmentos/prémios/pares) são guardadas como IDs
+// simples (`xMediaId`), resolvidas em lote pela aplicação, em vez de dezenas de
+// relações Prisma nomeadas para o mesmo alvo — mantém o schema legível.
+
+// ============================================================================
+// Identidade, organizações e permissões (CLAUDE.md secções 3-5)
+// ============================================================================
+
+enum MembershipRole {
+  ORG_ADMIN
+  EDITOR
+  ANALYST
+  VIEWER
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String
+  email           String    @unique
+  passwordHash    String
+  isSuperAdmin    Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  memberships             Membership[]
+  workspaceMemberships    WorkspaceMembership[]
+  campaignsOwned          Campaign[]               @relation("CampaignOwner")
+  mediaUploaded           MediaAsset[]
+  auditLogs               AuditLog[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+
+  @@index([email])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Organization {
+  id                  String    @id @default(cuid())
+  name                String
+  slug                String    @unique
+  privacyContactEmail String?
+  dataRetentionDays   Int?
+  defaultTimezone     String    @default("Europe/Lisbon")
+  suspendedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  memberships  Membership[]
+  workspaces   Workspace[]
+  brandKits    CampaignTheme[]
+  mediaAssets  MediaAsset[]
+  auditLogs    AuditLog[]
+  participants Participant[]
+  campaigns    Campaign[]
+
+  @@index([slug])
+}
+
+model Membership {
+  id             String         @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MembershipRole
+  createdAt      DateTime       @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model Workspace {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      WorkspaceMembership[]
+  folders      Folder[]
+  campaigns    Campaign[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+// Restringe o acesso de EDITOR/ANALYST/VIEWER a espaços de trabalho específicos.
+// ORG_ADMIN vê todos os espaços da organização independentemente desta tabela.
+model WorkspaceMembership {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Folder {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+
+  @@index([workspaceId])
+}
+
+// ============================================================================
+// Media (secção 9)
+// ============================================================================
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  SVG
+}
+
+model MediaAsset {
+  id             String    @id @default(cuid())
+  organizationId String
+  uploadedById   String
+  kind           MediaKind
+  storageKey     String
+  url            String
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  altText        String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([organizationId])
+}
+
+// ============================================================================
+// Brand kits (secção 10)
+// ============================================================================
+
+model CampaignTheme {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  name                   String
+  isBrandKit             Boolean  @default(false)
+  sourceBrandKitId       String?
+  logoMediaId            String?
+  faviconMediaId         String?
+  backgroundImageMediaId String?
+  primaryColor           String   @default("#002E5D")
+  secondaryColor         String   @default("#00AEEF")
+  backgroundColor        String   @default("#FFFFFF")
+  textColor              String   @default("#2E3A46")
+  buttonColor            String   @default("#00AEEF")
+  buttonTextColor        String   @default("#FFFFFF")
+  fontFamily             String   @default("Montserrat")
+  borderRadiusPx         Int      @default(8)
+  shadowEnabled          Boolean  @default(true)
+  headerConfig           Json?
+  footerConfig           Json?
+  legalLinks             Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign?
+
+  @@index([organizationId, isBrandKit])
+}
+
+// ============================================================================
+// Campanhas (secções 6-8, 15-17)
+// ============================================================================
+
+enum CampaignType {
+  MEMORY
+  WHEEL
+  QUIZ
+}
+
+enum CampaignStatus {
+  DRAFT
+  IN_REVIEW
+  SCHEDULED
+  PUBLISHED
+  PAUSED
+  EXPIRED
+  ARCHIVED
+}
+
+enum ParticipationLimitType {
+  UNLIMITED
+  ONE_TOTAL
+  ONE_PER_DAY
+  ONE_PER_HOUR
+  CUSTOM_MAX
+}
+
+enum DedupStrategy {
+  EMAIL
+  PHONE
+  COOKIE
+  SESSION
+  IP
+  CODE
+  FIELD_COMBINATION
+}
+
+model Campaign {
+  id                String         @id @default(cuid())
+  organizationId    String
+  workspaceId       String
+  folderId          String?
+  type              CampaignType
+  status            CampaignStatus @default(DRAFT)
+  internalName      String
+  publicTitle       String?
+  internalReference String?
+  tags              String[]       @default([])
+  ownerId           String
+  description       String?
+  locale            String         @default("pt-PT")
+  timezone          String         @default("Europe/Lisbon")
+  slug              String         @unique
+  themeId           String?        @unique
+
+  // Ecrã inicial (secção 9)
+  startTitle       String?
+  startSubtitle    String?
+  startIntroText   String?
+  startMediaId     String?
+  startLogoMediaId String?
+  startButtonLabel String?
+  startPrizeInfo   String?
+  countdownEnabled Boolean @default(false)
+  regulationText   String?
+  legalText        String?
+
+  // Participação e elegibilidade (secção 16)
+  participationLimitType ParticipationLimitType @default(UNLIMITED)
+  participationCustomMax Int?
+  dedupStrategies        DedupStrategy[]        @default([])
+  dedupFieldCombination  String[]               @default([])
+  minAge                 Int?
+
+  // Agenda (secção 17)
+  scheduleStartAt       DateTime?
+  scheduleEndAt         DateTime?
+  scheduleBeforeMessage String?
+  scheduleAfterMessage  String?
+  scheduleRedirectUrl   String?
+
+  // Ecrã final (secção 15)
+  finalTitle       String?
+  finalMessage     String?
+  finalMediaId     String?
+  finalCtaLabel    String?
+  finalCtaUrl      String?
+  finalAllowReplay Boolean @default(false)
+  finalAllowShare  Boolean @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+  archivedAt  DateTime?
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folder       Folder?        @relation(fields: [folderId], references: [id])
+  owner        User           @relation("CampaignOwner", fields: [ownerId], references: [id])
+  theme        CampaignTheme? @relation(fields: [themeId], references: [id])
+
+  screens         CampaignScreen[]
+  leadForm        LeadForm?
+  memoryConfig    MemoryGameConfig?
+  wheelConfig     WheelConfig?
+  quizConfig      QuizConfig?
+  prizes          Prize[]
+  versions        CampaignVersion[]
+  participations  Participation[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([organizationId, workspaceId, status])
+  @@index([folderId])
+}
+
+enum ScreenKind {
+  INTERMEDIATE_BEFORE
+  INTERMEDIATE_AFTER
+}
+
+// Ecrãs intermédios opcionais (secção 15). Ecrã inicial e final vivem em Campaign
+// por serem obrigatórios e terem campos próprios; os intermédios são opcionais e
+// no máximo um antes e um depois do jogo, por isso ficam nesta tabela auxiliar.
+model CampaignScreen {
+  id                  String     @id @default(cuid())
+  campaignId          String
+  kind                ScreenKind
+  title               String?
+  text                String?
+  mediaId             String?
+  ctaLabel            String?
+  ctaUrl              String?
+  continueButtonLabel String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, kind])
+}
+
+// Snapshot imutável publicado. Participações ligam-se à versão, nunca à
+// configuração "viva" da campanha (secção 30).
+model CampaignVersion {
+  id            String   @id @default(cuid())
+  campaignId    String
+  versionNumber Int
+  snapshot      Json
+  publishedById String
+  createdAt     DateTime @default(now())
+
+  campaign       Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  publication    Publication?
+  participations Participation[]
+
+  @@unique([campaignId, versionNumber])
+}
+
+model Publication {
+  id                String   @id @default(cuid())
+  campaignVersionId String   @unique
+  publishedById     String
+  qrPngMediaId      String?
+  qrSvgMediaId      String?
+  embedHeightPx     Int      @default(720)
+  createdAt         DateTime @default(now())
+
+  campaignVersion CampaignVersion @relation(fields: [campaignVersionId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// Formulário de leads e consentimentos (secção 11)
+// ============================================================================
+
+enum LeadFormPosition {
+  BEFORE_GAME
+  AFTER_GAME
+  BEFORE_RESULT
+  BEFORE_PRIZE
+  NONE
+}
+
+enum LeadFieldType {
+  FIRST_NAME
+  LAST_NAME
+  FULL_NAME
+  EMAIL
+  PHONE
+  BIRTH_DATE
+  POSTAL_CODE
+  CITY
+  COUNTRY
+  COMPANY
+  JOB_TITLE
+  CUSTOMER_NUMBER
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  SHORT_TEXT
+  LONG_TEXT
+  DROPDOWN
+  DATE
+  CHECKBOX
+  HIDDEN
+  CONSENT
+  TERMS_ACCEPTANCE
+}
+
+model LeadForm {
+  id              String           @id @default(cuid())
+  campaignId      String           @unique
+  position        LeadFormPosition @default(BEFORE_GAME)
+  honeypotEnabled Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  campaign           Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fields             LeadFormField[]
+  consentDefinitions ConsentDefinition[]
+}
+
+model LeadFormField {
+  id              String        @id @default(cuid())
+  leadFormId      String
+  type            LeadFieldType
+  internalKey     String
+  label           String
+  placeholder     String?
+  helpText        String?
+  required        Boolean       @default(false)
+  order           Int
+  validationRegex String?
+  defaultValue    String?
+  options         Json?
+  exportMapping   String?
+
+  leadForm LeadForm @relation(fields: [leadFormId], references: [id], onDelete: Cascade)
+
+  @@unique([leadFormId, internalKey])
+}
+
+model ConsentDefinition {
+  id          String  @id @default(cuid())
+  leadFormId  String
+  text        String
+  version     Int     @default(1)
+  isMarketing Boolean @default(false)
+  required    Boolean @default(false)
+  order       Int
+
+  leadForm       LeadForm        @relation(fields: [leadFormId], references: [id], onDelete: Cascade)
+  consentRecords ConsentRecord[]
+
+  @@index([leadFormId])
+}
+
+// ============================================================================
+// Participantes, participações e consentimentos registados (secções 16, 21, 24)
+// ============================================================================
+
+model Participant {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String?
+  phone          String?
+  cookieId       String?
+  firstName      String?
+  lastName       String?
+  createdAt      DateTime  @default(now())
+  anonymizedAt   DateTime?
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  participations Participation[]
+
+  @@index([organizationId, email])
+  @@index([organizationId, phone])
+}
+
+enum ParticipationStatus {
+  STARTED
+  COMPLETED
+  ABANDONED
+  BLOCKED
+}
+
+model Participation {
+  id                String              @id @default(cuid())
+  campaignId        String
+  campaignVersionId String
+  participantId     String?
+  status            ParticipationStatus @default(STARTED)
+  isTest            Boolean             @default(false)
+  idempotencyKey    String              @unique
+  leadFormResponse  Json?
+  resultSummary     Json?
+  source            String?
+  utmSource         String?
+  utmMedium         String?
+  utmCampaign       String?
+  utmContent        String?
+  utmTerm           String?
+  deviceType        String?
+  browser           String?
+  os                String?
+  sessionId         String?
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime            @default(now())
+
+  campaign        Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignVersion CampaignVersion @relation(fields: [campaignVersionId], references: [id])
+  participant     Participant?    @relation(fields: [participantId], references: [id])
+  consentRecords  ConsentRecord[]
+  gameSession     GameSession?
+  memoryResult    MemoryResult?
+  prizeAward      PrizeAward?
+  quizResponse    QuizResponse?
+
+  @@index([campaignId, status, createdAt])
+  @@index([campaignId, participantId])
+}
+
+enum ConsentStatus {
+  GRANTED
+  DECLINED
+  WITHDRAWN
+}
+
+model ConsentRecord {
+  id                  String        @id @default(cuid())
+  participationId     String
+  consentDefinitionId String
+  status              ConsentStatus
+  text                String
+  version             Int
+  source              String?
+  grantedAt           DateTime      @default(now())
+
+  participation     Participation     @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  consentDefinition ConsentDefinition @relation(fields: [consentDefinitionId], references: [id])
+
+  @@index([participationId])
+}
+
+model GameSession {
+  id              String    @id @default(cuid())
+  participationId String    @unique
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  expiresAt       DateTime?
+
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// Jogo da Memória (secção 12)
+// ============================================================================
+
+enum MemoryPairKind {
+  SAME_IMAGE
+  DIFFERENT_IMAGE_MATCH
+  IMAGE_TEXT
+  TEXT_TEXT
+}
+
+model MemoryGameConfig {
+  id                String  @id @default(cuid())
+  campaignId        String  @unique
+  columns           Int     @default(4)
+  randomizeOrder    Boolean @default(true)
+  cardAspectRatio   String  @default("1/1")
+  cardGapPx         Int     @default(8)
+  timeLimitSeconds  Int?
+  maxAttempts       Int?
+  pointsPerPair     Int     @default(10)
+  penaltyPerMistake Int     @default(0)
+  speedBonusEnabled Boolean @default(false)
+  previewSeconds    Int?
+  soundEnabled      Boolean @default(true)
+  rankingEnabled    Boolean @default(false)
+  rankingMaxEntries Int?
+  rankingAnonymize  Boolean @default(false)
+  cardBackMediaId   String?
+
+  campaign Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  pairs    MemoryCardPair[]
+}
+
+model MemoryCardPair {
+  id                 String         @id @default(cuid())
+  memoryGameConfigId String
+  order              Int
+  kind               MemoryPairKind
+  cardAMediaId       String?
+  cardAText          String?
+  cardAAltText       String?
+  cardBMediaId       String?
+  cardBText          String?
+  cardBAltText       String?
+
+  memoryGameConfig MemoryGameConfig @relation(fields: [memoryGameConfigId], references: [id], onDelete: Cascade)
+
+  @@index([memoryGameConfigId])
+}
+
+model MemoryResult {
+  id              String  @id @default(cuid())
+  participationId String  @unique
+  timeSeconds     Int
+  attempts        Int
+  pairsFound      Int
+  score           Int
+  completed       Boolean
+
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// Roda da Sorte (secção 13)
+// ============================================================================
+
+enum WheelSegmentOutcome {
+  WIN
+  NO_WIN
+}
+
+model WheelConfig {
+  id         String @id @default(cuid())
+  campaignId String @unique
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  segments WheelSegment[]
+}
+
+model WheelSegment {
+  id                String              @id @default(cuid())
+  wheelConfigId     String
+  order             Int
+  name              String
+  colorHex          String
+  imageMediaId      String?
+  outcome           WheelSegmentOutcome
+  prizeId           String?
+  weight            Int                 @default(1)
+  totalQuantity     Int?
+  remainingQuantity Int?
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  message           String?
+  code              String?
+  isActive          Boolean             @default(true)
+
+  wheelConfig WheelConfig  @relation(fields: [wheelConfigId], references: [id], onDelete: Cascade)
+  prize       Prize?       @relation(fields: [prizeId], references: [id])
+  prizeAwards PrizeAward[]
+
+  @@index([wheelConfigId])
+}
+
+model Prize {
+  id              String    @id @default(cuid())
+  campaignId      String
+  internalName    String
+  publicName      String
+  description     String?
+  imageMediaId    String?
+  totalQuantity   Int?
+  awardedQuantity Int       @default(0)
+  dailyLimit      Int?
+  instructions    String?
+  terms           String?
+  isActive        Boolean   @default(true)
+  startAt         DateTime?
+  endAt           DateTime?
+
+  campaign Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  segments WheelSegment[]
+  codes    PrizeCode[]
+  awards   PrizeAward[]
+
+  @@index([campaignId])
+}
+
+enum PrizeCodeStatus {
+  AVAILABLE
+  RESERVED
+  ASSIGNED
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+model PrizeCode {
+  id         String          @id @default(cuid())
+  prizeId    String
+  code       String
+  status     PrizeCodeStatus @default(AVAILABLE)
+  expiresAt  DateTime?
+  assignedAt DateTime?
+  usedAt     DateTime?
+  createdAt  DateTime        @default(now())
+
+  prize Prize       @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+  award PrizeAward?
+
+  @@unique([prizeId, code])
+}
+
+// Registo atómico do prémio atribuído a uma participação — gravado na mesma
+// transação que decrementa o stock do segmento/prémio (secção 13, fluxo técnico).
+model PrizeAward {
+  id              String   @id @default(cuid())
+  participationId String   @unique
+  prizeId         String
+  wheelSegmentId  String?
+  prizeCodeId     String?  @unique
+  awardedAt       DateTime @default(now())
+
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  prize         Prize         @relation(fields: [prizeId], references: [id])
+  wheelSegment  WheelSegment? @relation(fields: [wheelSegmentId], references: [id])
+  prizeCode     PrizeCode?    @relation(fields: [prizeCodeId], references: [id])
+
+  @@index([prizeId])
+}
+
+// ============================================================================
+// Quiz Interativo (secção 14)
+// ============================================================================
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  IMAGE_CHOICE
+}
+
+model QuizConfig {
+  id                          String  @id @default(cuid())
+  campaignId                  String  @unique
+  questionsPerParticipation   Int?
+  randomizeQuestionOrder      Boolean @default(false)
+  randomizeAnswerOrder        Boolean @default(false)
+  totalTimeLimitSeconds       Int?
+  perQuestionTimeLimitSeconds Int?
+  penaltyPerWrong             Int     @default(0)
+  speedBonusEnabled           Boolean @default(false)
+  allowGoBack                 Boolean @default(true)
+  showProgress                Boolean @default(true)
+  showCorrectAnswer           Boolean @default(true)
+  showExplanation             Boolean @default(true)
+  minPassPercentage           Int?
+  maxAttempts                 Int?
+
+  campaign       Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  questions      QuizQuestion[]
+  resultProfiles QuizResultProfile[]
+}
+
+model QuizQuestion {
+  id                String       @id @default(cuid())
+  quizConfigId      String
+  order             Int
+  type              QuestionType
+  title             String
+  supportText       String?
+  imageMediaId      String?
+  points            Int          @default(10)
+  timeLimitSeconds  Int?
+  explanation       String?
+  required          Boolean      @default(true)
+  immediateFeedback Boolean      @default(false)
+
+  quizConfig QuizConfig   @relation(fields: [quizConfigId], references: [id], onDelete: Cascade)
+  answers    QuizAnswer[]
+
+  @@index([quizConfigId])
+}
+
+model QuizAnswer {
+  id           String  @id @default(cuid())
+  questionId   String
+  order        Int
+  text         String?
+  imageMediaId String?
+  isCorrect    Boolean @default(false)
+
+  question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model QuizResultProfile {
+  id            String  @id @default(cuid())
+  quizConfigId  String
+  minPercentage Int
+  maxPercentage Int
+  title         String
+  description   String?
+  imageMediaId  String?
+  ctaLabel      String?
+  ctaUrl        String?
+
+  quizConfig QuizConfig @relation(fields: [quizConfigId], references: [id], onDelete: Cascade)
+
+  @@index([quizConfigId])
+}
+
+model QuizResponse {
+  id              String   @id @default(cuid())
+  participationId String   @unique
+  answers         Json
+  totalScore      Int
+  percentage      Float
+  passed          Boolean?
+  resultProfileId String?
+  timeSeconds     Int
+
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// Analytics por eventos (secção 20, 31) — nunca guardar dados pessoais aqui.
+// ============================================================================
+
+enum AnalyticsEventType {
+  CAMPAIGN_VIEWED
+  START_CLICKED
+  LEAD_FORM_VIEWED
+  LEAD_FORM_SUBMITTED
+  GAME_STARTED
+  GAME_COMPLETED
+  GAME_ABANDONED
+  RESULT_VIEWED
+  CTA_CLICKED
+  PARTICIPATION_BLOCKED
+  PRIZE_AWARDED
+}
+
+model AnalyticsEvent {
+  id         String             @id @default(cuid())
+  campaignId String
+  type       AnalyticsEventType
+  occurredAt DateTime           @default(now())
+  sessionId  String?
+  isTest     Boolean            @default(false)
+  metadata   Json?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, type, occurredAt])
+}
+
+// ============================================================================
+// Auditoria (secção 26) — sem dados pessoais nos metadados.
+// ============================================================================
+
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  CREATE
+  UPDATE
+  PUBLISH
+  PAUSE
+  ARCHIVE
+  DELETE
+  EXPORT
+  PERMISSION_CHANGE
+  ODDS_CHANGE
+  STOCK_CHANGE
+  CODE_CHANGE
+  PRIVACY_OPERATION
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         AuditAction
+  entityType     String
+  entityId       String?
+  result         String
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
 }
