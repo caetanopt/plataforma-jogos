@@ -98,6 +98,11 @@ model Membership {
   userId         String
   organizationId String
   role           MembershipRole
+  // Concede a EDITOR a publicação de campanhas e a ANALYST a exportação de leads
+  // (secção 3: "publicar apenas com permissão" / "exportar quando autorizado").
+  // ORG_ADMIN tem sempre ambas, independentemente destas flags.
+  canPublish     Boolean        @default(false)
+  canExportLeads Boolean        @default(false)
   createdAt      DateTime       @default(now())
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
