@@ -3,7 +3,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { prisma } from "@/server/db/client";
 import { MemoryGameStep } from "@/components/backoffice/editor/memory-game-step";
 import { WheelGameStep } from "@/components/backoffice/editor/wheel-game-step";
-import { StepPlaceholder } from "@/components/backoffice/editor/step-placeholder";
+import { QuizGameStep } from "@/components/backoffice/editor/quiz-game-step";
 
 export default async function GameConfigStepPage({
   params,
@@ -25,5 +25,5 @@ export default async function GameConfigStepPage({
     return <WheelGameStep campaignId={id} />;
   }
 
-  return <StepPlaceholder title="Configuração do jogo" />;
+  return <QuizGameStep campaignId={id} />;
 }

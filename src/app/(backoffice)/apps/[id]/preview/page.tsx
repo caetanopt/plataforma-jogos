@@ -3,6 +3,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { prisma } from "@/server/db/client";
 import { MemoryGamePreview } from "@/components/public-game/memory-game-preview";
 import { WheelGamePreview } from "@/components/public-game/wheel-game-preview";
+import { QuizGamePreview } from "@/components/public-game/quiz-game-preview";
 
 export default async function CampaignPreviewPage({
   params,
@@ -17,22 +18,38 @@ export default async function CampaignPreviewPage({
     include: {
       memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } },
       wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
+      quizConfig: {
+        include: {
+          questions: { include: { answers: { orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
+          resultProfiles: { orderBy: { minPercentage: "asc" } },
+        },
+      },
       prizes: true,
     },
   });
   if (!campaign) notFound();
 
   let mediaById = new Map<string, { url: string }>();
+  const mediaIdsToFetch: string[] = [];
   if (campaign.memoryConfig) {
-    const mediaIds = campaign.memoryConfig.pairs.flatMap((pair) =>
-      [pair.cardAMediaId, pair.cardBMediaId, campaign.memoryConfig?.cardBackMediaId].filter(
-        (v): v is string => Boolean(v),
+    mediaIdsToFetch.push(
+      ...campaign.memoryConfig.pairs.flatMap((pair) =>
+        [pair.cardAMediaId, pair.cardBMediaId, campaign.memoryConfig?.cardBackMediaId].filter(
+          (v): v is string => Boolean(v),
+        ),
       ),
     );
-    if (mediaIds.length) {
-      const mediaAssets = await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds } } });
-      mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
-    }
+  }
+  if (campaign.quizConfig) {
+    mediaIdsToFetch.push(
+      ...campaign.quizConfig.questions.flatMap((q) =>
+        [q.imageMediaId, ...q.answers.map((a) => a.imageMediaId)].filter((v): v is string => Boolean(v)),
+      ),
+    );
+  }
+  if (mediaIdsToFetch.length) {
+    const mediaAssets = await prisma.mediaAsset.findMany({ where: { id: { in: mediaIdsToFetch } } });
+    mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
   }
 
   const prizeById = new Map(campaign.prizes.map((p) => [p.id, p]));
@@ -86,6 +103,40 @@ export default async function CampaignPreviewPage({
               message: segment.message,
               prizeName: segment.prizeId ? (prizeById.get(segment.prizeId)?.publicName ?? null) : null,
             }))}
+        />
+      ) : campaign.type === "QUIZ" && campaign.quizConfig ? (
+        <QuizGamePreview
+          questions={campaign.quizConfig.questions.map((question) => ({
+            id: question.id,
+            type: question.type,
+            title: question.title,
+            supportText: question.supportText,
+            imageUrl: question.imageMediaId ? mediaById.get(question.imageMediaId)?.url : undefined,
+            points: question.points,
+            correctAnswerIds: question.answers.filter((a) => a.isCorrect).map((a) => a.id),
+            answers: question.answers.map((answer) => ({
+              id: answer.id,
+              text: answer.text,
+              imageUrl: answer.imageMediaId ? mediaById.get(answer.imageMediaId)?.url : undefined,
+            })),
+          }))}
+          resultProfiles={campaign.quizConfig.resultProfiles.map((profile) => ({
+            id: profile.id,
+            minPercentage: profile.minPercentage,
+            maxPercentage: profile.maxPercentage,
+            title: profile.title,
+            description: profile.description,
+            ctaLabel: profile.ctaLabel,
+            ctaUrl: profile.ctaUrl,
+          }))}
+          config={{
+            allowGoBack: campaign.quizConfig.allowGoBack,
+            showProgress: campaign.quizConfig.showProgress,
+            totalTimeLimitSeconds: campaign.quizConfig.totalTimeLimitSeconds,
+            penaltyPerWrong: campaign.quizConfig.penaltyPerWrong,
+            speedBonusEnabled: campaign.quizConfig.speedBonusEnabled,
+            minPassPercentage: campaign.quizConfig.minPassPercentage,
+          }}
         />
       ) : (
         <p className="text-center text-sm text-caetano-medium-gray">
