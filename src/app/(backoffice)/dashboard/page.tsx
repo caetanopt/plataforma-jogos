@@ -6,23 +6,7 @@ import { resolveDateRange } from "@/lib/dates/range";
 import { StatCard } from "@/components/backoffice/stat-card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import type { CampaignType } from "@/generated/prisma/client";
-
-const GAME_TYPE_LABELS: Record<CampaignType, string> = {
-  MEMORY: "Jogo da Memória",
-  WHEEL: "Roda da Sorte",
-  QUIZ: "Quiz Interativo",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Rascunho",
-  IN_REVIEW: "Em validação",
-  SCHEDULED: "Agendado",
-  PUBLISHED: "Publicado",
-  PAUSED: "Pausado",
-  EXPIRED: "Expirado",
-  ARCHIVED: "Arquivado",
-};
+import { CAMPAIGN_TYPE_LABELS, CAMPAIGN_STATUS_LABELS } from "@/lib/labels";
 
 interface DashboardSearchParams {
   period?: string;
@@ -153,7 +137,7 @@ export default async function DashboardPage({
           <Label htmlFor="type">Tipo de jogo</Label>
           <select id="type" name="type" defaultValue={params.type ?? ""} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm">
             <option value="">Todos</option>
-            {Object.entries(GAME_TYPE_LABELS).map(([value, label]) => (
+            {Object.entries(CAMPAIGN_TYPE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -208,7 +192,7 @@ export default async function DashboardPage({
                     {campaign.internalName}
                   </Link>
                   <p className="text-caetano-medium-gray">
-                    {GAME_TYPE_LABELS[campaign.type]} · {STATUS_LABELS[campaign.status]}
+                    {CAMPAIGN_TYPE_LABELS[campaign.type]} · {CAMPAIGN_STATUS_LABELS[campaign.status]}
                   </p>
                 </li>
               ))}
