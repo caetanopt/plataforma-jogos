@@ -4,6 +4,7 @@ import type {
   DedupStrategy,
   LeadFieldType,
   LeadFormPosition,
+  ParticipationLimitType,
 } from "@/generated/prisma/client";
 
 export const CAMPAIGN_TYPE_LABELS: Record<CampaignType, string> = {
@@ -76,4 +77,12 @@ export const DEDUP_STRATEGY_LABELS: Record<DedupStrategy, string> = {
   IP: "IP (uso limitado)",
   CODE: "Código único",
   FIELD_COMBINATION: "Combinação de campos",
+};
+
+export const PARTICIPATION_LIMIT_TYPE_LABELS: Record<ParticipationLimitType, string> = {
+  UNLIMITED: "Ilimitada",
+  ONE_TOTAL: "Uma participação no total",
+  ONE_PER_DAY: "Uma participação por dia",
+  ONE_PER_HOUR: "Uma participação por hora",
+  CUSTOM_MAX: "Máximo personalizado",
 };

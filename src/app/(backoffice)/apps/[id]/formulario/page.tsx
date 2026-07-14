@@ -62,6 +62,7 @@ export default async function LeadFormStepPage({
         <div>
           <Label htmlFor="position">Posição do formulário</Label>
           <select
+            key={`position-${leadForm.updatedAt.toISOString()}`}
             id="position"
             name="position"
             defaultValue={leadForm.position}

@@ -71,6 +71,7 @@ export default async function ProjectInfoStepPage({
           <div>
             <Label htmlFor="workspaceId">Espaço de trabalho</Label>
             <select
+              key={`workspaceId-${campaign.updatedAt.toISOString()}`}
               id="workspaceId"
               name="workspaceId"
               defaultValue={campaign.workspaceId}
@@ -86,6 +87,7 @@ export default async function ProjectInfoStepPage({
           <div>
             <Label htmlFor="folderId">Pasta</Label>
             <select
+              key={`folderId-${campaign.updatedAt.toISOString()}`}
               id="folderId"
               name="folderId"
               defaultValue={campaign.folderId ?? ""}
@@ -123,6 +125,7 @@ export default async function ProjectInfoStepPage({
           <div>
             <Label htmlFor="locale">Idioma</Label>
             <select
+              key={`locale-${campaign.updatedAt.toISOString()}`}
               id="locale"
               name="locale"
               defaultValue={campaign.locale}
@@ -138,6 +141,7 @@ export default async function ProjectInfoStepPage({
           <div>
             <Label htmlFor="timezone">Fuso horário</Label>
             <select
+              key={`timezone-${campaign.updatedAt.toISOString()}`}
               id="timezone"
               name="timezone"
               defaultValue={campaign.timezone}

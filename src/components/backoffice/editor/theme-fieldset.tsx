@@ -18,6 +18,7 @@ export interface ThemeFieldsetValues {
   fontFamily: string;
   borderRadiusPx: number;
   shadowEnabled: boolean;
+  updatedAt: Date;
 }
 
 function ColorField({ id, label, defaultValue }: { id: string; label: string; defaultValue: string }) {
@@ -89,6 +90,7 @@ export function ThemeFieldset({
         <div>
           <Label htmlFor="fontFamily">Tipografia</Label>
           <select
+            key={`fontFamily-${theme.updatedAt.toISOString()}`}
             id="fontFamily"
             name="fontFamily"
             defaultValue={theme.fontFamily}
