@@ -210,7 +210,11 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
                   </ul>
 
                   {question.type !== "TRUE_FALSE" && (
-                    <form action={addAnswerAction} className="mt-2 flex flex-wrap items-center gap-2">
+                    <form
+                      key={`add-answer-${question.answers.length}`}
+                      action={addAnswerAction}
+                      className="mt-2 flex flex-wrap items-center gap-2"
+                    >
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="questionId" value={question.id} />
                       <Input name="text" placeholder="Nova resposta" className="h-8" required />

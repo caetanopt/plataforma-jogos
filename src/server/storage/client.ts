@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 declare global {
   var __s3: S3Client | undefined;
@@ -27,4 +27,9 @@ export const MEDIA_BUCKET = process.env.STORAGE_BUCKET ?? "plataforma-jogos-medi
 export function publicUrlForKey(key: string): string {
   const base = process.env.STORAGE_PUBLIC_URL ?? "";
   return `${base.replace(/\/$/, "")}/${key}`;
+}
+
+export async function uploadBuffer(key: string, body: Buffer | string, contentType: string): Promise<string> {
+  await s3.send(new PutObjectCommand({ Bucket: MEDIA_BUCKET, Key: key, Body: body, ContentType: contentType }));
+  return publicUrlForKey(key);
 }

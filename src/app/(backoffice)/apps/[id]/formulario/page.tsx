@@ -322,7 +322,11 @@ export default async function LeadFormStepPage({
           ))}
         </ul>
 
-        <form action={addConsentAction} className="mt-4 space-y-2">
+        <form
+          key={`add-consent-${leadForm.consentDefinitions.length}`}
+          action={addConsentAction}
+          className="mt-4 space-y-2"
+        >
           <input type="hidden" name="campaignId" value={campaign.id} />
           <textarea
             name="text"

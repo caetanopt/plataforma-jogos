@@ -93,6 +93,7 @@ function isSerializationConflict(error: unknown): boolean {
 export async function drawAndAwardPrize(
   participationId: string,
   now: Date = new Date(),
+  isTest = false,
 ): Promise<WheelDrawResult> {
   for (let attempt = 0; attempt < MAX_SERIALIZATION_RETRIES; attempt += 1) {
     try {
@@ -122,48 +123,59 @@ export async function drawAndAwardPrize(
 
           if (chosen.outcome === "WIN" && chosen.prizeId) {
             const prizeRecord = await tx.prize.findUniqueOrThrow({ where: { id: chosen.prizeId } });
-            if (prizeRecord.totalQuantity != null && prizeRecord.awardedQuantity >= prizeRecord.totalQuantity) {
-              throw new NoEligibleSegmentsError();
-            }
 
-            await tx.prize.update({
-              where: { id: prizeRecord.id },
-              data: { awardedQuantity: { increment: 1 } },
-            });
+            if (isTest) {
+              // Modo de teste: nunca consome stock nem atribui código real (secção 18).
+              prize = {
+                id: prizeRecord.id,
+                publicName: prizeRecord.publicName,
+                instructions: prizeRecord.instructions,
+                code: null,
+              };
+            } else {
+              if (prizeRecord.totalQuantity != null && prizeRecord.awardedQuantity >= prizeRecord.totalQuantity) {
+                throw new NoEligibleSegmentsError();
+              }
 
-            const availableCode = await tx.prizeCode.findFirst({
-              where: { prizeId: prizeRecord.id, status: "AVAILABLE" },
-            });
-            let prizeCodeId: string | null = null;
-            let assignedCode: string | null = null;
-            if (availableCode) {
-              await tx.prizeCode.update({
-                where: { id: availableCode.id },
-                data: { status: "ASSIGNED", assignedAt: now },
+              await tx.prize.update({
+                where: { id: prizeRecord.id },
+                data: { awardedQuantity: { increment: 1 } },
               });
-              prizeCodeId = availableCode.id;
-              assignedCode = availableCode.code;
+
+              const availableCode = await tx.prizeCode.findFirst({
+                where: { prizeId: prizeRecord.id, status: "AVAILABLE" },
+              });
+              let prizeCodeId: string | null = null;
+              let assignedCode: string | null = null;
+              if (availableCode) {
+                await tx.prizeCode.update({
+                  where: { id: availableCode.id },
+                  data: { status: "ASSIGNED", assignedAt: now },
+                });
+                prizeCodeId = availableCode.id;
+                assignedCode = availableCode.code;
+              }
+
+              await tx.prizeAward.create({
+                data: {
+                  participationId,
+                  prizeId: prizeRecord.id,
+                  wheelSegmentId: chosen.id,
+                  prizeCodeId,
+                  awardedAt: now,
+                },
+              });
+
+              prize = {
+                id: prizeRecord.id,
+                publicName: prizeRecord.publicName,
+                instructions: prizeRecord.instructions,
+                code: assignedCode,
+              };
             }
-
-            await tx.prizeAward.create({
-              data: {
-                participationId,
-                prizeId: prizeRecord.id,
-                wheelSegmentId: chosen.id,
-                prizeCodeId,
-                awardedAt: now,
-              },
-            });
-
-            prize = {
-              id: prizeRecord.id,
-              publicName: prizeRecord.publicName,
-              instructions: prizeRecord.instructions,
-              code: assignedCode,
-            };
           }
 
-          if (chosen.totalQuantity != null) {
+          if (!isTest && chosen.totalQuantity != null) {
             await tx.wheelSegment.update({
               where: { id: chosen.id },
               data: { remainingQuantity: { decrement: 1 } },

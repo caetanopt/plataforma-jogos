@@ -241,7 +241,11 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         </ul>
 
         <div className="mt-4">
-          <WheelSegmentForm campaignId={campaignId} prizes={campaign.prizes.map((p) => ({ id: p.id, publicName: p.publicName }))} />
+          <WheelSegmentForm
+            key={`add-segment-${wheelConfig.segments.length}`}
+            campaignId={campaignId}
+            prizes={campaign.prizes.map((p) => ({ id: p.id, publicName: p.publicName }))}
+          />
         </div>
       </section>
     </div>
