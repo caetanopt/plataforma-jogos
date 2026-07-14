@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #2e3a46;
+
+  /* Identidade Caetano (Brand Book, abril 2026) — tema base do backoffice.
+     Cada campanha tem o seu próprio Brand Kit, inicializado com estes valores. */
+  --color-caetano-deep-blue: #002e5d;
+  --color-caetano-cyan: #00aeef;
+  --color-caetano-sky: #66cef5;
+  --color-caetano-anthracite: #2e3a46;
+  --color-caetano-medium-gray: #9caeb8;
+  --color-caetano-ultra-white: #ffffff;
+  --color-caetano-eco-green: #49b489;
+  --color-caetano-dynamic-orange: #ffa931;
+  --color-caetano-freedom-yellow: #ffd23f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-montserrat);
+
+  --color-caetano-deep-blue: var(--color-caetano-deep-blue);
+  --color-caetano-cyan: var(--color-caetano-cyan);
+  --color-caetano-sky: var(--color-caetano-sky);
+  --color-caetano-anthracite: var(--color-caetano-anthracite);
+  --color-caetano-medium-gray: var(--color-caetano-medium-gray);
+  --color-caetano-ultra-white: var(--color-caetano-ultra-white);
+  --color-caetano-eco-green: var(--color-caetano-eco-green);
+  --color-caetano-dynamic-orange: var(--color-caetano-dynamic-orange);
+  --color-caetano-freedom-yellow: var(--color-caetano-freedom-yellow);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
