@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireOrgContext } from "@/server/auth/session";
 import { prisma } from "@/server/db/client";
 import { MemoryGamePreview } from "@/components/public-game/memory-game-preview";
+import { WheelGamePreview } from "@/components/public-game/wheel-game-preview";
 
 export default async function CampaignPreviewPage({
   params,
@@ -13,7 +14,11 @@ export default async function CampaignPreviewPage({
 
   const campaign = await prisma.campaign.findFirst({
     where: { id, organizationId: context.organizationId },
-    include: { memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } } },
+    include: {
+      memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } },
+      wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
+      prizes: true,
+    },
   });
   if (!campaign) notFound();
 
@@ -29,6 +34,8 @@ export default async function CampaignPreviewPage({
       mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
     }
   }
+
+  const prizeById = new Map(campaign.prizes.map((p) => [p.id, p]));
 
   return (
     <div className="mx-auto max-w-xl">
@@ -65,6 +72,20 @@ export default async function CampaignPreviewPage({
             timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
             maxAttempts: campaign.memoryConfig.maxAttempts,
           }}
+        />
+      ) : campaign.type === "WHEEL" && campaign.wheelConfig ? (
+        <WheelGamePreview
+          segments={campaign.wheelConfig.segments
+            .filter((segment) => segment.isActive)
+            .map((segment) => ({
+              id: segment.id,
+              name: segment.name,
+              colorHex: segment.colorHex,
+              weight: segment.weight,
+              outcome: segment.outcome,
+              message: segment.message,
+              prizeName: segment.prizeId ? (prizeById.get(segment.prizeId)?.publicName ?? null) : null,
+            }))}
         />
       ) : (
         <p className="text-center text-sm text-caetano-medium-gray">
