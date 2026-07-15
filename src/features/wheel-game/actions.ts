@@ -53,7 +53,7 @@ export async function addWheelSegmentAction(formData: FormData): Promise<void> {
 
   const prizeId = parsed.data.outcome === "WIN" && parsed.data.prizeId ? parsed.data.prizeId : null;
 
-  await prisma.wheelSegment.create({
+  const segment = await prisma.wheelSegment.create({
     data: {
       wheelConfigId: owned.wheelConfig.id,
       order: nextOrder,
@@ -78,7 +78,7 @@ export async function addWheelSegmentAction(formData: FormData): Promise<void> {
     userId: context.userId,
     action: "CREATE",
     entityType: "WheelSegment",
-    entityId: owned.wheelConfig.id,
+    entityId: segment.id,
     result: "SUCCESS",
   });
 
@@ -178,16 +178,20 @@ export async function removeWheelSegmentAction(formData: FormData): Promise<void
   const owned = await getOwnedWheelConfig(context.organizationId, campaignId);
   if (!owned) notFound();
 
-  await prisma.wheelSegment.deleteMany({ where: { id: segmentId, wheelConfigId: owned.wheelConfig.id } });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "DELETE",
-    entityType: "WheelSegment",
-    entityId: segmentId,
-    result: "SUCCESS",
+  const deleted = await prisma.wheelSegment.deleteMany({
+    where: { id: segmentId, wheelConfigId: owned.wheelConfig.id },
   });
+
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "WheelSegment",
+      entityId: segmentId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -217,6 +221,16 @@ export async function moveWheelSegmentAction(formData: FormData): Promise<void> 
     prisma.wheelSegment.update({ where: { id: current.id }, data: { order: swapWith.order } }),
     prisma.wheelSegment.update({ where: { id: swapWith.id }, data: { order: current.order } }),
   ]);
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "WheelSegment",
+    entityId: current.id,
+    result: "SUCCESS",
+    metadata: { action: "reorder", swappedWith: swapWith.id },
+  });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }

@@ -13,6 +13,7 @@ import {
 import { sendMail } from "@/server/mail/mailer";
 import { passwordResetEmail } from "@/features/auth/email-templates";
 import { checkRateLimit } from "@/lib/security/rate-limit";
+import { getRequestIp } from "@/lib/security/request-ip";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -56,8 +57,14 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
 export async function resetPasswordAction(formData: FormData): Promise<void> {
   const token = String(formData.get("token") ?? "");
 
-  const rateLimit = await checkRateLimit(`reset-password-attempt:${token}`, 10, 60 * 60);
-  if (!rateLimit.allowed) {
+  // Limite por token: útil sobretudo contra reenvios acidentais do mesmo pedido.
+  const tokenRateLimit = await checkRateLimit(`reset-password-attempt:${token}`, 10, 60 * 60);
+  // Limite por IP: a defesa real contra um atacante a testar muitos tokens
+  // diferentes (o limite por token, por si só, recomeça do zero a cada
+  // token novo, por isso não trava esse padrão de ataque).
+  const ip = await getRequestIp();
+  const ipRateLimit = await checkRateLimit(`reset-password-attempt-ip:${ip ?? "unknown"}`, 20, 60 * 60);
+  if (!tokenRateLimit.allowed || !ipRateLimit.allowed) {
     redirect("/login?error=reset_token_invalid");
   }
 

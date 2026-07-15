@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
@@ -14,6 +15,8 @@ import { inviteUserSchema, updateMembershipSchema } from "@/lib/validation/users
 import { getField } from "@/lib/forms/form-data";
 
 const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+class LastAdminError extends Error {}
 
 export async function inviteUserAction(formData: FormData): Promise<void> {
   const context = await requireOrgContext();
@@ -39,21 +42,33 @@ export async function inviteUserAction(formData: FormData): Promise<void> {
 
   if (!user) {
     isNewUser = true;
-    user = await prisma.user.create({
-      data: { name, email, passwordHash: await hashPassword(randomBytes(24).toString("hex")) },
+    try {
+      user = await prisma.user.create({
+        data: { name, email, passwordHash: await hashPassword(randomBytes(24).toString("hex")) },
+      });
+    } catch (error) {
+      // Corrida entre dois convites simultâneos para o mesmo e-mail ainda
+      // inexistente: outro pedido criou o utilizador entretanto.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        user = await prisma.user.findUniqueOrThrow({ where: { email } });
+        isNewUser = false;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  let membership;
+  try {
+    membership = await prisma.membership.create({
+      data: { userId: user.id, organizationId: context.organizationId, role, canPublish, canExportLeads },
     });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      redirect("/users?error=already_member");
+    }
+    throw error;
   }
-
-  const existingMembership = await prisma.membership.findUnique({
-    where: { userId_organizationId: { userId: user.id, organizationId: context.organizationId } },
-  });
-  if (existingMembership) {
-    redirect("/users?error=already_member");
-  }
-
-  const membership = await prisma.membership.create({
-    data: { userId: user.id, organizationId: context.organizationId, role, canPublish, canExportLeads },
-  });
 
   if (isNewUser) {
     const token = randomBytes(32).toString("hex");
@@ -95,23 +110,33 @@ export async function updateMembershipAction(formData: FormData): Promise<void> 
   });
   if (!parsed.success) return;
 
-  if (membership.role === "ORG_ADMIN" && parsed.data.role !== "ORG_ADMIN") {
-    const otherAdmins = await prisma.membership.count({
-      where: { organizationId: context.organizationId, role: "ORG_ADMIN", id: { not: membershipId } },
-    });
-    if (otherAdmins === 0) {
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        if (membership.role === "ORG_ADMIN" && parsed.data.role !== "ORG_ADMIN") {
+          const otherAdmins = await tx.membership.count({
+            where: { organizationId: context.organizationId, role: "ORG_ADMIN", id: { not: membershipId } },
+          });
+          if (otherAdmins === 0) throw new LastAdminError();
+        }
+
+        await tx.membership.update({
+          where: { id: membershipId },
+          data: {
+            role: parsed.data.role,
+            canPublish: parsed.data.canPublish === "on",
+            canExportLeads: parsed.data.canExportLeads === "on",
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  } catch (error) {
+    if (error instanceof LastAdminError) {
       redirect("/users?error=last_admin");
     }
+    throw error;
   }
-
-  await prisma.membership.update({
-    where: { id: membershipId },
-    data: {
-      role: parsed.data.role,
-      canPublish: parsed.data.canPublish === "on",
-      canExportLeads: parsed.data.canExportLeads === "on",
-    },
-  });
 
   await logAudit({
     organizationId: context.organizationId,
@@ -136,16 +161,26 @@ export async function removeMembershipAction(formData: FormData): Promise<void> 
   });
   if (!membership) notFound();
 
-  if (membership.role === "ORG_ADMIN") {
-    const otherAdmins = await prisma.membership.count({
-      where: { organizationId: context.organizationId, role: "ORG_ADMIN", id: { not: membershipId } },
-    });
-    if (otherAdmins === 0) {
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        if (membership.role === "ORG_ADMIN") {
+          const otherAdmins = await tx.membership.count({
+            where: { organizationId: context.organizationId, role: "ORG_ADMIN", id: { not: membershipId } },
+          });
+          if (otherAdmins === 0) throw new LastAdminError();
+        }
+
+        await tx.membership.delete({ where: { id: membershipId } });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  } catch (error) {
+    if (error instanceof LastAdminError) {
       redirect("/users?error=last_admin");
     }
+    throw error;
   }
-
-  await prisma.membership.delete({ where: { id: membershipId } });
 
   await logAudit({
     organizationId: context.organizationId,

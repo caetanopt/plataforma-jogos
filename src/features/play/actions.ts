@@ -5,7 +5,7 @@ import { prisma } from "@/server/db/client";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { checkParticipationAllowed } from "@/features/play/limits";
 import { getOrCreateVisitorCookieId } from "@/features/play/cookie";
-import { getRequestIp } from "@/features/play/request-ip";
+import { getRequestIp } from "@/lib/security/request-ip";
 import { parseUserAgent } from "@/features/play/user-agent";
 import { canTestCampaign } from "@/features/play/test-mode";
 import { headers } from "next/headers";
@@ -89,11 +89,14 @@ export async function startParticipationAction(
   if (effectiveState !== "active") return { ok: false, reason: "not_active" };
 
   const ip = await getRequestIp();
-  const rateLimit = await checkRateLimit(`participation:${campaign.id}:${ip ?? "unknown"}`, 30, 3600);
+  const cookieId = await getOrCreateVisitorCookieId();
+  // Sem IP (proxy/CDN que não define x-forwarded-for), usa o cookie do
+  // visitante em vez de um balde "unknown" partilhado por todos — evita que
+  // muitos visitantes sem IP detetável se bloqueiem uns aos outros.
+  const rateLimit = await checkRateLimit(`participation:${campaign.id}:${ip ?? cookieId}`, 30, 3600);
   if (!rateLimit.allowed) return { ok: false, reason: "rate_limited" };
 
   const isTest = input.testRequested && (await canTestCampaign(campaign.organizationId));
-  const cookieId = await getOrCreateVisitorCookieId();
 
   if (!isTest) {
     const allowed = await checkParticipationAllowed({
@@ -170,7 +173,9 @@ export type SubmitLeadFormResult = { ok: true } | { ok: false; reason: "duplicat
 
 export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<SubmitLeadFormResult> {
   const ip = await getRequestIp();
-  const rateLimit = await checkRateLimit(`leadform:${ip ?? "unknown"}`, 30, 3600);
+  // Sem IP, usa o id da participação (único por submissão) em vez de um
+  // balde "unknown" partilhado por todos os visitantes sem IP detetável.
+  const rateLimit = await checkRateLimit(`leadform:${ip ?? input.participationId}`, 30, 3600);
   if (!rateLimit.allowed) return { ok: false, reason: "invalid" };
 
   const participation = await prisma.participation.findUnique({

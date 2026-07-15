@@ -51,6 +51,7 @@ export function QuizGamePlayer({
   const [timeSeconds, setTimeSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<QuizPlayerResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const submittedRef = useRef(false);
 
   const question = questions[index];
@@ -85,13 +86,20 @@ export function QuizGamePlayer({
 
   async function handleSubmit() {
     setSubmitting(true);
+    setError(null);
     const submissions: QuizPlayerSubmission[] = questions.map((q) => ({
       questionId: q.id,
       selectedAnswerIds: selections[q.id] ?? [],
     }));
-    const finalResult = await onSubmit(submissions, timeSeconds);
-    setResult(finalResult);
-    setSubmitting(false);
+    try {
+      const finalResult = await onSubmit(submissions, timeSeconds);
+      setResult(finalResult);
+    } catch {
+      submittedRef.current = false;
+      setError("Não foi possível submeter as respostas. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (result) {
@@ -159,6 +167,12 @@ export function QuizGamePlayer({
           );
         })}
       </div>
+
+      {error && (
+        <p className="mt-4 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
 
       <div className="mt-6 flex justify-between">
         {allowGoBack && index > 0 ? (

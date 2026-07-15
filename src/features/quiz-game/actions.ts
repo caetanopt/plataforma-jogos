@@ -48,24 +48,59 @@ export async function updateQuizConfigAction(formData: FormData): Promise<void> 
   });
   if (!parsed.success) return;
 
+  const minPassPercentage = parsed.data.minPassPercentage ?? null;
+  const penaltyPerWrong = parsed.data.penaltyPerWrong;
+  const totalTimeLimitSeconds = parsed.data.totalTimeLimitSeconds ?? null;
+  const maxAttempts = parsed.data.maxAttempts ?? null;
+
+  // Só regista auditoria quando um campo relevante para a equidade da
+  // pontuação muda — este formulário grava automaticamente a cada
+  // alteração (autosave), por isso não convém auditar todas as gravações.
+  const fairnessChanged =
+    minPassPercentage !== owned.quizConfig.minPassPercentage ||
+    penaltyPerWrong !== owned.quizConfig.penaltyPerWrong ||
+    totalTimeLimitSeconds !== owned.quizConfig.totalTimeLimitSeconds ||
+    maxAttempts !== owned.quizConfig.maxAttempts;
+
   await prisma.quizConfig.update({
     where: { id: owned.quizConfig.id },
     data: {
       questionsPerParticipation: parsed.data.questionsPerParticipation ?? null,
       randomizeQuestionOrder: parsed.data.randomizeQuestionOrder === "on",
       randomizeAnswerOrder: parsed.data.randomizeAnswerOrder === "on",
-      totalTimeLimitSeconds: parsed.data.totalTimeLimitSeconds ?? null,
+      totalTimeLimitSeconds,
       perQuestionTimeLimitSeconds: parsed.data.perQuestionTimeLimitSeconds ?? null,
-      penaltyPerWrong: parsed.data.penaltyPerWrong,
+      penaltyPerWrong,
       speedBonusEnabled: parsed.data.speedBonusEnabled === "on",
       allowGoBack: parsed.data.allowGoBack === "on",
       showProgress: parsed.data.showProgress === "on",
       showCorrectAnswer: parsed.data.showCorrectAnswer === "on",
       showExplanation: parsed.data.showExplanation === "on",
-      minPassPercentage: parsed.data.minPassPercentage ?? null,
-      maxAttempts: parsed.data.maxAttempts ?? null,
+      minPassPercentage,
+      maxAttempts,
     },
   });
+
+  if (fairnessChanged) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "UPDATE",
+      entityType: "QuizConfig",
+      entityId: owned.quizConfig.id,
+      result: "SUCCESS",
+      metadata: {
+        minPassPercentageBefore: owned.quizConfig.minPassPercentage,
+        minPassPercentageAfter: minPassPercentage,
+        penaltyPerWrongBefore: owned.quizConfig.penaltyPerWrong,
+        penaltyPerWrongAfter: penaltyPerWrong,
+        totalTimeLimitSecondsBefore: owned.quizConfig.totalTimeLimitSeconds,
+        totalTimeLimitSecondsAfter: totalTimeLimitSeconds,
+        maxAttemptsBefore: owned.quizConfig.maxAttempts,
+        maxAttemptsAfter: maxAttempts,
+      },
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -181,16 +216,20 @@ export async function removeQuestionAction(formData: FormData): Promise<void> {
   const owned = await getOwnedQuizConfig(context.organizationId, campaignId);
   if (!owned) notFound();
 
-  await prisma.quizQuestion.deleteMany({ where: { id: questionId, quizConfigId: owned.quizConfig.id } });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "DELETE",
-    entityType: "QuizQuestion",
-    entityId: questionId,
-    result: "SUCCESS",
+  const deleted = await prisma.quizQuestion.deleteMany({
+    where: { id: questionId, quizConfigId: owned.quizConfig.id },
   });
+
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "QuizQuestion",
+      entityId: questionId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -220,6 +259,16 @@ export async function moveQuestionAction(formData: FormData): Promise<void> {
     prisma.quizQuestion.update({ where: { id: current.id }, data: { order: swapWith.order } }),
     prisma.quizQuestion.update({ where: { id: swapWith.id }, data: { order: current.order } }),
   ]);
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "QuizQuestion",
+    entityId: current.id,
+    result: "SUCCESS",
+    metadata: { action: "reorder", swappedWith: swapWith.id },
+  });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -336,16 +385,18 @@ export async function removeAnswerAction(formData: FormData): Promise<void> {
   });
   if (!question || question.type === "TRUE_FALSE") return;
 
-  await prisma.quizAnswer.deleteMany({ where: { id: answerId, questionId } });
+  const deleted = await prisma.quizAnswer.deleteMany({ where: { id: answerId, questionId } });
 
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "DELETE",
-    entityType: "QuizAnswer",
-    entityId: answerId,
-    result: "SUCCESS",
-  });
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "QuizAnswer",
+      entityId: answerId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -369,7 +420,7 @@ export async function addResultProfileAction(formData: FormData): Promise<void> 
   });
   if (!parsed.success) return;
 
-  await prisma.quizResultProfile.create({
+  const profile = await prisma.quizResultProfile.create({
     data: {
       quizConfigId: owned.quizConfig.id,
       minPercentage: parsed.data.minPercentage,
@@ -380,6 +431,15 @@ export async function addResultProfileAction(formData: FormData): Promise<void> 
       ctaLabel: parsed.data.ctaLabel || null,
       ctaUrl: parsed.data.ctaUrl || null,
     },
+  });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "CREATE",
+    entityType: "QuizResultProfile",
+    entityId: profile.id,
+    result: "SUCCESS",
   });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
@@ -394,7 +454,20 @@ export async function removeResultProfileAction(formData: FormData): Promise<voi
   const owned = await getOwnedQuizConfig(context.organizationId, campaignId);
   if (!owned) notFound();
 
-  await prisma.quizResultProfile.deleteMany({ where: { id: profileId, quizConfigId: owned.quizConfig.id } });
+  const deleted = await prisma.quizResultProfile.deleteMany({
+    where: { id: profileId, quizConfigId: owned.quizConfig.id },
+  });
+
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "QuizResultProfile",
+      entityId: profileId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }

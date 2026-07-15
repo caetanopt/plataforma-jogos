@@ -113,6 +113,15 @@ export async function updatePrizeAction(formData: FormData): Promise<void> {
     },
   });
 
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "Prize",
+    entityId: prizeId,
+    result: "SUCCESS",
+  });
+
   if (quantityChanged) {
     await logAudit({
       organizationId: context.organizationId,
@@ -143,16 +152,18 @@ export async function removePrizeAction(formData: FormData): Promise<void> {
   if (!campaign) notFound();
 
   await prisma.wheelSegment.updateMany({ where: { prizeId }, data: { prizeId: null } });
-  await prisma.prize.deleteMany({ where: { id: prizeId, campaignId } });
+  const deleted = await prisma.prize.deleteMany({ where: { id: prizeId, campaignId } });
 
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "DELETE",
-    entityType: "Prize",
-    entityId: prizeId,
-    result: "SUCCESS",
-  });
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "Prize",
+      entityId: prizeId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }

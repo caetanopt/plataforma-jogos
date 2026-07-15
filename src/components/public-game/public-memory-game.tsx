@@ -17,21 +17,44 @@ export function PublicMemoryGame({
   }>;
   onContinue: () => void;
 }) {
-  const [phase, setPhase] = useState<"playing" | "submitting" | "done">("playing");
+  const [phase, setPhase] = useState<"playing" | "submitting" | "done" | "error">("playing");
   const [result, setResult] = useState<{ score: number; completed: boolean } | null>(null);
+  const [lastRaw, setLastRaw] = useState<{ attempts: number; pairsFound: number; timeSeconds: number } | null>(null);
 
   function handleComplete(raw: { attempts: number; pairsFound: number; timeSeconds: number }) {
+    setLastRaw(raw);
     setPhase("submitting");
-    onSubmit(raw).then((r) => {
-      setResult(r);
-      setPhase("done");
-    });
+    onSubmit(raw)
+      .then((r) => {
+        setResult(r);
+        setPhase("done");
+      })
+      .catch(() => {
+        setPhase("error");
+      });
   }
 
   if (phase === "submitting") {
     return (
       <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center text-sm text-caetano-medium-gray">
         A calcular o resultado…
+      </div>
+    );
+  }
+
+  if (phase === "error") {
+    return (
+      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center">
+        <p className="text-sm text-red-600" role="alert">
+          Não foi possível calcular o resultado. Tente novamente.
+        </p>
+        <button
+          type="button"
+          onClick={() => lastRaw && handleComplete(lastRaw)}
+          className="mt-4 w-full rounded-lg bg-caetano-deep-blue px-4 py-2.5 font-medium text-white"
+        >
+          Tentar novamente
+        </button>
       </div>
     );
   }
