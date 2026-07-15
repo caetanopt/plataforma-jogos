@@ -92,6 +92,10 @@ export async function updatePrizeAction(formData: FormData): Promise<void> {
   });
   if (!parsed.success) return;
 
+  const quantityChanged =
+    parsed.data.totalQuantity !== (prize.totalQuantity ?? undefined) ||
+    parsed.data.dailyLimit !== (prize.dailyLimit ?? undefined);
+
   await prisma.prize.update({
     where: { id: prizeId },
     data: {
@@ -109,6 +113,23 @@ export async function updatePrizeAction(formData: FormData): Promise<void> {
     },
   });
 
+  if (quantityChanged) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "STOCK_CHANGE",
+      entityType: "Prize",
+      entityId: prizeId,
+      result: "SUCCESS",
+      metadata: {
+        totalQuantityBefore: prize.totalQuantity,
+        totalQuantityAfter: parsed.data.totalQuantity ?? null,
+        dailyLimitBefore: prize.dailyLimit,
+        dailyLimitAfter: parsed.data.dailyLimit ?? null,
+      },
+    });
+  }
+
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
 
@@ -123,6 +144,15 @@ export async function removePrizeAction(formData: FormData): Promise<void> {
 
   await prisma.wheelSegment.updateMany({ where: { prizeId }, data: { prizeId: null } });
   await prisma.prize.deleteMany({ where: { id: prizeId, campaignId } });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "DELETE",
+    entityType: "Prize",
+    entityId: prizeId,
+    result: "SUCCESS",
+  });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -145,12 +175,22 @@ export async function addPrizeCodeAction(formData: FormData): Promise<void> {
   });
   if (!parsed.success) return;
 
-  await prisma.prizeCode.create({
+  const prizeCode = await prisma.prizeCode.create({
     data: {
       prizeId,
       code: parsed.data.code,
       expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
     },
+  });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "CODE_CHANGE",
+    entityType: "PrizeCode",
+    entityId: prizeCode.id,
+    result: "SUCCESS",
+    metadata: { prizeId, action: "create" },
   });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
@@ -165,7 +205,21 @@ export async function removePrizeCodeAction(formData: FormData): Promise<void> {
   const campaign = await getOwnedCampaign(context.organizationId, campaignId);
   if (!campaign) notFound();
 
-  await prisma.prizeCode.deleteMany({ where: { id: codeId, status: "AVAILABLE", prize: { campaignId } } });
+  const deleted = await prisma.prizeCode.deleteMany({
+    where: { id: codeId, status: "AVAILABLE", prize: { campaignId } },
+  });
+
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "CODE_CHANGE",
+      entityType: "PrizeCode",
+      entityId: codeId,
+      result: "SUCCESS",
+      metadata: { action: "delete" },
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }

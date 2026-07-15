@@ -169,10 +169,9 @@ export interface SubmitLeadFormInput {
 export type SubmitLeadFormResult = { ok: true } | { ok: false; reason: "duplicate" | "invalid" | "bot" };
 
 export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<SubmitLeadFormResult> {
-  if (input.honeypot) {
-    // Bot detetado — finge sucesso sem gravar nada real (secção 25).
-    return { ok: true };
-  }
+  const ip = await getRequestIp();
+  const rateLimit = await checkRateLimit(`leadform:${ip ?? "unknown"}`, 30, 3600);
+  if (!rateLimit.allowed) return { ok: false, reason: "invalid" };
 
   const participation = await prisma.participation.findUnique({
     where: { id: input.participationId },
@@ -185,6 +184,14 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
     },
   });
   if (!participation?.campaign.leadForm) return { ok: false, reason: "invalid" };
+
+  if (input.honeypot) {
+    // Bot detetado — finge sucesso sem gravar nada real (secção 25).
+    await recordEvent(participation.campaignId, "PARTICIPATION_BLOCKED", participation.isTest, participation.sessionId, {
+      reason: "honeypot",
+    });
+    return { ok: true };
+  }
 
   const { leadForm, dedupStrategies, minAge, organizationId, id: campaignId } = participation.campaign;
 
@@ -279,6 +286,9 @@ export interface MemorySubmitResult {
 }
 
 export async function submitMemoryResultAction(input: MemorySubmitInput): Promise<MemorySubmitResult> {
+  const rateLimit = await checkRateLimit(`submit:${input.participationId}`, 10, 60);
+  if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+
   const participation = await prisma.participation.findUniqueOrThrow({
     where: { id: input.participationId },
     include: { campaign: { include: { memoryConfig: { include: { pairs: true } } } }, memoryResult: true },
@@ -332,6 +342,9 @@ export async function submitMemoryResultAction(input: MemorySubmitInput): Promis
 }
 
 export async function spinWheelAction(participationId: string, isTest: boolean): Promise<WheelSpinResult> {
+  const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
+  if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+
   try {
     const result = await drawAndAwardPrize(participationId, new Date(), isTest);
     const participation = await prisma.participation.findUnique({ where: { id: participationId } });
@@ -360,6 +373,9 @@ export async function submitQuizAction(
   submissions: QuizPlayerSubmission[],
   timeSeconds: number,
 ): Promise<QuizPlayerResult> {
+  const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
+  if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+
   const participation = await prisma.participation.findUniqueOrThrow({
     where: { id: participationId },
     include: {

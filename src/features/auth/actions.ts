@@ -55,6 +55,12 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
 
 export async function resetPasswordAction(formData: FormData): Promise<void> {
   const token = String(formData.get("token") ?? "");
+
+  const rateLimit = await checkRateLimit(`reset-password-attempt:${token}`, 10, 60 * 60);
+  if (!rateLimit.allowed) {
+    redirect("/login?error=reset_token_invalid");
+  }
+
   const parsed = resetPasswordSchema.safeParse({
     token,
     password: formData.get("password"),

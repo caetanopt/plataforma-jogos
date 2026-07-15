@@ -108,6 +108,9 @@ export async function updateWheelSegmentAction(formData: FormData): Promise<void
   const awarded = segment.totalQuantity != null ? segment.totalQuantity - (segment.remainingQuantity ?? 0) : 0;
   const newRemaining = parsed.data.totalQuantity != null ? Math.max(0, parsed.data.totalQuantity - awarded) : null;
 
+  const weightChanged = parsed.data.weight !== segment.weight;
+  const stockChanged = parsed.data.totalQuantity !== (segment.totalQuantity ?? undefined);
+
   await prisma.wheelSegment.update({
     where: { id: segmentId },
     data: {
@@ -136,6 +139,33 @@ export async function updateWheelSegmentAction(formData: FormData): Promise<void
     result: "SUCCESS",
   });
 
+  if (weightChanged) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "ODDS_CHANGE",
+      entityType: "WheelSegment",
+      entityId: segmentId,
+      result: "SUCCESS",
+      metadata: { weightBefore: segment.weight, weightAfter: parsed.data.weight },
+    });
+  }
+
+  if (stockChanged) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "STOCK_CHANGE",
+      entityType: "WheelSegment",
+      entityId: segmentId,
+      result: "SUCCESS",
+      metadata: {
+        totalQuantityBefore: segment.totalQuantity,
+        totalQuantityAfter: parsed.data.totalQuantity ?? null,
+      },
+    });
+  }
+
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
 
@@ -149,6 +179,15 @@ export async function removeWheelSegmentAction(formData: FormData): Promise<void
   if (!owned) notFound();
 
   await prisma.wheelSegment.deleteMany({ where: { id: segmentId, wheelConfigId: owned.wheelConfig.id } });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "DELETE",
+    entityType: "WheelSegment",
+    entityId: segmentId,
+    result: "SUCCESS",
+  });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }

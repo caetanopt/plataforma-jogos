@@ -12,7 +12,8 @@ export type PermissionAction =
   | "campaign:delete"
   | "leads:view"
   | "leads:export"
-  | "stats:view";
+  | "stats:view"
+  | "audit:view";
 
 const ROLE_ACTIONS: Record<MembershipRole, PermissionAction[]> = {
   ORG_ADMIN: [
@@ -27,6 +28,7 @@ const ROLE_ACTIONS: Record<MembershipRole, PermissionAction[]> = {
     "leads:view",
     "leads:export",
     "stats:view",
+    "audit:view",
   ],
   EDITOR: ["campaign:create", "campaign:edit", "campaign:archive", "stats:view"],
   ANALYST: ["leads:view", "stats:view"],

@@ -1,9 +1,11 @@
 import type {
+  AuditAction,
   CampaignStatus,
   CampaignType,
   DedupStrategy,
   LeadFieldType,
   LeadFormPosition,
+  MembershipRole,
   ParticipationLimitType,
 } from "@/generated/prisma/client";
 
@@ -77,6 +79,30 @@ export const DEDUP_STRATEGY_LABELS: Record<DedupStrategy, string> = {
   IP: "IP (uso limitado)",
   CODE: "Código único",
   FIELD_COMBINATION: "Combinação de campos",
+};
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  LOGIN: "Início de sessão",
+  LOGIN_FAILED: "Início de sessão falhado",
+  CREATE: "Criação",
+  UPDATE: "Edição",
+  PUBLISH: "Publicação",
+  PAUSE: "Pausa",
+  ARCHIVE: "Arquivo",
+  DELETE: "Eliminação",
+  EXPORT: "Exportação",
+  PERMISSION_CHANGE: "Alteração de permissões",
+  ODDS_CHANGE: "Alteração de probabilidades",
+  STOCK_CHANGE: "Alteração de stock",
+  CODE_CHANGE: "Alteração de códigos",
+  PRIVACY_OPERATION: "Operação de privacidade",
+};
+
+export const MEMBERSHIP_ROLE_LABELS: Record<MembershipRole, string> = {
+  ORG_ADMIN: "Administrador da organização",
+  EDITOR: "Editor",
+  ANALYST: "Analista",
+  VIEWER: "Visualizador",
 };
 
 export const PARTICIPATION_LIMIT_TYPE_LABELS: Record<ParticipationLimitType, string> = {

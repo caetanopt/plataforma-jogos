@@ -160,6 +160,15 @@ export async function updateQuestionAction(formData: FormData): Promise<void> {
     },
   });
 
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "QuizQuestion",
+    entityId: questionId,
+    result: "SUCCESS",
+  });
+
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
 
@@ -173,6 +182,15 @@ export async function removeQuestionAction(formData: FormData): Promise<void> {
   if (!owned) notFound();
 
   await prisma.quizQuestion.deleteMany({ where: { id: questionId, quizConfigId: owned.quizConfig.id } });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "DELETE",
+    entityType: "QuizQuestion",
+    entityId: questionId,
+    result: "SUCCESS",
+  });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
@@ -239,7 +257,7 @@ export async function addAnswerAction(formData: FormData): Promise<void> {
     await prisma.quizAnswer.updateMany({ where: { questionId }, data: { isCorrect: false } });
   }
 
-  await prisma.quizAnswer.create({
+  const answer = await prisma.quizAnswer.create({
     data: {
       questionId,
       order: nextOrder,
@@ -247,6 +265,16 @@ export async function addAnswerAction(formData: FormData): Promise<void> {
       imageMediaId: parsed.data.imageMediaId || null,
       isCorrect,
     },
+  });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "CREATE",
+    entityType: "QuizAnswer",
+    entityId: answer.id,
+    result: "SUCCESS",
+    metadata: { questionId, isCorrect },
   });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
@@ -280,6 +308,16 @@ export async function toggleAnswerCorrectAction(formData: FormData): Promise<voi
     await prisma.quizAnswer.update({ where: { id: answerId }, data: { isCorrect: !answer.isCorrect } });
   }
 
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "QuizAnswer",
+    entityId: answerId,
+    result: "SUCCESS",
+    metadata: { questionId, isCorrectBefore: answer.isCorrect },
+  });
+
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
 
@@ -299,6 +337,15 @@ export async function removeAnswerAction(formData: FormData): Promise<void> {
   if (!question || question.type === "TRUE_FALSE") return;
 
   await prisma.quizAnswer.deleteMany({ where: { id: answerId, questionId } });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "DELETE",
+    entityType: "QuizAnswer",
+    entityId: answerId,
+    result: "SUCCESS",
+  });
 
   revalidatePath(`/apps/${campaignId}/jogo`);
 }
