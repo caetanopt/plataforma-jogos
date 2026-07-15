@@ -1,0 +1,32 @@
+name: BD - Migrações + Seed (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_seed:
+        description: "Também correr o seed inicial (organização/admin) além das migrações?"
+        type: boolean
+        default: true
+
+jobs:
+  migrate-seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Aplicar migrações (prisma migrate deploy)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Seed inicial (organização, admin, brand kit)
+        if: ${{ inputs.run_seed }}
+        run: npm run db:seed
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
