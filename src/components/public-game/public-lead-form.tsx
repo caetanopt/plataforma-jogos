@@ -128,6 +128,7 @@ export function PublicLeadForm({
             <input
               id={field.id}
               type="checkbox"
+              required={field.required}
               className="h-4 w-4 rounded border-caetano-medium-gray"
               checked={values[field.internalKey] === "true"}
               onChange={(e) =>

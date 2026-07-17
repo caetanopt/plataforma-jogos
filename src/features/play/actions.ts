@@ -76,11 +76,13 @@ export async function startParticipationAction(
       id: true,
       organizationId: true,
       status: true,
+      type: true,
       scheduleStartAt: true,
       scheduleEndAt: true,
       participationLimitType: true,
       participationCustomMax: true,
       dedupStrategies: true,
+      quizConfig: { select: { maxAttempts: true } },
     },
   });
   if (!campaign) return { ok: false, reason: "not_found" };
@@ -126,6 +128,20 @@ export async function startParticipationAction(
     create: { organizationId: campaign.organizationId, cookieId },
     update: {},
   });
+
+  // "Máx. tentativas" do Quiz (secção 14) — limite de repetições distinto e
+  // adicional às regras de participação gerais da campanha, aplicado por
+  // visitante (identificado pelo cookie, tal como o resto deste fluxo para
+  // anónimos).
+  if (!isTest && campaign.type === "QUIZ" && campaign.quizConfig?.maxAttempts != null) {
+    const attemptsUsed = await prisma.participation.count({
+      where: { campaignId: campaign.id, isTest: false, participantId: participant.id },
+    });
+    if (attemptsUsed >= campaign.quizConfig.maxAttempts) {
+      await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", isTest, input.sessionId, { reason: "limit" });
+      return { ok: false, reason: "limit_reached" };
+    }
+  }
 
   const latestVersion = await prisma.campaignVersion.findFirst({
     where: { campaignId: campaign.id },
@@ -201,7 +217,16 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
   const { leadForm, dedupStrategies, minAge, organizationId, id: campaignId } = participation.campaign;
 
   for (const field of leadForm.fields) {
-    if (field.required && !input.values[field.internalKey]?.trim()) {
+    if (!field.required) continue;
+    // Uma checkbox desmarcada é serializada como a string "false", que não é
+    // vazia — sem este caso especial, `!"false".trim()` avalia a falso e a
+    // validação de obrigatoriedade era ignorada (ex.: aceitação de
+    // regulamento marcada como obrigatória podia ser submetida desmarcada).
+    if (field.type === "CHECKBOX") {
+      if (input.values[field.internalKey] !== "true") return { ok: false, reason: "invalid" };
+      continue;
+    }
+    if (!input.values[field.internalKey]?.trim()) {
       return { ok: false, reason: "invalid" };
     }
   }
@@ -217,14 +242,19 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
   const email = emailField ? input.values[emailField.internalKey]?.trim() || undefined : undefined;
   const phone = phoneField ? input.values[phoneField.internalKey]?.trim() || undefined : undefined;
 
-  if (minAge != null && birthDateField) {
-    const raw = input.values[birthDateField.internalKey];
-    if (raw) {
-      const birthDate = new Date(raw);
-      const age = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      if (Number.isFinite(age) && age < minAge) {
-        return { ok: false, reason: "invalid" };
-      }
+  if (minAge != null) {
+    // Falha fechado: se a campanha exige idade mínima mas não há campo de
+    // data de nascimento configurado (ou foi deixado em branco/inválido),
+    // a idade não pode ser confirmada — bloquear em vez de deixar passar
+    // silenciosamente (secção 16: validar idade mínima antes do jogo).
+    const raw = birthDateField ? input.values[birthDateField.internalKey] : undefined;
+    const birthDate = raw ? new Date(raw) : null;
+    const age =
+      birthDate && !Number.isNaN(birthDate.getTime())
+        ? Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+        : null;
+    if (age == null || age < minAge) {
+      return { ok: false, reason: "invalid" };
     }
   }
 
@@ -324,9 +354,9 @@ export async function submitMemoryResultAction(input: MemorySubmitInput): Promis
     prisma.memoryResult.create({
       data: {
         participationId: input.participationId,
-        timeSeconds: input.timeSeconds,
-        attempts: input.attempts,
-        pairsFound: input.pairsFound,
+        timeSeconds: result.timeSeconds,
+        attempts: result.attempts,
+        pairsFound: result.pairsFound,
         score: result.score,
         completed: result.completed,
       },
@@ -346,12 +376,12 @@ export async function submitMemoryResultAction(input: MemorySubmitInput): Promis
   return { score: result.score, completed: result.completed };
 }
 
-export async function spinWheelAction(participationId: string, isTest: boolean): Promise<WheelSpinResult> {
+export async function spinWheelAction(participationId: string): Promise<WheelSpinResult> {
   const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
   if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
   try {
-    const result = await drawAndAwardPrize(participationId, new Date(), isTest);
+    const result = await drawAndAwardPrize(participationId, new Date());
     const participation = await prisma.participation.findUnique({ where: { id: participationId } });
     if (participation) {
       await recordEvent(participation.campaignId, "GAME_COMPLETED", participation.isTest, participation.sessionId);
@@ -364,7 +394,7 @@ export async function spinWheelAction(participationId: string, isTest: boolean):
     if (error instanceof NoEligibleSegmentsError) {
       const participation = await prisma.participation.findUnique({ where: { id: participationId } });
       if (participation) {
-        await recordEvent(participation.campaignId, "PARTICIPATION_BLOCKED", isTest, participation.sessionId, {
+        await recordEvent(participation.campaignId, "PARTICIPATION_BLOCKED", participation.isTest, participation.sessionId, {
           reason: "no_eligible_segments",
         });
       }

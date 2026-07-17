@@ -37,17 +37,27 @@ export async function updateLeadFormSettingsAction(formData: FormData): Promise<
   });
   if (!parsed.success) return;
 
-  await prisma.leadForm.update({
-    where: { id: owned.leadForm.id },
-    data: {
-      position: parsed.data.position,
-      honeypotEnabled: parsed.data.honeypotEnabled === "on",
-    },
-  });
+  await prisma.$transaction([
+    prisma.leadForm.update({
+      where: { id: owned.leadForm.id },
+      data: {
+        position: parsed.data.position,
+        honeypotEnabled: parsed.data.honeypotEnabled === "on",
+      },
+    }),
+    prisma.campaign.update({
+      where: { id: campaignId },
+      data: { dedupStrategies: parsed.data.dedupStrategies },
+    }),
+  ]);
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: { dedupStrategies: parsed.data.dedupStrategies },
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "LeadForm",
+    entityId: owned.leadForm.id,
+    result: "SUCCESS",
   });
 
   revalidatePath(`/apps/${campaignId}/formulario`);
@@ -154,6 +164,15 @@ export async function updateLeadFieldAction(formData: FormData): Promise<void> {
     },
   });
 
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "LeadFormField",
+    entityId: fieldId,
+    result: "SUCCESS",
+  });
+
   revalidatePath(`/apps/${campaignId}/formulario`);
 }
 
@@ -166,7 +185,18 @@ export async function removeLeadFieldAction(formData: FormData): Promise<void> {
   const owned = await getOwnedLeadForm(context.organizationId, campaignId);
   if (!owned) notFound();
 
-  await prisma.leadFormField.deleteMany({ where: { id: fieldId, leadFormId: owned.leadForm.id } });
+  const deleted = await prisma.leadFormField.deleteMany({ where: { id: fieldId, leadFormId: owned.leadForm.id } });
+
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "LeadFormField",
+      entityId: fieldId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/formulario`);
 }
@@ -197,6 +227,16 @@ export async function moveLeadFieldAction(formData: FormData): Promise<void> {
     prisma.leadFormField.update({ where: { id: swapWith.id }, data: { order: current.order } }),
   ]);
 
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "LeadFormField",
+    entityId: current.id,
+    result: "SUCCESS",
+    metadata: { action: "reorder", swappedWith: swapWith.id },
+  });
+
   revalidatePath(`/apps/${campaignId}/formulario`);
 }
 
@@ -221,7 +261,7 @@ export async function addConsentAction(formData: FormData): Promise<void> {
   });
   const nextOrder = existing.reduce((max, c) => Math.max(max, c.order), -1) + 1;
 
-  await prisma.consentDefinition.create({
+  const consent = await prisma.consentDefinition.create({
     data: {
       leadFormId: owned.leadForm.id,
       text: parsed.data.text,
@@ -230,6 +270,15 @@ export async function addConsentAction(formData: FormData): Promise<void> {
       required: parsed.data.required === "on",
       order: nextOrder,
     },
+  });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "CREATE",
+    entityType: "ConsentDefinition",
+    entityId: consent.id,
+    result: "SUCCESS",
   });
 
   revalidatePath(`/apps/${campaignId}/formulario`);
@@ -268,6 +317,24 @@ export async function updateConsentAction(formData: FormData): Promise<void> {
     },
   });
 
+  // Consentimentos são dados relevantes para o RGPD (secção 24) — auditar
+  // sempre que o texto (nova versão) ou o carácter de marketing/obrigatório
+  // muda, não só na criação/remoção.
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "ConsentDefinition",
+    entityId: consentId,
+    result: "SUCCESS",
+    metadata: {
+      versionBefore: consent.version,
+      versionAfter: textChanged ? consent.version + 1 : consent.version,
+      isMarketingBefore: consent.isMarketing,
+      isMarketingAfter: parsed.data.isMarketing === "on",
+    },
+  });
+
   revalidatePath(`/apps/${campaignId}/formulario`);
 }
 
@@ -280,9 +347,20 @@ export async function removeConsentAction(formData: FormData): Promise<void> {
   const owned = await getOwnedLeadForm(context.organizationId, campaignId);
   if (!owned) notFound();
 
-  await prisma.consentDefinition.deleteMany({
+  const deleted = await prisma.consentDefinition.deleteMany({
     where: { id: consentId, leadFormId: owned.leadForm.id },
   });
+
+  if (deleted.count > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "ConsentDefinition",
+      entityId: consentId,
+      result: "SUCCESS",
+    });
+  }
 
   revalidatePath(`/apps/${campaignId}/formulario`);
 }

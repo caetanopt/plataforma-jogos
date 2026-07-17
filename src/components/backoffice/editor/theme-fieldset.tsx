@@ -46,9 +46,21 @@ export function ThemeFieldset({
   theme: ThemeFieldsetValues;
   media: { logo: MediaAsset | null; favicon: MediaAsset | null; background: MediaAsset | null };
 }) {
+  // Cada bloco de topo leva um `key` derivado de `theme.updatedAt` — sem
+  // isto, ao aplicar um brand kit (que substitui todos estes valores de
+  // uma vez via `applyBrandKitAction`), o React reconcilia os inputs
+  // não controlados existentes em vez de os recriar, e `defaultValue`/
+  // `defaultChecked` só são aplicados na montagem inicial. O resultado era
+  // cores, border-radius, sombra e os uploads de logo/favicon/fundo a
+  // continuarem a mostrar os valores antigos depois de aplicar o kit,
+  // apesar do texto ao lado de cada cor (que lê `theme.*` diretamente) já
+  // mostrar o valor novo.
+  const version = theme.updatedAt.toISOString();
+
   return (
     <>
       <MediaUploadField
+        key={`logo-${version}`}
         name="logoMediaId"
         label="Logótipo"
         defaultMediaId={theme.logoMediaId}
@@ -57,6 +69,7 @@ export function ThemeFieldset({
         accept="image/jpeg,image/png,image/webp,image/svg+xml"
       />
       <MediaUploadField
+        key={`favicon-${version}`}
         name="faviconMediaId"
         label="Favicon"
         defaultMediaId={theme.faviconMediaId}
@@ -65,6 +78,7 @@ export function ThemeFieldset({
         accept="image/png,image/svg+xml"
       />
       <MediaUploadField
+        key={`background-${version}`}
         name="backgroundImageMediaId"
         label="Imagem de fundo"
         defaultMediaId={theme.backgroundImageMediaId}
@@ -73,7 +87,7 @@ export function ThemeFieldset({
         accept="image/jpeg,image/png,image/webp"
       />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <div key={`colors-${version}`} className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <ColorField id="primaryColor" label="Cor primária" defaultValue={theme.primaryColor} />
         <ColorField id="secondaryColor" label="Cor secundária" defaultValue={theme.secondaryColor} />
         <ColorField id="backgroundColor" label="Cor de fundo" defaultValue={theme.backgroundColor} />
@@ -86,11 +100,10 @@ export function ThemeFieldset({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div key={`typography-${version}`} className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="fontFamily">Tipografia</Label>
           <select
-            key={`fontFamily-${theme.updatedAt.toISOString()}`}
             id="fontFamily"
             name="fontFamily"
             defaultValue={theme.fontFamily}
@@ -116,7 +129,7 @@ export function ThemeFieldset({
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
+      <label key={`shadow-${version}`} className="flex items-center gap-2 text-sm text-caetano-anthracite">
         <input
           type="checkbox"
           name="shadowEnabled"

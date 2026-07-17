@@ -143,12 +143,26 @@ async function getMemoryStats(campaignIds: string[], range: DateRange) {
         createdAt: { gte: range.from, lte: range.to },
       },
     },
-    include: { participation: { include: { participant: true } } },
+    include: {
+      participation: {
+        include: { participant: true, campaign: { include: { memoryConfig: true } } },
+      },
+    },
     orderBy: { score: "desc" },
     take: 500,
   });
 
   const avg = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
+
+  // O ranking respeita a configuração por campanha (secção 12): uma
+  // campanha com "rankingEnabled" desligado fica fora do ranking (mas
+  // continua a contar para as métricas agregadas acima), e uma com
+  // "rankingAnonymize" ligado nunca mostra o nome real.
+  const rankable = results.filter((r) => r.participation.campaign.memoryConfig?.rankingEnabled !== false);
+  const maxEntries = Math.min(
+    ...rankable.map((r) => r.participation.campaign.memoryConfig?.rankingMaxEntries ?? 10),
+    10,
+  );
 
   return {
     plays: results.length,
@@ -156,13 +170,17 @@ async function getMemoryStats(campaignIds: string[], range: DateRange) {
     avgTimeSeconds: Math.round(avg(results.map((r) => r.timeSeconds))),
     avgAttempts: Math.round(avg(results.map((r) => r.attempts))),
     completionRate: results.length ? results.filter((r) => r.completed).length / results.length : 0,
-    ranking: results.slice(0, 10).map((r) => ({
-      name:
-        [r.participation.participant?.firstName, r.participation.participant?.lastName].filter(Boolean).join(" ") ||
-        "Anónimo",
-      score: r.score,
-      timeSeconds: r.timeSeconds,
-    })),
+    ranking: rankable.slice(0, Number.isFinite(maxEntries) ? maxEntries : 10).map((r) => {
+      const anonymize = r.participation.campaign.memoryConfig?.rankingAnonymize ?? false;
+      const realName = [r.participation.participant?.firstName, r.participation.participant?.lastName]
+        .filter(Boolean)
+        .join(" ");
+      return {
+        name: anonymize || !realName ? "Anónimo" : realName,
+        score: r.score,
+        timeSeconds: r.timeSeconds,
+      };
+    }),
   };
 }
 

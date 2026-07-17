@@ -57,11 +57,11 @@ export function CampaignRowActions({
           </form>
         )}
 
-        {canPublish && (status === "PUBLISHED" || status === "PAUSED") && (
+        {canPublish && (status === "PUBLISHED" || status === "PAUSED" || status === "SCHEDULED") && (
           <form action={togglePauseCampaignAction}>
             <input type="hidden" name="campaignId" value={campaignId} />
             <button type="submit" className={menuItemClass}>
-              {status === "PUBLISHED" ? "Pausar" : "Retomar"}
+              {status === "PAUSED" ? "Retomar" : "Pausar"}
             </button>
           </form>
         )}

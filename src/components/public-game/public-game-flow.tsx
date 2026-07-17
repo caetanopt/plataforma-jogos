@@ -221,7 +221,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
           {props.campaignType === "WHEEL" && props.wheel && (
             <PublicWheelGame
               segments={props.wheel.segments}
-              onSpin={() => spinWheelAction(participationId, props.isTestMode)}
+              onSpin={() => spinWheelAction(participationId)}
               onContinue={advance}
             />
           )}

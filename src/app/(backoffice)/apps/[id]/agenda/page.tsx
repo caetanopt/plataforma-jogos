@@ -7,12 +7,7 @@ import { SaveStatus } from "@/components/backoffice/editor/save-status";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-
-function toDatetimeLocalValue(date: Date | null): string {
-  if (!date) return "";
-  const offsetMs = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
+import { utcToZonedDateTimeLocal } from "@/lib/dates/timezone";
 
 export default async function ScheduleStepPage({
   params,
@@ -52,7 +47,7 @@ export default async function ScheduleStepPage({
               id="scheduleStartAt"
               name="scheduleStartAt"
               type="datetime-local"
-              defaultValue={toDatetimeLocalValue(campaign.scheduleStartAt)}
+              defaultValue={campaign.scheduleStartAt ? utcToZonedDateTimeLocal(campaign.scheduleStartAt, campaign.timezone) : ""}
             />
           </div>
           <div>
@@ -61,7 +56,7 @@ export default async function ScheduleStepPage({
               id="scheduleEndAt"
               name="scheduleEndAt"
               type="datetime-local"
-              defaultValue={toDatetimeLocalValue(campaign.scheduleEndAt)}
+              defaultValue={campaign.scheduleEndAt ? utcToZonedDateTimeLocal(campaign.scheduleEndAt, campaign.timezone) : ""}
             />
           </div>
         </div>

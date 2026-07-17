@@ -1,7 +1,9 @@
 import { randomInt } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
-import type { WheelSegment } from "@/generated/prisma/client";
+import type { Prize, WheelSegment } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
+
+type WheelSegmentWithPrize = WheelSegment & { prize: Prize | null };
 
 export class NoEligibleSegmentsError extends Error {
   constructor() {
@@ -29,11 +31,23 @@ export interface WheelDrawResult extends PersistedWheelResult {
   alreadyResolved: boolean;
 }
 
-function isSegmentEligible(segment: WheelSegment, now: Date): boolean {
+/**
+ * Um segmento "WIN" pode partilhar o stock do prémio com outros segmentos
+ * (o stock vive no `Prize`, não só no `WheelSegment.remainingQuantity`, que é
+ * opcional). Ignorar o stock do prémio ligado deixava o segmento
+ * "elegível" mesmo com o prémio esgotado — era escolhido pelo sorteio
+ * ponderado e só depois falhava (abortando a rotação inteira), distorcendo
+ * a distribuição real de probabilidade e bloqueando rotações legítimas.
+ */
+function isSegmentEligible(segment: WheelSegmentWithPrize, now: Date): boolean {
   if (!segment.isActive) return false;
   if (segment.periodStart && segment.periodStart > now) return false;
   if (segment.periodEnd && segment.periodEnd < now) return false;
   if (segment.totalQuantity != null && (segment.remainingQuantity ?? 0) <= 0) return false;
+  if (segment.outcome === "WIN" && segment.prize) {
+    const prize = segment.prize;
+    if (prize.totalQuantity != null && prize.awardedQuantity >= prize.totalQuantity) return false;
+  }
   return true;
 }
 
@@ -93,7 +107,6 @@ function isSerializationConflict(error: unknown): boolean {
 export async function drawAndAwardPrize(
   participationId: string,
   now: Date = new Date(),
-  isTest = false,
 ): Promise<WheelDrawResult> {
   for (let attempt = 0; attempt < MAX_SERIALIZATION_RETRIES; attempt += 1) {
     try {
@@ -108,9 +121,16 @@ export async function drawAndAwardPrize(
             return { ...persisted, alreadyResolved: true };
           }
 
+          // O modo de teste é sempre lido da participação gravada na BD, nunca
+          // de um parâmetro do pedido — spinWheelAction é uma Server Action,
+          // logo um endpoint HTTP invocável diretamente, e um valor recebido do
+          // cliente poderia ser falsificado para consumir stock/atribuir
+          // prémios reais numa participação de teste (ou vice-versa).
+          const isTest = participation.isTest;
+
           const wheelConfig = await tx.wheelConfig.findUnique({
             where: { campaignId: participation.campaignId },
-            include: { segments: true },
+            include: { segments: { include: { prize: true } } },
           });
           if (!wheelConfig) throw new Error("Roda da Sorte não configurada para esta campanha.");
 
@@ -135,6 +155,16 @@ export async function drawAndAwardPrize(
             } else {
               if (prizeRecord.totalQuantity != null && prizeRecord.awardedQuantity >= prizeRecord.totalQuantity) {
                 throw new NoEligibleSegmentsError();
+              }
+
+              if (prizeRecord.dailyLimit != null) {
+                const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                const awardedToday = await tx.prizeAward.count({
+                  where: { prizeId: prizeRecord.id, awardedAt: { gte: startOfDay } },
+                });
+                if (awardedToday >= prizeRecord.dailyLimit) {
+                  throw new NoEligibleSegmentsError();
+                }
               }
 
               await tx.prize.update({

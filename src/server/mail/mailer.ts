@@ -30,6 +30,16 @@ export async function sendMail(input: SendMailInput): Promise<void> {
   const from = process.env.MAIL_FROM ?? "Plataforma de Jogos <no-reply@caetano.pt>";
 
   if (process.env.MAIL_TRANSPORT !== "smtp") {
+    if (process.env.NODE_ENV === "production") {
+      // Em produção, nunca escrever o corpo do e-mail nos logs — pode conter
+      // um token de reset de password ou de convite. Isto é sobretudo um
+      // aviso de configuração em falta (MAIL_TRANSPORT/SMTP_* não definidos):
+      // o e-mail não está a ser entregue a ninguém.
+      console.error(
+        `[mail] MAIL_TRANSPORT não está definido como "smtp" em produção — e-mail para ${input.to} (assunto: "${input.subject}") NÃO foi enviado.`,
+      );
+      return;
+    }
     console.log(
       `[mail:console] Para: ${input.to} | Assunto: ${input.subject}\n${input.text}`,
     );

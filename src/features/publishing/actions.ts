@@ -40,30 +40,40 @@ export async function publishCampaignAction(formData: FormData): Promise<void> {
 
   const snapshot = JSON.parse(JSON.stringify(campaign));
 
-  const version = await prisma.campaignVersion.create({
-    data: {
-      campaignId,
-      versionNumber,
-      snapshot,
-      publishedById: context.userId,
-    },
-  });
-
+  // O upload do QR code (I/O externo, para o storage S3) corre primeiro e
+  // fora de qualquer transação — se falhar, nada na BD foi tocado ainda,
+  // por isso repetir a publicação fica sempre seguro. As três escritas na
+  // BD (versão, publicação e o próprio estado da campanha) só acontecem
+  // depois, atomicamente: sem isto, uma falha a meio (ex.: no update do
+  // estado) deixava uma CampaignVersion/Publication "fantasma" sem a
+  // campanha refletir a publicação, e uma nova tentativa criava outra
+  // versão duplicada.
   const url = publicPlayUrl(campaign.slug);
   const { pngMediaId, svgMediaId } = await generateAndStoreQrCodes(context.organizationId, context.userId, url);
 
-  await prisma.publication.create({
-    data: {
-      campaignVersionId: version.id,
-      publishedById: context.userId,
-      qrPngMediaId: pngMediaId,
-      qrSvgMediaId: svgMediaId,
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    const version = await tx.campaignVersion.create({
+      data: {
+        campaignId,
+        versionNumber,
+        snapshot,
+        publishedById: context.userId,
+      },
+    });
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: { status: nextStatus, publishedAt: now },
+    await tx.publication.create({
+      data: {
+        campaignVersionId: version.id,
+        publishedById: context.userId,
+        qrPngMediaId: pngMediaId,
+        qrSvgMediaId: svgMediaId,
+      },
+    });
+
+    await tx.campaign.update({
+      where: { id: campaignId },
+      data: { status: nextStatus, publishedAt: now },
+    });
   });
 
   await logAudit({

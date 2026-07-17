@@ -97,4 +97,29 @@ describe("computeMemoryScore", () => {
     expect(result.completed).toBe(false);
     expect(result.score).toBe(40);
   });
+
+  it("clamps a manipulated pairsFound to the real number of pairs", () => {
+    const result = computeMemoryScore({
+      pairsTotal: 8,
+      pairsFound: 999_999,
+      attempts: 8,
+      timeSeconds: 40,
+      config: baseConfig,
+    });
+    expect(result.pairsFound).toBe(8);
+    expect(result.score).toBe(80);
+  });
+
+  it("clamps attempts to at least pairsFound and rejects negative/NaN input", () => {
+    const result = computeMemoryScore({
+      pairsTotal: 8,
+      pairsFound: 8,
+      attempts: -5,
+      timeSeconds: -10,
+      config: baseConfig,
+    });
+    expect(result.attempts).toBe(8);
+    expect(result.timeSeconds).toBe(0);
+    expect(result.score).toBe(80);
+  });
 });

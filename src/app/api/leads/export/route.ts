@@ -29,7 +29,21 @@ export async function GET(request: Request) {
     entityType: "Participation",
     entityId: params.campaignId || "all",
     result: "SUCCESS",
-    metadata: { count: participations.length, filters: params },
+    // Nunca incluir `params.search` — é o mesmo campo de pesquisa por
+    // nome/e-mail/telefone (src/features/leads/queries.ts), por isso pode
+    // conter dados pessoais de um lead. Só se regista se a exportação usou
+    // pesquisa, não o texto pesquisado.
+    metadata: {
+      count: participations.length,
+      hadSearch: Boolean(params.search),
+      filters: {
+        campaignId: params.campaignId ?? null,
+        excludeTest: params.excludeTest,
+        preset: range.preset,
+        from: range.from.toISOString(),
+        to: range.to.toISOString(),
+      },
+    },
   });
 
   return new NextResponse(csv, {

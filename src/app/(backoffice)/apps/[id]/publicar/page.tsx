@@ -25,6 +25,17 @@ function publicPlayUrl(slug: string): string {
   return `${base.replace(/\/$/, "")}/play/${slug}`;
 }
 
+// Título controlado pelo admin, interpolado num atributo HTML de um snippet
+// que é copiado e colado, sem revisão, no site externo do cliente — escapar
+// para não permitir "escapar" do atributo `title` (ex.: `">＜script>...`).
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export default async function PublishStepPage({
   params,
   searchParams,
@@ -63,7 +74,8 @@ export default async function PublishStepPage({
     : [null, null];
 
   const url = publicPlayUrl(campaign.slug);
-  const embedSnippet = `<iframe src="${url}?embed=1" width="100%" height="${publication?.embedHeightPx ?? 720}" style="border:0" title="${campaign.publicTitle ?? campaign.internalName}"></iframe>`;
+  const embedTitle = escapeHtmlAttribute(campaign.publicTitle ?? campaign.internalName);
+  const embedSnippet = `<iframe src="${url}?embed=1" width="100%" height="${publication?.embedHeightPx ?? 720}" style="border:0" title="${embedTitle}"></iframe>`;
 
   return (
     <div className="max-w-3xl space-y-6">

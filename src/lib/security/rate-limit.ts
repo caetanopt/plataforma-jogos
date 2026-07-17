@@ -26,7 +26,12 @@ export async function checkRateLimit(
     }
     return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
   } catch (error) {
-    console.error(`[rate-limit] Redis indisponível, a permitir o pedido (${key}):`, error);
+    // Regista só o tipo de limite (a parte antes do primeiro ":"), nunca a
+    // chave completa — esta pode conter dados pessoais (email, IP) ou um
+    // segredo (ex.: o próprio token de reset de password em
+    // "reset-password-attempt:<token>"), que nunca deve ir para os logs.
+    const kind = key.split(":")[0];
+    console.error(`[rate-limit] Redis indisponível, a permitir o pedido (${kind}):`, error);
     return { allowed: true, remaining: limit };
   }
 }

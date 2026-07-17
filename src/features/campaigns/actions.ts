@@ -48,6 +48,13 @@ export async function createCampaignAction(formData: FormData): Promise<void> {
     redirect("/apps/new?error=validation");
   }
 
+  if (folderId) {
+    const folder = await prisma.folder.findFirst({ where: { id: folderId, workspaceId } });
+    if (!folder) {
+      redirect("/apps/new?error=validation");
+    }
+  }
+
   const theme = await createCampaignTheme(context.organizationId);
   const slug = await ensureUniqueSlug(generateCampaignSlug(type.toLowerCase()));
 
@@ -459,6 +466,8 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
   });
   if (!campaign) redirect("/apps?error=not_found");
 
+  await prisma.campaign.delete({ where: { id: campaignId } });
+
   await logAudit({
     organizationId: context.organizationId,
     userId: context.userId,
@@ -468,8 +477,6 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
     result: "SUCCESS",
     metadata: { participationsDeleted: campaign._count.participations },
   });
-
-  await prisma.campaign.delete({ where: { id: campaignId } });
 
   revalidatePath("/apps");
 }
@@ -516,11 +523,15 @@ export async function togglePauseCampaignAction(formData: FormData): Promise<voi
     where: { id: campaignId, organizationId: context.organizationId },
   });
   if (!campaign) redirect("/apps?error=not_found");
-  if (campaign.status !== "PUBLISHED" && campaign.status !== "PAUSED") {
+  // Uma campanha "Agendada" cuja data de início já passou está efetivamente
+  // ativa (ver getEffectivePublicState) e tinha de poder ser pausada — antes
+  // só PUBLISHED/PAUSED eram aceites, deixando essas campanhas presas sem
+  // nenhum caminho de UI para as pausar.
+  if (campaign.status !== "PUBLISHED" && campaign.status !== "PAUSED" && campaign.status !== "SCHEDULED") {
     redirect("/apps?error=invalid_state");
   }
 
-  const nextStatus = campaign.status === "PUBLISHED" ? "PAUSED" : "PUBLISHED";
+  const nextStatus = campaign.status === "PAUSED" ? "PUBLISHED" : "PAUSED";
   await prisma.campaign.update({ where: { id: campaignId }, data: { status: nextStatus } });
 
   await logAudit({
