@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
+import { logAudit } from "@/server/audit/log";
 import { finalScreenSchema } from "@/lib/validation/campaign";
 import { getField } from "@/lib/forms/form-data";
 
@@ -40,6 +41,16 @@ export async function updateFinalScreenAction(formData: FormData): Promise<void>
       finalAllowReplay: parsed.data.finalAllowReplay === "on",
       finalAllowShare: parsed.data.finalAllowShare === "on",
     },
+  });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "Campaign",
+    entityId: campaignId,
+    result: "SUCCESS",
+    metadata: { step: "ecra-final" },
   });
 
   revalidatePath(`/apps/${campaignId}/ecra-final`);

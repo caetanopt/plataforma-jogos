@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
+import { logAudit } from "@/server/audit/log";
 import { participationRulesSchema } from "@/lib/validation/campaign";
 import { getField } from "@/lib/forms/form-data";
 
@@ -37,6 +38,27 @@ export async function updateParticipationRulesAction(formData: FormData): Promis
       participationLimitType: parsed.data.participationLimitType,
       participationCustomMax: customMax,
       minAge,
+    },
+  });
+
+  // Regras de elegibilidade têm impacto direto no controlo de fraude
+  // (secção 16) — auditar com antes/depois, como as alterações a
+  // probabilidades/stock da Roda.
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "Campaign",
+    entityId: campaignId,
+    result: "SUCCESS",
+    metadata: {
+      step: "regras",
+      participationLimitTypeBefore: campaign.participationLimitType,
+      participationLimitTypeAfter: parsed.data.participationLimitType,
+      participationCustomMaxBefore: campaign.participationCustomMax,
+      participationCustomMaxAfter: customMax,
+      minAgeBefore: campaign.minAge,
+      minAgeAfter: minAge,
     },
   });
 

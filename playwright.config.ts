@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 import { config as loadEnv } from "dotenv";
 
@@ -5,6 +6,15 @@ import { config as loadEnv } from "dotenv";
 // carregar aqui para que global-setup, specs e o `webServer` (npm run start)
 // vejam DATABASE_URL/REDIS_URL/etc.
 loadEnv();
+
+// A revisão do Chromium pré-instalada no ambiente de desenvolvimento
+// (chromium-1194) é mais antiga do que a que este @playwright/test pediria
+// por omissão — aponta diretamente para o binário em vez de correr
+// `playwright install`. Só existe nesse ambiente; noutros (ex.: CI, depois
+// de `playwright install --with-deps chromium`), cai para a resolução
+// normal do Playwright.
+const sandboxChromiumPath = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+const chromiumExecutablePath = existsSync(sandboxChromiumPath) ? sandboxChromiumPath : undefined;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -15,14 +25,14 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
-  reporter: "list",
+  // Em CI, "html" fica gravado em disco (playwright-report/) para se poder
+  // enviar como artefacto quando um teste falha — "list" (só terminal) não
+  // deixa nada para inspecionar depois de o runner terminar.
+  reporter: process.env.CI ? "html" : "list",
   use: {
     baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
     trace: "on-first-retry",
-    // A revisão do Chromium pré-instalada no ambiente (chromium-1194) é mais
-    // antiga do que a que este @playwright/test pediria por omissão — aponta
-    // diretamente para o binário em vez de correr `playwright install`.
-    launchOptions: { executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" },
+    launchOptions: chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : {},
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /mobile-keyboard\.spec\.ts/ },

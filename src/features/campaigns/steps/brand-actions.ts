@@ -152,5 +152,15 @@ export async function applyBrandKitAction(formData: FormData): Promise<void> {
     },
   });
 
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "CampaignTheme",
+    entityId: campaign.theme.id,
+    result: "SUCCESS",
+    metadata: { appliedBrandKitId: brandKit.id },
+  });
+
   revalidatePath(`/apps/${campaignId}/marca`);
 }

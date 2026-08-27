@@ -58,10 +58,24 @@ export async function inviteUserAction(formData: FormData): Promise<void> {
     }
   }
 
+  // O membership e o token de convite têm de ficar ambos gravados ou
+  // nenhum — sem transação, uma falha a meio (ex.: o token) deixava um
+  // membership "órfão" sem convite possível de reenviar (um segundo
+  // convite ao mesmo e-mail encontra logo o membership existente e para
+  // em "already_member", sem nunca (re)tentar o token/e-mail).
+  const token = randomBytes(32).toString("hex");
   let membership;
   try {
-    membership = await prisma.membership.create({
-      data: { userId: user.id, organizationId: context.organizationId, role, canPublish, canExportLeads },
+    membership = await prisma.$transaction(async (tx) => {
+      const created = await tx.membership.create({
+        data: { userId: user.id, organizationId: context.organizationId, role, canPublish, canExportLeads },
+      });
+      if (isNewUser) {
+        await tx.passwordResetToken.create({
+          data: { userId: user.id, token, expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS) },
+        });
+      }
+      return created;
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -71,10 +85,6 @@ export async function inviteUserAction(formData: FormData): Promise<void> {
   }
 
   if (isNewUser) {
-    const token = randomBytes(32).toString("hex");
-    await prisma.passwordResetToken.create({
-      data: { userId: user.id, token, expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS) },
-    });
     const organization = await prisma.organization.findUniqueOrThrow({ where: { id: context.organizationId } });
     const { subject, html, text } = inviteUserEmail(token, organization.name);
     await sendMail({ to: user.email, subject, html, text });

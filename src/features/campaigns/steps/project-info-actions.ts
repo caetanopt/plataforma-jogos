@@ -37,11 +37,17 @@ export async function updateProjectInfoAction(formData: FormData): Promise<void>
   });
   if (!workspace) return;
 
-  if (parsed.data.folderId) {
+  // Se a pasta submetida não pertencer ao espaço de trabalho (ex.: o
+  // utilizador mudou de espaço de trabalho na mesma autosave, sem o select
+  // de pasta — que ainda mostra as pastas do espaço antigo — ter sido
+  // atualizado a tempo), cai para "sem pasta" em vez de descartar
+  // silenciosamente o resto do formulário (nome, descrição, etc.).
+  let folderId = parsed.data.folderId || null;
+  if (folderId) {
     const folder = await prisma.folder.findFirst({
-      where: { id: parsed.data.folderId, workspaceId: parsed.data.workspaceId },
+      where: { id: folderId, workspaceId: parsed.data.workspaceId },
     });
-    if (!folder) return;
+    if (!folder) folderId = null;
   }
 
   let slug = slugify(String(formData.get("slug") ?? "")) || campaign.slug;
@@ -62,7 +68,7 @@ export async function updateProjectInfoAction(formData: FormData): Promise<void>
       publicTitle: parsed.data.publicTitle || null,
       internalReference: parsed.data.internalReference || null,
       workspaceId: parsed.data.workspaceId,
-      folderId: parsed.data.folderId || null,
+      folderId,
       tags,
       description: parsed.data.description || null,
       locale: parsed.data.locale,

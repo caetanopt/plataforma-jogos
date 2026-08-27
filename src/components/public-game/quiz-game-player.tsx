@@ -94,7 +94,8 @@ export function QuizGamePlayer({
     try {
       const finalResult = await onSubmit(submissions, timeSeconds);
       setResult(finalResult);
-    } catch {
+    } catch (error) {
+      console.error("[quiz] Falha ao submeter as respostas:", error);
       submittedRef.current = false;
       setError("Não foi possível submeter as respostas. Tente novamente.");
     } finally {

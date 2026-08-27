@@ -29,7 +29,8 @@ export function PublicMemoryGame({
         setResult(r);
         setPhase("done");
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        console.error("[memory] Falha ao submeter o resultado do jogo:", error);
         setPhase("error");
       });
   }

@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    name: Lint, typecheck, testes e build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: plataforma
+          POSTGRES_PASSWORD: plataforma
+          POSTGRES_DB: plataforma_jogos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://plataforma:plataforma@localhost:5432/plataforma_jogos
+      REDIS_URL: redis://localhost:6379
+      AUTH_SECRET: ci-only-secret-never-used-in-production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DISABLE_AUTH: "false"
+      MAIL_TRANSPORT: console
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Aplicar migrações
+        run: npx prisma migrate deploy
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Testes unitários e de integração
+        run: npm run test
+
+      - name: Build de produção
+        run: npm run build
+
+  e2e:
+    name: Testes end-to-end (Playwright)
+    runs-on: ubuntu-latest
+    needs: verify
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: plataforma
+          POSTGRES_PASSWORD: plataforma
+          POSTGRES_DB: plataforma_jogos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://plataforma:plataforma@localhost:5432/plataforma_jogos
+      REDIS_URL: redis://localhost:6379
+      AUTH_SECRET: ci-only-secret-never-used-in-production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DISABLE_AUTH: "false"
+      MAIL_TRANSPORT: console
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_REGION: us-east-1
+      STORAGE_BUCKET: plataforma-jogos-media
+      # "S3RVER" é a única conta que o s3rver aceita (ver
+      # .env.example) — não é um segredo real.
+      STORAGE_ACCESS_KEY_ID: S3RVER
+      STORAGE_SECRET_ACCESS_KEY: S3RVER
+      STORAGE_FORCE_PATH_STYLE: "true"
+      STORAGE_PUBLIC_URL: http://localhost:9000/plataforma-jogos-media
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Aplicar migrações
+        run: npx prisma migrate deploy
+
+      - name: Instalar o Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Arrancar o mock de storage compatível com S3 (s3rver)
+        run: |
+          npx --yes s3rver -d /tmp/s3-data -a 0.0.0.0 -p 9000 --allow-mismatched-signatures --configure-bucket plataforma-jogos-media &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000 > /dev/null && exit 0
+            sleep 1
+          done
+          echo "s3rver não arrancou a tempo" >&2
+          exit 1
+
+      - name: Testes end-to-end
+        run: npm run test:e2e
+        env:
+          CI: "true"
+
+      - name: Guardar relatório do Playwright em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

@@ -47,7 +47,8 @@ export function WheelGamePlayer({ segments, onSpin }: WheelGamePlayerProps) {
         setResult(spinResult);
         setSpinning(false);
       }, 4000);
-    } catch {
+    } catch (error) {
+      console.error("[wheel] Falha ao rodar a roda:", error);
       setError("Não foi possível determinar o resultado. Tente novamente.");
       setSpinning(false);
     }
