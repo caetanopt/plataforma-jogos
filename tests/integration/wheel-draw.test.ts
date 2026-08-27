@@ -191,6 +191,38 @@ describe("drawAndAwardPrize — concorrência e stock", () => {
       await fixture.cleanup();
     }
   }, 30_000);
+
+  it("nunca atribui um código já expirado, mesmo que ainda esteja marcado AVAILABLE", async () => {
+    const fixture = await createWheelFixture({ prizeTotalQuantity: 5, includeNoWinFallback: false });
+    try {
+      const expiredCode = await prisma.prizeCode.create({
+        data: {
+          prizeId: fixture.prizeId,
+          code: `EXPIRED-${randomUUID().slice(0, 8)}`,
+          status: "AVAILABLE",
+          expiresAt: new Date(Date.now() - 60_000),
+        },
+      });
+      const validCode = await prisma.prizeCode.create({
+        data: {
+          prizeId: fixture.prizeId,
+          code: `VALID-${randomUUID().slice(0, 8)}`,
+          status: "AVAILABLE",
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      });
+
+      const participation = await fixture.createParticipation();
+      const result = await drawAndAwardPrize(participation.id);
+
+      expect(result.prize?.code).toBe(validCode.code);
+
+      const expiredAfter = await prisma.prizeCode.findUniqueOrThrow({ where: { id: expiredCode.id } });
+      expect(expiredAfter.status).toBe("EXPIRED");
+    } finally {
+      await fixture.cleanup();
+    }
+  }, 30_000);
 });
 
 afterAll(async () => {

@@ -142,6 +142,15 @@ export async function drawAndAwardPrize(
           data: { awardedQuantity: { increment: 1 } },
         });
 
+        // Não há um job periódico a expirar códigos — em vez disso, faz-se
+        // a transição aqui, no único sítio onde um código "AVAILABLE" pode
+        // realmente ser atribuído. Sem isto, um código já expirado mas
+        // ainda marcado "AVAILABLE" continuava a ser atribuível.
+        await tx.prizeCode.updateMany({
+          where: { prizeId: prizeRecord.id, status: "AVAILABLE", expiresAt: { lt: now } },
+          data: { status: "EXPIRED" },
+        });
+
         const availableCode = await tx.prizeCode.findFirst({
           where: { prizeId: prizeRecord.id, status: "AVAILABLE" },
         });

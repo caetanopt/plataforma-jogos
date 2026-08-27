@@ -50,7 +50,11 @@ export async function updateProjectInfoAction(formData: FormData): Promise<void>
     if (!folder) folderId = null;
   }
 
-  let slug = slugify(String(formData.get("slug") ?? "")) || campaign.slug;
+  // Uma vez publicada, mudar o slug parte o link/QR code já partilhados
+  // (a imagem do QR fica gravada com a URL antiga, agora um 404 livre para
+  // outra campanha reclamar) — bloquear a mudança em vez de deixar a
+  // publicação existente ficar dessincronizada do slug atual.
+  let slug = campaign.publishedAt ? campaign.slug : slugify(String(formData.get("slug") ?? "")) || campaign.slug;
   if (slug !== campaign.slug) {
     const existing = await prisma.campaign.findUnique({ where: { slug } });
     if (existing) slug = campaign.slug;

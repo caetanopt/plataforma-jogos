@@ -158,9 +158,17 @@ export default async function ProjectInfoStepPage({
 
         <div>
           <Label htmlFor="slug">Slug público</Label>
-          <Input id="slug" name="slug" defaultValue={campaign.slug} />
-          <p className="mt-1 text-xs text-caetano-medium-gray">
+          <Input
+            id="slug"
+            name="slug"
+            defaultValue={campaign.slug}
+            disabled={Boolean(campaign.publishedAt)}
+            aria-describedby="slug-help"
+          />
+          <p id="slug-help" className="mt-1 text-xs text-caetano-medium-gray">
             URL pública: /play/{campaign.slug}
+            {campaign.publishedAt &&
+              " — já não pode ser alterado depois de publicado (partia o link e o QR code já partilhados)."}
           </p>
         </div>
 
