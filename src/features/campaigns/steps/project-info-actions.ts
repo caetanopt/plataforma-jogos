@@ -8,6 +8,7 @@ import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { projectInfoSchema } from "@/lib/validation/campaign";
 import { slugify } from "@/lib/random/slug";
+import { getField } from "@/lib/forms/form-data";
 
 export async function updateProjectInfoAction(formData: FormData): Promise<void> {
   const context = await requireOrgContext();
@@ -20,15 +21,15 @@ export async function updateProjectInfoAction(formData: FormData): Promise<void>
   if (!campaign) notFound();
 
   const parsed = projectInfoSchema.safeParse({
-    internalName: formData.get("internalName"),
-    publicTitle: formData.get("publicTitle"),
-    internalReference: formData.get("internalReference"),
-    workspaceId: formData.get("workspaceId"),
-    folderId: formData.get("folderId"),
-    tags: formData.get("tags"),
-    description: formData.get("description"),
-    locale: formData.get("locale") || "pt-PT",
-    timezone: formData.get("timezone") || "Europe/Lisbon",
+    internalName: getField(formData, "internalName"),
+    publicTitle: getField(formData, "publicTitle"),
+    internalReference: getField(formData, "internalReference"),
+    workspaceId: getField(formData, "workspaceId"),
+    folderId: getField(formData, "folderId"),
+    tags: getField(formData, "tags"),
+    description: getField(formData, "description"),
+    locale: getField(formData, "locale") || "pt-PT",
+    timezone: getField(formData, "timezone") || "Europe/Lisbon",
   });
   if (!parsed.success) return;
 

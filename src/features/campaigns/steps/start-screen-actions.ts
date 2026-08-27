@@ -7,6 +7,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { startScreenSchema } from "@/lib/validation/campaign";
+import { getField } from "@/lib/forms/form-data";
 
 export async function updateStartScreenAction(formData: FormData): Promise<void> {
   const context = await requireOrgContext();
@@ -19,16 +20,16 @@ export async function updateStartScreenAction(formData: FormData): Promise<void>
   if (!campaign) notFound();
 
   const parsed = startScreenSchema.safeParse({
-    startTitle: formData.get("startTitle"),
-    startSubtitle: formData.get("startSubtitle"),
-    startIntroText: formData.get("startIntroText"),
-    startMediaId: formData.get("startMediaId"),
-    startLogoMediaId: formData.get("startLogoMediaId"),
-    startButtonLabel: formData.get("startButtonLabel"),
-    startPrizeInfo: formData.get("startPrizeInfo"),
-    countdownEnabled: formData.get("countdownEnabled") ?? "",
-    regulationText: formData.get("regulationText"),
-    legalText: formData.get("legalText"),
+    startTitle: getField(formData, "startTitle"),
+    startSubtitle: getField(formData, "startSubtitle"),
+    startIntroText: getField(formData, "startIntroText"),
+    startMediaId: getField(formData, "startMediaId"),
+    startLogoMediaId: getField(formData, "startLogoMediaId"),
+    startButtonLabel: getField(formData, "startButtonLabel"),
+    startPrizeInfo: getField(formData, "startPrizeInfo"),
+    countdownEnabled: getField(formData, "countdownEnabled"),
+    regulationText: getField(formData, "regulationText"),
+    legalText: getField(formData, "legalText"),
   });
   if (!parsed.success) return;
 

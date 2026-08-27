@@ -7,6 +7,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { brandThemeSchema } from "@/lib/validation/campaign";
+import { getField } from "@/lib/forms/form-data";
 
 async function getCampaignWithTheme(organizationId: string, campaignId: string) {
   return prisma.campaign.findFirst({
@@ -24,19 +25,19 @@ export async function updateCampaignThemeAction(formData: FormData): Promise<voi
   if (!campaign || !campaign.theme) notFound();
 
   const parsed = brandThemeSchema.safeParse({
-    name: formData.get("name"),
-    logoMediaId: formData.get("logoMediaId"),
-    faviconMediaId: formData.get("faviconMediaId"),
-    backgroundImageMediaId: formData.get("backgroundImageMediaId"),
-    primaryColor: formData.get("primaryColor"),
-    secondaryColor: formData.get("secondaryColor"),
-    backgroundColor: formData.get("backgroundColor"),
-    textColor: formData.get("textColor"),
-    buttonColor: formData.get("buttonColor"),
-    buttonTextColor: formData.get("buttonTextColor"),
-    fontFamily: formData.get("fontFamily"),
-    borderRadiusPx: formData.get("borderRadiusPx"),
-    shadowEnabled: formData.get("shadowEnabled") ?? "",
+    name: getField(formData, "name"),
+    logoMediaId: getField(formData, "logoMediaId"),
+    faviconMediaId: getField(formData, "faviconMediaId"),
+    backgroundImageMediaId: getField(formData, "backgroundImageMediaId"),
+    primaryColor: getField(formData, "primaryColor"),
+    secondaryColor: getField(formData, "secondaryColor"),
+    backgroundColor: getField(formData, "backgroundColor"),
+    textColor: getField(formData, "textColor"),
+    buttonColor: getField(formData, "buttonColor"),
+    buttonTextColor: getField(formData, "buttonTextColor"),
+    fontFamily: getField(formData, "fontFamily"),
+    borderRadiusPx: getField(formData, "borderRadiusPx"),
+    shadowEnabled: getField(formData, "shadowEnabled"),
   });
   if (!parsed.success) return;
 
