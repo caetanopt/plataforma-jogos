@@ -119,6 +119,12 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
           Perguntas ({quizConfig.questions.length})
         </h3>
 
+        {quizConfig.questions.length === 0 && (
+          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+            Ainda não há perguntas. Adicione a primeira abaixo.
+          </p>
+        )}
+
         <ul className="space-y-3">
           {quizConfig.questions.map((question, index) => (
             <li key={question.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
@@ -259,6 +265,12 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
         <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
           Perfis de resultado ({quizConfig.resultProfiles.length})
         </h3>
+
+        {quizConfig.resultProfiles.length === 0 && (
+          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+            Ainda não há perfis de resultado (opcional).
+          </p>
+        )}
 
         <ul className="space-y-2">
           {quizConfig.resultProfiles.map((profile) => (

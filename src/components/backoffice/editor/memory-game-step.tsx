@@ -175,13 +175,27 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
           Pares de cartas ({memoryConfig.pairs.length})
         </h3>
 
+        {memoryConfig.pairs.length === 0 && (
+          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+            Ainda não há pares de cartas. Adicione o primeiro abaixo.
+          </p>
+        )}
+
         <ul className="space-y-2">
           {memoryConfig.pairs.map((pair, index) => (
             <li key={pair.id} className="flex items-center justify-between gap-3 rounded-lg border border-caetano-medium-gray/20 p-2">
               <div className="flex items-center gap-3">
-                <PairThumb url={pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined} text={pair.cardAText} />
+                <PairThumb
+                  url={pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined}
+                  text={pair.cardAText}
+                  label="Carta A"
+                />
                 <span className="text-caetano-medium-gray">↔</span>
-                <PairThumb url={pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined} text={pair.cardBText} />
+                <PairThumb
+                  url={pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined}
+                  text={pair.cardBText}
+                  label="Carta B"
+                />
                 <span className="text-xs text-caetano-medium-gray">{PAIR_KIND_LABELS[pair.kind]}</span>
               </div>
               <div className="flex items-center gap-1">
@@ -221,10 +235,10 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
   );
 }
 
-function PairThumb({ url, text }: { url?: string; text?: string | null }) {
+function PairThumb({ url, text, label }: { url?: string; text?: string | null; label: string }) {
   if (url) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="" className="h-12 w-12 rounded object-cover" />;
+    return <img src={url} alt={label} className="h-12 w-12 rounded object-cover" />;
   }
   return (
     <span className="flex h-12 w-24 items-center justify-center rounded bg-neutral-100 px-2 text-xs text-caetano-anthracite">

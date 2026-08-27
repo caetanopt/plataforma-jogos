@@ -115,7 +115,7 @@ export function MediaUploadField({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
-              alt=""
+              alt={`Pré-visualização de ${label}`}
               className="h-32 rounded-lg border border-caetano-medium-gray/30 object-contain"
             />
           )}

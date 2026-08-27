@@ -57,6 +57,12 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
           Prémios ({campaign.prizes.length})
         </h3>
 
+        {campaign.prizes.length === 0 && (
+          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+            Ainda não há prémios. Adicione o primeiro abaixo antes de criar segmentos.
+          </p>
+        )}
+
         <ul className="space-y-3">
           {campaign.prizes.map((prize) => (
             <li key={prize.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
@@ -154,6 +160,12 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
           Segmentos ({wheelConfig.segments.length})
         </h3>
+
+        {wheelConfig.segments.length === 0 && (
+          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+            Ainda não há segmentos. Adicione o primeiro abaixo.
+          </p>
+        )}
 
         <ul className="space-y-2">
           {wheelConfig.segments.map((segment, index) => (

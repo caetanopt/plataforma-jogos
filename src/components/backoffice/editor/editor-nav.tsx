@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Check, TriangleAlert } from "lucide-react";
 import { EDITOR_STEPS } from "@/components/backoffice/editor/steps";
 import { cn } from "@/lib/utils";
 
@@ -43,9 +44,20 @@ export function EditorNav({
                   )}
                   aria-hidden="true"
                 >
-                  {index + 1}
+                  {isActive ? (
+                    index + 1
+                  ) : isIncomplete ? (
+                    <TriangleAlert size={12} />
+                  ) : (
+                    <Check size={12} />
+                  )}
                 </span>
                 {step.label}
+                {/* A cor sozinha (laranja/verde) não chega para distinguir
+                    incompleta de completa — WCAG 1.4.1 — e o ícone acima é
+                    decorativo (aria-hidden). Este texto dá a mesma
+                    informação a leitores de ecrã. */}
+                {!isActive && <span className="sr-only">{isIncomplete ? " (incompleta)" : " (completa)"}</span>}
               </Link>
             </li>
           );

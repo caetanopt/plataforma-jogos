@@ -67,8 +67,9 @@ export default async function ParticipationRulesStepPage({
             min={1}
             defaultValue={campaign.participationCustomMax ?? ""}
             disabled={campaign.participationLimitType !== "CUSTOM_MAX"}
+            aria-describedby="participationCustomMax-help"
           />
-          <p className="mt-1 text-xs text-caetano-medium-gray">
+          <p id="participationCustomMax-help" className="mt-1 text-xs text-caetano-medium-gray">
             Só aplicável quando o limite acima é &quot;Máximo personalizado&quot;.
           </p>
         </div>
