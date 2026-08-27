@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { checkParticipationAllowed } from "@/features/play/limits";
+import { createParticipationIfAllowed } from "@/features/play/create-participation";
 import { getOrCreateVisitorCookieId } from "@/features/play/cookie";
 import { getRequestIp } from "@/lib/security/request-ip";
 import { parseUserAgent } from "@/features/play/user-agent";
@@ -13,7 +14,10 @@ import { getEffectivePublicState } from "@/features/publishing/public-status";
 import { computeMemoryScore } from "@/features/memory-game/scoring";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
 import { drawAndAwardPrize, NoEligibleSegmentsError } from "@/features/wheel-game/draw";
-import type { QuizPlayerResult, QuizPlayerSubmission } from "@/components/public-game/quiz-game-player";
+import type {
+  QuizPlayerResult,
+  QuizPlayerSubmission,
+} from "@/components/public-game/quiz-game-player";
 import type { WheelSpinResult } from "@/components/public-game/wheel-game-player";
 
 async function recordEvent(
@@ -95,53 +99,14 @@ export async function startParticipationAction(
   // Sem IP (proxy/CDN que não define x-forwarded-for), usa o cookie do
   // visitante em vez de um balde "unknown" partilhado por todos — evita que
   // muitos visitantes sem IP detetável se bloqueiem uns aos outros.
-  const rateLimit = await checkRateLimit(`participation:${campaign.id}:${ip ?? cookieId}`, 30, 3600);
+  const rateLimit = await checkRateLimit(
+    `participation:${campaign.id}:${ip ?? cookieId}`,
+    30,
+    3600,
+  );
   if (!rateLimit.allowed) return { ok: false, reason: "rate_limited" };
 
   const isTest = input.testRequested && (await canTestCampaign(campaign.organizationId));
-
-  if (!isTest) {
-    const allowed = await checkParticipationAllowed({
-      organizationId: campaign.organizationId,
-      campaignId: campaign.id,
-      limitType: campaign.participationLimitType,
-      customMax: campaign.participationCustomMax,
-      dedupStrategies: campaign.dedupStrategies,
-      cookieId,
-      ip,
-      sessionId: input.sessionId,
-      now: new Date(),
-    });
-    if (!allowed) {
-      await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", isTest, input.sessionId, { reason: "limit" });
-      return { ok: false, reason: "limit_reached" };
-    }
-  }
-
-  const existing = await prisma.participation.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
-  if (existing) {
-    return { ok: true, participationId: existing.id, isTest: existing.isTest };
-  }
-
-  const participant = await prisma.participant.upsert({
-    where: { organizationId_cookieId: { organizationId: campaign.organizationId, cookieId } },
-    create: { organizationId: campaign.organizationId, cookieId },
-    update: {},
-  });
-
-  // "Máx. tentativas" do Quiz (secção 14) — limite de repetições distinto e
-  // adicional às regras de participação gerais da campanha, aplicado por
-  // visitante (identificado pelo cookie, tal como o resto deste fluxo para
-  // anónimos).
-  if (!isTest && campaign.type === "QUIZ" && campaign.quizConfig?.maxAttempts != null) {
-    const attemptsUsed = await prisma.participation.count({
-      where: { campaignId: campaign.id, isTest: false, participantId: participant.id },
-    });
-    if (attemptsUsed >= campaign.quizConfig.maxAttempts) {
-      await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", isTest, input.sessionId, { reason: "limit" });
-      return { ok: false, reason: "limit_reached" };
-    }
-  }
 
   const latestVersion = await prisma.campaignVersion.findFirst({
     where: { campaignId: campaign.id },
@@ -152,30 +117,49 @@ export async function startParticipationAction(
   const userAgent = (await headers()).get("user-agent");
   const { deviceType, browser, os } = parseUserAgent(userAgent);
 
-  const participation = await prisma.participation.create({
-    data: {
-      campaignId: campaign.id,
-      campaignVersionId: latestVersion.id,
-      participantId: participant.id,
-      isTest,
-      idempotencyKey: input.idempotencyKey,
-      source: input.source,
-      utmSource: input.utm?.source,
-      utmMedium: input.utm?.medium,
-      utmCampaign: input.utm?.campaign,
-      utmContent: input.utm?.content,
-      utmTerm: input.utm?.term,
-      sessionId: input.sessionId,
-      ipAddress: ip,
-      deviceType,
-      browser,
-      os,
-    },
+  // A verificação do limite de participação e a criação da participação têm
+  // de acontecer na MESMA transação serializável: se corressem em passos
+  // separados, dois pedidos concorrentes do mesmo visitante (dois
+  // separadores, duplo clique) podiam ambos ler "abaixo do limite" antes de
+  // qualquer um gravar a sua participação — contornando "uma participação
+  // total/dia/hora" (secção 16). Ver `createParticipationIfAllowed`.
+  const result = await createParticipationIfAllowed({
+    organizationId: campaign.organizationId,
+    campaignId: campaign.id,
+    campaignVersionId: latestVersion.id,
+    campaignType: campaign.type,
+    participationLimitType: campaign.participationLimitType,
+    participationCustomMax: campaign.participationCustomMax,
+    dedupStrategies: campaign.dedupStrategies,
+    quizMaxAttempts: campaign.quizConfig?.maxAttempts ?? null,
+    idempotencyKey: input.idempotencyKey,
+    isTest,
+    cookieId,
+    ip,
+    sessionId: input.sessionId,
+    source: input.source,
+    utm: input.utm,
+    deviceType,
+    browser,
+    os,
   });
 
-  await recordEvent(campaign.id, "GAME_STARTED", isTest, input.sessionId);
+  if (result.kind === "blocked") {
+    await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", isTest, input.sessionId, {
+      reason: "limit",
+    });
+    return { ok: false, reason: "limit_reached" };
+  }
 
-  return { ok: true, participationId: participation.id, isTest };
+  if (result.kind === "created") {
+    await recordEvent(campaign.id, "GAME_STARTED", isTest, input.sessionId);
+  }
+
+  return {
+    ok: true,
+    participationId: result.participation.id,
+    isTest: result.participation.isTest,
+  };
 }
 
 export interface SubmitLeadFormInput {
@@ -185,9 +169,12 @@ export interface SubmitLeadFormInput {
   honeypot?: string;
 }
 
-export type SubmitLeadFormResult = { ok: true } | { ok: false; reason: "duplicate" | "invalid" | "bot" };
+export type SubmitLeadFormResult =
+  { ok: true } | { ok: false; reason: "duplicate" | "invalid" | "bot" };
 
-export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<SubmitLeadFormResult> {
+export async function submitLeadFormAction(
+  input: SubmitLeadFormInput,
+): Promise<SubmitLeadFormResult> {
   const ip = await getRequestIp();
   // Sem IP, usa o id da participação (único por submissão) em vez de um
   // balde "unknown" partilhado por todos os visitantes sem IP detetável.
@@ -208,13 +195,25 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
 
   if (input.honeypot) {
     // Bot detetado — finge sucesso sem gravar nada real (secção 25).
-    await recordEvent(participation.campaignId, "PARTICIPATION_BLOCKED", participation.isTest, participation.sessionId, {
-      reason: "honeypot",
-    });
+    await recordEvent(
+      participation.campaignId,
+      "PARTICIPATION_BLOCKED",
+      participation.isTest,
+      participation.sessionId,
+      {
+        reason: "honeypot",
+      },
+    );
     return { ok: true };
   }
 
-  const { leadForm, dedupStrategies, minAge, organizationId, id: campaignId } = participation.campaign;
+  const {
+    leadForm,
+    dedupStrategies,
+    minAge,
+    organizationId,
+    id: campaignId,
+  } = participation.campaign;
 
   for (const field of leadForm.fields) {
     if (!field.required) continue;
@@ -259,7 +258,7 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
   }
 
   if (!participation.isTest && (email || phone)) {
-    const allowed = await checkParticipationAllowed({
+    const allowed = await checkParticipationAllowed(prisma, {
       organizationId,
       campaignId,
       limitType: participation.campaign.participationLimitType,
@@ -272,7 +271,9 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
     if (!allowed) return { ok: false, reason: "duplicate" };
   }
 
-  const firstNameField = leadForm.fields.find((f) => f.type === "FIRST_NAME" || f.type === "FULL_NAME");
+  const firstNameField = leadForm.fields.find(
+    (f) => f.type === "FIRST_NAME" || f.type === "FULL_NAME",
+  );
   const lastNameField = leadForm.fields.find((f) => f.type === "LAST_NAME");
 
   const participant = await prisma.participant.update({
@@ -303,7 +304,12 @@ export async function submitLeadFormAction(input: SubmitLeadFormInput): Promise<
     ),
   ]);
 
-  await recordEvent(campaignId, "LEAD_FORM_SUBMITTED", participation.isTest, participation.sessionId);
+  await recordEvent(
+    campaignId,
+    "LEAD_FORM_SUBMITTED",
+    participation.isTest,
+    participation.sessionId,
+  );
 
   return { ok: true };
 }
@@ -320,17 +326,26 @@ export interface MemorySubmitResult {
   completed: boolean;
 }
 
-export async function submitMemoryResultAction(input: MemorySubmitInput): Promise<MemorySubmitResult> {
+export async function submitMemoryResultAction(
+  input: MemorySubmitInput,
+): Promise<MemorySubmitResult> {
   const rateLimit = await checkRateLimit(`submit:${input.participationId}`, 10, 60);
-  if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+  if (!rateLimit.allowed)
+    throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
   const participation = await prisma.participation.findUniqueOrThrow({
     where: { id: input.participationId },
-    include: { campaign: { include: { memoryConfig: { include: { pairs: true } } } }, memoryResult: true },
+    include: {
+      campaign: { include: { memoryConfig: { include: { pairs: true } } } },
+      memoryResult: true,
+    },
   });
 
   if (participation.memoryResult) {
-    return { score: participation.memoryResult.score, completed: participation.memoryResult.completed };
+    return {
+      score: participation.memoryResult.score,
+      completed: participation.memoryResult.completed,
+    };
   }
 
   const config = participation.campaign.memoryConfig;
@@ -371,32 +386,56 @@ export async function submitMemoryResultAction(input: MemorySubmitInput): Promis
     }),
   ]);
 
-  await recordEvent(participation.campaignId, "GAME_COMPLETED", participation.isTest, participation.sessionId);
+  await recordEvent(
+    participation.campaignId,
+    "GAME_COMPLETED",
+    participation.isTest,
+    participation.sessionId,
+  );
 
   return { score: result.score, completed: result.completed };
 }
 
 export async function spinWheelAction(participationId: string): Promise<WheelSpinResult> {
   const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
-  if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+  if (!rateLimit.allowed)
+    throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
   try {
     const result = await drawAndAwardPrize(participationId, new Date());
     const participation = await prisma.participation.findUnique({ where: { id: participationId } });
     if (participation) {
-      await recordEvent(participation.campaignId, "GAME_COMPLETED", participation.isTest, participation.sessionId);
+      await recordEvent(
+        participation.campaignId,
+        "GAME_COMPLETED",
+        participation.isTest,
+        participation.sessionId,
+      );
       if (result.prize) {
-        await recordEvent(participation.campaignId, "PRIZE_AWARDED", participation.isTest, participation.sessionId);
+        await recordEvent(
+          participation.campaignId,
+          "PRIZE_AWARDED",
+          participation.isTest,
+          participation.sessionId,
+        );
       }
     }
     return result;
   } catch (error) {
     if (error instanceof NoEligibleSegmentsError) {
-      const participation = await prisma.participation.findUnique({ where: { id: participationId } });
+      const participation = await prisma.participation.findUnique({
+        where: { id: participationId },
+      });
       if (participation) {
-        await recordEvent(participation.campaignId, "PARTICIPATION_BLOCKED", participation.isTest, participation.sessionId, {
-          reason: "no_eligible_segments",
-        });
+        await recordEvent(
+          participation.campaignId,
+          "PARTICIPATION_BLOCKED",
+          participation.isTest,
+          participation.sessionId,
+          {
+            reason: "no_eligible_segments",
+          },
+        );
       }
     }
     throw error;
@@ -409,7 +448,8 @@ export async function submitQuizAction(
   timeSeconds: number,
 ): Promise<QuizPlayerResult> {
   const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
-  if (!rateLimit.allowed) throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+  if (!rateLimit.allowed)
+    throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
   const participation = await prisma.participation.findUniqueOrThrow({
     where: { id: participationId },
@@ -438,7 +478,12 @@ export async function submitQuizAction(
       percentage: participation.quizResponse.percentage,
       passed: participation.quizResponse.passed,
       resultProfile: profile
-        ? { title: profile.title, description: profile.description, ctaLabel: profile.ctaLabel, ctaUrl: profile.ctaUrl }
+        ? {
+            title: profile.title,
+            description: profile.description,
+            ctaLabel: profile.ctaLabel,
+            ctaUrl: profile.ctaUrl,
+          }
         : null,
     };
   }
@@ -483,7 +528,12 @@ export async function submitQuizAction(
     }),
   ]);
 
-  await recordEvent(participation.campaignId, "GAME_COMPLETED", participation.isTest, participation.sessionId);
+  await recordEvent(
+    participation.campaignId,
+    "GAME_COMPLETED",
+    participation.isTest,
+    participation.sessionId,
+  );
 
   return {
     totalScore: scored.totalScore,
@@ -491,7 +541,12 @@ export async function submitQuizAction(
     percentage: scored.percentage,
     passed: scored.passed,
     resultProfile: profile
-      ? { title: profile.title, description: profile.description, ctaLabel: profile.ctaLabel, ctaUrl: profile.ctaUrl }
+      ? {
+          title: profile.title,
+          description: profile.description,
+          ctaLabel: profile.ctaLabel,
+          ctaUrl: profile.ctaUrl,
+        }
       : null,
   };
 }

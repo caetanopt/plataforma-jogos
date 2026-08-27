@@ -13,6 +13,12 @@ function createS3Client(): S3Client {
       accessKeyId: process.env.STORAGE_ACCESS_KEY_ID ?? "",
       secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY ?? "",
     },
+    // Versões recentes do SDK calculam por omissão um checksum adicional
+    // (CRC32) em cada upload — a maioria dos serviços compatíveis com S3
+    // (secção 28: "storage compatível com S3") ainda não o suporta e
+    // rejeita o pedido. "WHEN_REQUIRED" mantém o checksum apenas quando a
+    // operação o exige mesmo, restaurando a compatibilidade.
+    requestChecksumCalculation: "WHEN_REQUIRED",
   });
 }
 

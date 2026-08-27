@@ -1,4 +1,3 @@
-import { prisma } from "@/server/db/client";
 import type { DedupStrategy, ParticipationLimitType, Prisma } from "@/generated/prisma/client";
 
 export interface ParticipationLimitCheckInput {
@@ -22,8 +21,17 @@ export interface ParticipationLimitCheckInput {
  * só entram se o admin ativou essa estratégia. As estratégias "Código" e
  * "Combinação de campos" ficam por implementar — não têm UI de configuração
  * ainda e ficam documentadas como trabalho futuro.
+ *
+ * Recebe explicitamente o cliente Prisma (`db`) para poder correr dentro da
+ * mesma transação serializável que cria a participação — ler a contagem
+ * fora dessa transação permitiria a dois pedidos concorrentes do mesmo
+ * visitante lerem ambos "abaixo do limite" antes de qualquer um criar a
+ * sua participação.
  */
-export async function checkParticipationAllowed(input: ParticipationLimitCheckInput): Promise<boolean> {
+export async function checkParticipationAllowed(
+  db: Prisma.TransactionClient,
+  input: ParticipationLimitCheckInput,
+): Promise<boolean> {
   if (input.limitType === "UNLIMITED") return true;
 
   const windowStart =
@@ -37,21 +45,21 @@ export async function checkParticipationAllowed(input: ParticipationLimitCheckIn
 
   const participantIds = new Set<string>();
   if (input.cookieId) {
-    const participant = await prisma.participant.findFirst({
+    const participant = await db.participant.findFirst({
       where: { organizationId: input.organizationId, cookieId: input.cookieId },
       select: { id: true },
     });
     if (participant) participantIds.add(participant.id);
   }
   if (input.dedupStrategies.includes("EMAIL") && input.email) {
-    const participant = await prisma.participant.findFirst({
+    const participant = await db.participant.findFirst({
       where: { organizationId: input.organizationId, email: input.email },
       select: { id: true },
     });
     if (participant) participantIds.add(participant.id);
   }
   if (input.dedupStrategies.includes("PHONE") && input.phone) {
-    const participant = await prisma.participant.findFirst({
+    const participant = await db.participant.findFirst({
       where: { organizationId: input.organizationId, phone: input.phone },
       select: { id: true },
     });
@@ -61,11 +69,12 @@ export async function checkParticipationAllowed(input: ParticipationLimitCheckIn
   const or: Prisma.ParticipationWhereInput[] = [];
   if (participantIds.size > 0) or.push({ participantId: { in: [...participantIds] } });
   if (input.dedupStrategies.includes("IP") && input.ip) or.push({ ipAddress: input.ip });
-  if (input.dedupStrategies.includes("SESSION") && input.sessionId) or.push({ sessionId: input.sessionId });
+  if (input.dedupStrategies.includes("SESSION") && input.sessionId)
+    or.push({ sessionId: input.sessionId });
 
   if (or.length === 0) return true;
 
-  const count = await prisma.participation.count({
+  const count = await db.participation.count({
     where: {
       campaignId: input.campaignId,
       isTest: false,
