@@ -52,7 +52,7 @@ export default async function NewAppPage({
   const singleWorkspace = workspaces.length === 1 ? workspaces[0] : null;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Escolha um tipo de jogo</h1>
       <p className="mt-1 text-caetano-anthracite-80">
         Disponíveis nesta primeira fase: Jogo da Memória, Roda da Sorte e Quiz Interativo.

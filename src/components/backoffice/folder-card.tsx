@@ -65,7 +65,9 @@ export function FolderCard({
           <h3 className="truncate text-sm font-bold text-caetano-anthracite">
             <Link
               href={`/apps?folderId=${id}`}
-              className="before:absolute before:inset-0 before:rounded-xl focus-visible:outline-none"
+              // O anel é desenhado pelo pseudo-elemento que cobre o cartão,
+              // para o foco envolver o cartão inteiro e não só o texto.
+              className="outline-none before:absolute before:inset-0 before:rounded-xl focus-visible:before:ring-2 focus-visible:before:ring-caetano-cyan focus-visible:before:ring-offset-2"
             >
               {name}
             </Link>

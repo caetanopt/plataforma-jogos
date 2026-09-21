@@ -39,8 +39,8 @@ export function EditorNav({
                     isActive
                       ? "bg-white/20 text-white"
                       : isIncomplete
-                        ? "border border-caetano-dynamic-orange text-caetano-dynamic-orange"
-                        : "border border-caetano-eco-green text-caetano-eco-green",
+                        ? "bg-caetano-dynamic-orange-20 text-caetano-anthracite ring-1 ring-caetano-dynamic-orange"
+                        : "bg-caetano-eco-green-20 text-caetano-anthracite ring-1 ring-caetano-eco-green",
                   )}
                   aria-hidden="true"
                 >

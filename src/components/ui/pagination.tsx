@@ -62,8 +62,13 @@ export function Pagination({
       </p>
 
       <ul className="flex flex-wrap items-center gap-1">
-        <li>
-          {page > 1 ? (
+        {/*
+          O Anterior/Seguinte indisponível não é renderizado: um texto
+          esbatido o suficiente para parecer inativo fica abaixo do contraste
+          mínimo, e uma seta que não leva a lado nenhum não acrescenta nada.
+        */}
+        {page > 1 && (
+          <li>
             <Link
               href={buildHref(page - 1)}
               rel="prev"
@@ -71,12 +76,8 @@ export function Pagination({
             >
               Anterior
             </Link>
-          ) : (
-            <span className={cn(itemClass, "cursor-default text-caetano-anthracite-40")} aria-hidden="true">
-              Anterior
-            </span>
-          )}
-        </li>
+          </li>
+        )}
 
         {items.map((item, index) =>
           item === "gap" ? (
@@ -102,8 +103,8 @@ export function Pagination({
           ),
         )}
 
-        <li>
-          {page < pageCount ? (
+        {page < pageCount && (
+          <li>
             <Link
               href={buildHref(page + 1)}
               rel="next"
@@ -111,12 +112,8 @@ export function Pagination({
             >
               Seguinte
             </Link>
-          ) : (
-            <span className={cn(itemClass, "cursor-default text-caetano-anthracite-40")} aria-hidden="true">
-              Seguinte
-            </span>
-          )}
-        </li>
+          </li>
+        )}
       </ul>
     </nav>
   );

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
 
+export const metadata = { title: "Espaços de trabalho" };
+
 const PAGE_SIZE = 20;
 
 /*
@@ -44,7 +46,7 @@ export default async function WorkspacesPage({
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Espaços de trabalho</h1>
       <p className="mt-1 text-caetano-anthracite-80">
         Agrupam campanhas, utilizadores e permissões por marca, departamento ou cliente.

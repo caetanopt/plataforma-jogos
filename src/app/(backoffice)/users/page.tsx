@@ -10,6 +10,8 @@ import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { Pagination } from "@/components/ui/pagination";
 import { MEMBERSHIP_ROLE_LABELS } from "@/lib/labels";
 
+export const metadata = { title: "Utilizadores" };
+
 /** Uma organização grande fazia esta página carregar todos os membros. */
 const PAGE_SIZE = 25;
 
@@ -44,7 +46,7 @@ export default async function UsersPage({
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Utilizadores</h1>
       <p className="mt-1 text-caetano-anthracite-80">
         Convide colegas e defina o papel de cada um na organização.
@@ -56,15 +58,21 @@ export default async function UsersPage({
         </div>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Tabela de utilizadores"
+        className="mt-6 overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+      >
         <table className="w-full text-sm">
+          <caption className="sr-only">Utilizadores da organização e respetivos papéis</caption>
           <thead>
             <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
-              <th className="px-4 py-3">Nome</th>
-              <th className="px-4 py-3">E-mail</th>
-              <th className="px-4 py-3">Papel</th>
-              <th className="px-4 py-3">Permissões extra</th>
-              <th className="px-4 py-3">Ações</th>
+              <th scope="col" className="px-4 py-3">Nome</th>
+              <th scope="col" className="px-4 py-3">E-mail</th>
+              <th scope="col" className="px-4 py-3">Papel</th>
+              <th scope="col" className="px-4 py-3">Permissões extra</th>
+              <th scope="col" className="px-4 py-3">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-caetano-medium-gray-20">

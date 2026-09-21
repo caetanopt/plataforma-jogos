@@ -12,6 +12,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/labels";
 
+export const metadata = { title: "Leads" };
+
 interface LeadsSearchParams {
   campaignId?: string;
   search?: string;
@@ -67,7 +69,7 @@ export default async function LeadsPage({
   }).toString();
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-caetano-anthracite">Leads</h1>
@@ -129,18 +131,24 @@ export default async function LeadsPage({
         </Button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Tabela de leads"
+        className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+      >
         <table className="w-full text-sm">
+          <caption className="sr-only">Participações e leads recolhidos</caption>
           <thead>
             <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Campanha</th>
-              <th className="px-4 py-3">Nome</th>
-              <th className="px-4 py-3">Contacto</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Resultado</th>
-              <th className="px-4 py-3">Prémio</th>
-              <th className="px-4 py-3">Origem</th>
+              <th scope="col" className="px-4 py-3">Data</th>
+              <th scope="col" className="px-4 py-3">Campanha</th>
+              <th scope="col" className="px-4 py-3">Nome</th>
+              <th scope="col" className="px-4 py-3">Contacto</th>
+              <th scope="col" className="px-4 py-3">Estado</th>
+              <th scope="col" className="px-4 py-3">Resultado</th>
+              <th scope="col" className="px-4 py-3">Prémio</th>
+              <th scope="col" className="px-4 py-3">Origem</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-caetano-medium-gray-20">

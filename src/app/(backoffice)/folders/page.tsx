@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
 import { FolderCard } from "@/components/backoffice/folder-card";
 
+export const metadata = { title: "Início" };
+
 const ERROR_MESSAGES: Record<string, string> = {
   folder_not_empty: "Não é possível eliminar: mova ou elimine primeiro as aplicações desta pasta.",
   validation: "Dados inválidos. Confirme o nome da pasta (até 120 caracteres).",

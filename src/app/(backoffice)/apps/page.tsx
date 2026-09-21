@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { CampaignRowActions } from "@/components/backoffice/campaign-row-actions";
 import type { CampaignStatus, CampaignType } from "@/generated/prisma/client";
 
+export const metadata = { title: "Aplicações" };
+
 const ERROR_MESSAGES: Record<string, string> = {
   not_found: "Aplicação não encontrada ou sem permissão para a alterar.",
   validation: "Dados inválidos. Verifique a pasta de destino.",
@@ -96,7 +98,7 @@ export default async function AppsListPage({
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-caetano-anthracite">Aplicações</h1>
@@ -229,18 +231,24 @@ export default async function AppsListPage({
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
+        <div
+        tabIndex={0}
+        role="region"
+        aria-label="Tabela de aplicações"
+        className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+      >
           <table className="w-full min-w-[720px] text-left text-sm">
+            <caption className="sr-only">Aplicações da organização</caption>
             <thead className="border-b border-caetano-medium-gray-40 text-caetano-anthracite-80">
               <tr>
-                <th className="px-4 py-3 font-medium">Nome</th>
-                <th className="px-4 py-3 font-medium">Tipo</th>
-                <th className="px-4 py-3 font-medium">Pasta</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">Autor</th>
-                <th className="px-4 py-3 font-medium">Atualização</th>
-                <th className="px-4 py-3 font-medium">Participações</th>
-                <th className="px-4 py-3" />
+                <th scope="col" className="px-4 py-3 font-medium">Nome</th>
+                <th scope="col" className="px-4 py-3 font-medium">Tipo</th>
+                <th scope="col" className="px-4 py-3 font-medium">Pasta</th>
+                <th scope="col" className="px-4 py-3 font-medium">Estado</th>
+                <th scope="col" className="px-4 py-3 font-medium">Autor</th>
+                <th scope="col" className="px-4 py-3 font-medium">Atualização</th>
+                <th scope="col" className="px-4 py-3 font-medium">Participações</th>
+                <th scope="col" className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-caetano-medium-gray-20">

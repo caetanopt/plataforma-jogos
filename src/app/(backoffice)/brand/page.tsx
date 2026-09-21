@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
+export const metadata = { title: "Identidade visual" };
+
 export default async function BrandKitsPage() {
   const context = await requireOrgContext();
   assertCan(context, "brand:manage");
@@ -45,7 +47,7 @@ export default async function BrandKitsPage() {
   const mediaById = new Map(mediaAssets.map((asset) => [asset.id, asset]));
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Identidade visual</h1>
       <p className="mt-1 text-caetano-anthracite-80">
         Brand kits reutilizáveis. Cada campanha recebe sempre uma cópia ao aplicar um kit —

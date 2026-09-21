@@ -3,9 +3,12 @@ import { assertCan } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { AUDIT_ACTION_LABELS } from "@/lib/labels";
 import type { AuditAction } from "@/generated/prisma/client";
+
+export const metadata = { title: "Configurações" };
 
 interface SettingsSearchParams {
   action?: string;
@@ -54,7 +57,7 @@ export default async function SettingsPage({
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Configurações</h1>
       <p className="mt-1 text-caetano-anthracite-80">
         Auditoria de ações relevantes {context.isSuperAdmin ? "em todas as organizações" : "nesta organização"}.
@@ -88,15 +91,21 @@ export default async function SettingsPage({
         </Button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Tabela de auditoria"
+        className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+      >
         <table className="w-full text-sm">
+          <caption className="sr-only">Registo de auditoria</caption>
           <thead>
             <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Utilizador</th>
-              <th className="px-4 py-3">Ação</th>
-              <th className="px-4 py-3">Entidade</th>
-              <th className="px-4 py-3">Resultado</th>
+              <th scope="col" className="px-4 py-3">Data</th>
+              <th scope="col" className="px-4 py-3">Utilizador</th>
+              <th scope="col" className="px-4 py-3">Ação</th>
+              <th scope="col" className="px-4 py-3">Entidade</th>
+              <th scope="col" className="px-4 py-3">Resultado</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-caetano-medium-gray-20">
@@ -119,9 +128,9 @@ export default async function SettingsPage({
                     {entry.entityId && <span className="ml-1 font-mono text-xs">({entry.entityId.slice(0, 8)})</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={entry.result === "SUCCESS" ? "text-caetano-eco-green" : "text-danger"}>
-                      {entry.result}
-                    </span>
+                    {/* O verde eco sobre branco dá 2,57:1; o Badge resolve o
+                        contraste e comunica o mesmo. */}
+                    <Badge tone={entry.result === "SUCCESS" ? "success" : "danger"}>{entry.result}</Badge>
                   </td>
                 </tr>
               ))

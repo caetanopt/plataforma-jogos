@@ -11,7 +11,10 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Plataforma de Jogos | Caetano",
+  title: {
+    default: "Plataforma de Jogos | Caetano",
+    template: "%s | Plataforma de Jogos",
+  },
   description:
     "Criação e gestão de jogos interativos para angariação de leads.",
 };
