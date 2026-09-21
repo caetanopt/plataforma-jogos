@@ -66,11 +66,23 @@ export function PublicLeadForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitting) return;
     setSubmitting(true);
     setError(null);
-    const result = await onSubmit(values, consentValues, honeypot);
-    if (!result.ok) {
-      setError(ERROR_MESSAGES[result.reason ?? "invalid"] ?? ERROR_MESSAGES.invalid);
+    try {
+      const result = await onSubmit(values, consentValues, honeypot);
+      if (!result.ok) {
+        setError(ERROR_MESSAGES[result.reason ?? "invalid"] ?? ERROR_MESSAGES.invalid);
+        setSubmitting(false);
+      }
+      // Em caso de sucesso o componente é desmontado pelo fluxo do jogo, por
+      // isso `submitting` fica como está de propósito — repor a false faria
+      // o botão voltar a ficar clicável durante a transição.
+    } catch (error) {
+      // Sem este ramo, uma server action que rejeite deixava o botão preso em
+      // "A enviar…" para sempre e o participante perdia a campanha.
+      console.error("[lead-form] Falha ao submeter o formulário:", error);
+      setError(ERROR_MESSAGES.invalid);
       setSubmitting(false);
     }
   }

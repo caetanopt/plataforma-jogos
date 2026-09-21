@@ -96,6 +96,8 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
   }, [finished, attempts, matched, timeSeconds, onComplete]);
 
   function handleFlip(tile: Tile) {
+    // Substitui o `disabled` do botão: ver o comentário no JSX.
+    if (finished || isFaceUp(tile)) return;
     if (previewing || finished || busyRef.current) return;
     if (revealed.includes(tile.tileId) || matched.has(tile.pairId)) return;
 
@@ -130,24 +132,40 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
         </p>
       )}
       <div
-        className="grid"
-        style={{
-          gridTemplateColumns: `repeat(${config.columns}, minmax(0, 1fr))`,
-          gap: `${config.cardGapPx}px`,
-        }}
+        className="memory-grid"
+        style={
+          {
+            "--memory-columns": config.columns,
+            gap: `${config.cardGapPx}px`,
+          } as React.CSSProperties
+        }
       >
-        {tiles.map((tile) => {
+        {tiles.map((tile, position) => {
           const faceUp = isFaceUp(tile);
+          const isMatched = matched.has(tile.pairId);
+          const locked = faceUp || finished;
           return (
             <button
               key={tile.tileId}
               type="button"
               onClick={() => handleFlip(tile)}
-              disabled={faceUp || finished}
-              aria-label={faceUp ? tile.alt ?? tile.text ?? "Carta revelada" : "Carta virada para baixo"}
+              // `disabled` tirava o foco do teclado a cada jogada, atirando o
+              // utilizador para o início da grelha. `aria-disabled` comunica o
+              // mesmo e a guarda está no handler.
+              aria-disabled={locked || undefined}
+              aria-pressed={faceUp}
+              aria-label={`Carta ${position + 1} de ${tiles.length}: ${
+                faceUp ? tile.alt ?? tile.text ?? "revelada" : "virada para baixo"
+              }${isMatched ? ", par encontrado" : ""}`}
               className={cn(
-                "flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-caetano-medium-gray-40 bg-white p-1 transition-transform",
-                matched.has(tile.pairId) && "opacity-60",
+                "flex aspect-square cursor-pointer touch-manipulation items-center justify-center overflow-hidden rounded-lg border border-caetano-medium-gray-40 bg-white p-1",
+                "transition-[transform,border-color] duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2",
+                !locked && "motion-safe:active:scale-[0.96]",
+                // Tom oficial em vez de opacidade, que deixa de ser cor da
+                // paleta assim que o fundo não é branco.
+                isMatched && "border-caetano-eco-green-40 bg-caetano-eco-green-20",
+                locked && "cursor-default",
               )}
             >
               {faceUp ? (
@@ -170,10 +188,15 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
         })}
       </div>
 
-      <div className="mt-4 flex justify-center gap-6 text-sm text-caetano-anthracite-80" aria-live="polite">
-        <span>Tentativas: {attempts}</span>
-        <span>Tempo: {timeSeconds}s</span>
-        <span>
+      <div className="mt-4 flex justify-center gap-6 text-sm text-caetano-anthracite-80">
+        {/*
+          O tempo muda a cada segundo: dentro de um aria-live fazia o leitor de
+          ecrã falar sem parar. Fica fora; o que é anunciado são as tentativas
+          e os pares, que só mudam quando o jogador joga.
+        */}
+        <span aria-live="polite">Tentativas: {attempts}</span>
+        <span aria-hidden="true">Tempo: {timeSeconds}s</span>
+        <span aria-live="polite">
           Pares: {matched.size}/{pairs.length}
         </span>
       </div>

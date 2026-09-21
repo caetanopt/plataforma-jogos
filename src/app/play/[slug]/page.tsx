@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
@@ -8,6 +9,33 @@ const STATE_MESSAGES: Record<string, string> = {
   paused: "Esta campanha está temporariamente pausada. Volte mais tarde.",
   expired: "Esta campanha já terminou. Obrigado pelo interesse!",
 };
+
+/**
+ * Sem isto, a campanha era partilhada com o título do backoffice
+ * ("Plataforma de Jogos | Caetano") em vez do seu próprio nome.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const campaign = await prisma.campaign.findUnique({
+    where: { slug },
+    select: { publicTitle: true, internalName: true, startIntroText: true, status: true },
+  });
+
+  if (!campaign) return { title: "Campanha não encontrada" };
+
+  const title = campaign.publicTitle || campaign.internalName;
+  return {
+    title,
+    description: campaign.startIntroText ?? undefined,
+    // Rascunhos e campanhas fora do ar não devem ser indexados.
+    robots: campaign.status === "PUBLISHED" ? undefined : { index: false, follow: false },
+    openGraph: { title, description: campaign.startIntroText ?? undefined },
+  };
+}
 
 export default async function PublicPlayPage({
   params,

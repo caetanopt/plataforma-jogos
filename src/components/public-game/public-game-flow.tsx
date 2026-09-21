@@ -105,6 +105,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   const [participationId, setParticipationId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const [showRegulation, setShowRegulation] = useState(false);
   const viewedRef = useRef(false);
 
@@ -125,23 +126,33 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   }
 
   async function handleStart() {
+    if (starting) return;
     setStarting(true);
+    setStartError(null);
     void recordAnalyticsEventAction(props.campaignId, "START_CLICKED", props.isTestMode, sessionId);
-    const result = await startParticipationAction({
-      campaignId: props.campaignId,
-      idempotencyKey,
-      sessionId,
-      testRequested: props.isTestMode,
-      source: typeof document !== "undefined" ? document.referrer || undefined : undefined,
-    });
-    if (!result.ok) {
-      setBlockedReason(result.reason);
+    try {
+      const result = await startParticipationAction({
+        campaignId: props.campaignId,
+        idempotencyKey,
+        sessionId,
+        testRequested: props.isTestMode,
+        source: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+      });
+      if (!result.ok) {
+        setBlockedReason(result.reason);
+        return;
+      }
+      setParticipationId(result.participationId);
+      advance();
+    } catch (error) {
+      // Sem isto o botão ficava preso em "A preparar…" e o participante não
+      // tinha forma de voltar a tentar. A chave de idempotência é a mesma, por
+      // isso repetir não cria uma segunda participação.
+      console.error("[play] Falha ao iniciar a participação:", error);
+      setStartError("Não foi possível iniciar. Verifique a ligação e tente novamente.");
+    } finally {
       setStarting(false);
-      return;
     }
-    setParticipationId(result.participationId);
-    setStarting(false);
-    advance();
   }
 
   async function handleLeadSubmit(values: Record<string, string>, consents: Record<string, boolean>, honeypot: string) {
@@ -162,10 +173,17 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   return (
     <div className="space-y-4">
       {props.isTestMode && (
-        <div className="rounded-lg border border-caetano-dynamic-orange bg-caetano-dynamic-orange-20 px-4 py-2 text-center text-sm font-medium text-caetano-anthracite">
+        // O CLAUDE.md §18 exige aviso visual PERMANENTE. Em linha, saía do ecrã
+        // com o scroll e um jogo longo passava a parecer real.
+        <div
+          role="status"
+          className="fixed inset-x-0 top-0 z-50 border-b border-caetano-dynamic-orange bg-caetano-dynamic-orange-20 px-4 py-2 text-center text-sm font-medium text-caetano-anthracite"
+        >
           Modo de teste — esta participação não conta para estatísticas nem consome stock.
         </div>
       )}
+      {/* Reserva o espaço da faixa fixa para não tapar o conteúdo. */}
+      {props.isTestMode && <div aria-hidden="true" className="h-9" />}
 
       {stage === "start" && (
         <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
@@ -185,10 +203,16 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             type="button"
             onClick={handleStart}
             disabled={starting}
-            className="mt-6 rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white disabled:opacity-60"
+            aria-busy={starting || undefined}
+            className="mt-6 cursor-pointer touch-manipulation select-none rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white transition-[background-color,transform] duration-150 hover:bg-caetano-deep-blue-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2 active:bg-caetano-deep-blue disabled:cursor-progress disabled:opacity-60 motion-safe:active:scale-[0.97]"
           >
             {starting ? "A preparar…" : props.start.buttonLabel || "Jogar"}
           </button>
+          {startError && (
+            <p role="alert" className="mt-3 text-sm text-danger-strong">
+              {startError}
+            </p>
+          )}
         </div>
       )}
 

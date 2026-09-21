@@ -158,6 +158,23 @@ body {
   animation: nav-progress 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/*
+  Grelha do Jogo da Memória. O número de colunas é configurado na campanha,
+  mas num ecrã de 360 px seis colunas dão cartas de ~47 px — abaixo do alvo
+  mínimo de toque e difíceis de distinguir. Em ecrãs estreitos a grelha passa
+  a encher por largura mínima e deixa as cartas mudarem de linha.
+*/
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--memory-columns), minmax(0, 1fr));
+}
+
+@media (max-width: 480px) {
+  .memory-grid {
+    grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
