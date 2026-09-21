@@ -18,7 +18,7 @@ Na primeira fase, suportar apenas:
 2. Roda da Sorte.
 3. Quiz Interativo.
 
-O MVP deve incluir autenticação, organizações, utilizadores, espaços de trabalho, pastas, dashboard, criação e gestão de jogos, editor por etapas, identidade visual, formulário de leads, pré-visualização, modo de teste, agendamento, publicação por URL, QR Code, embed, estatísticas, exportação de leads, consentimentos e limites de participação.
+O MVP deve incluir autenticação, organizações, utilizadores, espaços de trabalho, pastas, criação e gestão de jogos, editor por etapas, identidade visual, formulário de leads, pré-visualização, modo de teste, agendamento, publicação por URL, QR Code, embed, estatísticas, exportação de leads, consentimentos e limites de participação.
 
 Ficam fora do MVP: outros jogos, marketplace, pagamentos, app nativa, API pública, integrações CRM avançadas, webhooks configuráveis, editor visual livre e domínios personalizados.
 
@@ -57,9 +57,8 @@ Usar RBAC e validar permissões no servidor. Nunca depender apenas do frontend.
 
 Navegação principal:
 
-- Dashboard.
+- Início (grelha de pastas).
 - Aplicações.
-- Pastas.
 - Espaços de trabalho.
 - Templates.
 - Leads.
@@ -69,19 +68,23 @@ Navegação principal:
 - Configurações.
 - Ajuda.
 
+Não existe página de dashboard: `/dashboard` redireciona para `/analytics`.
+
 ### Página inicial
 
 A página inicial é a grelha de pastas (`/folders`), orientada ao trabalho do dia a dia: saudação,
 botão "Criar aplicação", separadores Ativas/Arquivadas, ordenação e um cartão por pasta com o
 espaço de trabalho, o número de aplicações e as ações rápidas. É o destino do login e da raiz `/`.
 
-### Dashboard
+### Onde vive cada coisa
 
-Destino secundário (`/dashboard`), listado na navegação junto às estatísticas.
+Não há dashboard de métricas. O que existia nele está distribuído:
 
-Apresentar botão "Criar aplicação", jogos publicados, rascunhos, campanhas agendadas, visualizações, participações, leads, taxa de conversão, campanhas recentes, campanhas ativas, alertas de fim e alertas de stock.
-
-Filtros: 7, 30 e 90 dias, intervalo personalizado, espaço de trabalho, marca e tipo de jogo.
+- Botão "Criar aplicação" e visão geral do trabalho: página inicial.
+- Campanhas recentes e campanhas ativas: Aplicações (`/apps`), que já ordena por
+  atualização recente e filtra por estado.
+- Visualizações, participações, leads, taxa de conversão, contagens por estado,
+  alertas de fim e alertas de stock: Estatísticas (secção 20).
 
 ## 5. Organização de projetos
 
@@ -339,7 +342,11 @@ Roda: rotações, vencedores, não vencedores, taxa de vitória, distribuição 
 
 Quiz: pontuação média, aprovação, respostas por pergunta, acerto, abandono, tempo e perfis.
 
-Filtros: hoje, 7, 30 e 90 dias, todo o período, intervalo personalizado, dispositivo, origem, resultado e prémio.
+Estado do portefólio: publicados, rascunhos, agendados e pausados. É o retrato atual, independente do período selecionado.
+
+Alertas: campanhas publicadas que terminam nos 3 dias seguintes e prémios com stock restante igual ou inferior a 5. Os alertas também não dependem do período — respondem ao que exige atenção agora.
+
+Filtros: hoje, 7, 30 e 90 dias, todo o período, intervalo personalizado, campanha, espaço de trabalho, pasta/marca, tipo de jogo, dispositivo, origem, resultado e prémio.
 
 ## 21. Leads e participações
 
@@ -444,7 +451,6 @@ src/
   app/
     (auth)/
     (backoffice)/
-      dashboard/
       apps/
       folders/
       leads/
@@ -594,7 +600,7 @@ Uma funcionalidade está concluída quando cumpre os requisitos, está tipada, t
 ## 37. Roadmap
 
 ### Fase 1
-Autenticação, organizações, espaços, pastas, dashboard, editor base e media.
+Autenticação, organizações, espaços, pastas, página inicial, editor base e media.
 
 ### Fase 2
 Memória, Roda, Quiz, formulários, resultados e preview.

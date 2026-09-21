@@ -1,5 +1,5 @@
+import type { LucideIcon } from "lucide-react";
 import {
-  LayoutDashboard,
   Gamepad2,
   Home,
   Building2,
@@ -13,19 +13,18 @@ import {
 export interface NavItem {
   href: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: LucideIcon;
   adminOnly?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  // A página inicial é a grelha de pastas (/folders); o dashboard de métricas
-  // passou a ser um destino secundário, junto às estatísticas.
+  // A página inicial é a grelha de pastas (/folders). Os alertas e as
+  // contagens por estado que viviam no antigo dashboard estão em /analytics.
   { href: "/folders", label: "Início", icon: Home },
   { href: "/apps", label: "Aplicações", icon: Gamepad2 },
   { href: "/workspaces", label: "Espaços de trabalho", icon: Building2, adminOnly: true },
   { href: "/leads", label: "Leads", icon: ClipboardList },
   { href: "/analytics", label: "Estatísticas", icon: BarChart3 },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/users", label: "Utilizadores", icon: Users, adminOnly: true },
   { href: "/brand", label: "Identidade visual", icon: Palette, adminOnly: true },
   { href: "/settings", label: "Configurações", icon: Settings, adminOnly: true },

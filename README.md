@@ -42,12 +42,12 @@ npm run db:studio      # Prisma Studio
 ## Âmbito desta entrega
 
 Cobre as Fases 1-3 do roadmap definido em `CLAUDE.md` (secção 37): autenticação, organizações,
-espaços de trabalho, pastas, dashboard, editor por etapas, os 3 jogos do MVP, formulário de
+espaços de trabalho, pastas, editor por etapas, os 3 jogos do MVP, formulário de
 leads, publicação (link/QR/embed), leads e estatísticas básicas.
 
 A página inicial do backoffice (`/folders`) é a grelha de pastas: é para lá que o login e a raiz
-`/` redirecionam. O dashboard de métricas continua disponível em `/dashboard`, mas como destino
-secundário junto às estatísticas.
+`/` redirecionam. Não há página de dashboard — os alertas de fim de campanha e de stock, e as
+contagens por estado, vivem em Estatísticas (`/analytics`); `/dashboard` redireciona para lá.
 
 Ficam para uma iteração seguinte (não bloqueiam este âmbito): exportação XLSX, importação CSV
 em massa de códigos/vouchers, anonimização e retenção agendada, allowlist de domínios de embed,
@@ -58,7 +58,7 @@ tests essenciais de cada jogo).
 
 ```text
 src/app/(auth)          páginas de autenticação
-src/app/(backoffice)    pastas (início), aplicações, leads, estatísticas, dashboard, configurações
+src/app/(backoffice)    pastas (início), aplicações, leads, estatísticas, configurações
 src/app/play/[slug]     aplicação pública do jogo
 src/components          componentes de UI, backoffice, jogo público, gráficos e formulários
 src/features            lógica de domínio por área (campaigns, memory-game, wheel-game, ...)

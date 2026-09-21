@@ -15,9 +15,9 @@ const PRESET_DAYS: Record<"7d" | "30d" | "90d", number> = {
 const EPOCH = new Date(0);
 
 /**
- * Resolve um intervalo de datas a partir dos parâmetros de filtro do dashboard
- * e das estatísticas (secção 4 e 20 do CLAUDE.md: hoje, 7/30/90 dias, todo o
- * período ou intervalo personalizado).
+ * Resolve um intervalo de datas a partir dos parâmetros de filtro das
+ * estatísticas e dos leads (secção 20 do CLAUDE.md: hoje, 7/30/90 dias, todo
+ * o período ou intervalo personalizado).
  */
 export function resolveDateRange(params: {
   period?: string;

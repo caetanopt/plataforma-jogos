@@ -22,6 +22,14 @@ const nextConfig: NextConfig = {
       { protocol: "http" as const, hostname: "minio" },
     ],
   },
+  async redirects() {
+    return [
+      // O antigo dashboard foi eliminado: os alertas e as contagens por estado
+      // passaram para as estatísticas. Mantém-se o redirect para não partir
+      // marcadores e ligações antigas.
+      { source: "/dashboard", destination: "/analytics", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

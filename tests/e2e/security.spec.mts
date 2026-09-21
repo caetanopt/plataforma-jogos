@@ -59,8 +59,9 @@ test.describe("Segurança", () => {
       await page.click('button[type="submit"]');
       await page.waitForLoadState("networkidle");
       // Afirmação positiva: continuar em /login é a prova de que o bloqueio
-      // se manteve. Um `not.toHaveURL(/\/dashboard/)` passaria trivialmente se
-      // o destino pós-login mudasse, escondendo uma falha no rate limiting.
+      // se manteve. Uma asserção negativa sobre o destino pós-login passaria
+      // trivialmente se esse destino mudasse, escondendo uma falha no rate
+      // limiting.
       await expect(page).toHaveURL(/\/login/);
     } finally {
       // Repõe o limite para não afetar outros testes que ainda precisam de iniciar sessão.

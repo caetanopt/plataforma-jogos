@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { resolveDateRange } from "@/lib/dates/range";
-import { getCampaignStats } from "@/features/analytics/campaign-stats";
+import { getCampaignStats, type CampaignStatsFilters } from "@/features/analytics/campaign-stats";
+import { getCampaignAlerts } from "@/features/analytics/campaign-alerts";
 import { StatCard } from "@/components/backoffice/stat-card";
 import { ParticipationTimelineChart } from "@/components/charts/participation-timeline-chart";
 import { Label } from "@/components/ui/label";
@@ -15,7 +17,15 @@ interface AnalyticsSearchParams {
   from?: string;
   to?: string;
   type?: string;
+  workspaceId?: string;
+  folderId?: string;
 }
+
+/** Máximo de alertas visíveis por tipo antes de resumir o resto. */
+const MAX_ALERTS_PER_KIND = 5;
+
+const controlClass =
+  "h-10 rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm focus-visible:border-caetano-cyan focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:outline-none";
 
 export default async function AnalyticsPage({
   searchParams,
@@ -30,19 +40,49 @@ export default async function AnalyticsPage({
   const type =
     params.type === "MEMORY" || params.type === "WHEEL" || params.type === "QUIZ" ? params.type : undefined;
 
-  const [campaigns, stats] = await Promise.all([
+  const filters: CampaignStatsFilters = {
+    campaignId: params.campaignId || undefined,
+    workspaceId: params.workspaceId || undefined,
+    folderId: params.folderId || undefined,
+    type,
+  };
+
+  const [campaigns, workspaces, folders, stats, alerts] = await Promise.all([
     prisma.campaign.findMany({
       where: { organizationId: context.organizationId },
       select: { id: true, internalName: true, type: true },
       orderBy: { internalName: "asc" },
     }),
-    getCampaignStats(context.organizationId, range, {
-      campaignId: params.campaignId || undefined,
-      type,
+    prisma.workspace.findMany({
+      where: { organizationId: context.organizationId },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
     }),
+    prisma.folder.findMany({
+      where: {
+        workspace: { organizationId: context.organizationId },
+        archivedAt: null,
+        ...(params.workspaceId ? { workspaceId: params.workspaceId } : {}),
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    getCampaignStats(context.organizationId, range, filters),
+    // Os alertas ignoram deliberadamente o intervalo de datas: ver
+    // campaign-alerts.ts.
+    getCampaignAlerts(context.organizationId, filters),
   ]);
 
   const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const hasAlerts = alerts.endingSoon.length > 0 || alerts.stockAlerts.length > 0;
+  // Uma parede de alertas deixa de ser um alerta. Mostram-se os mais urgentes
+  // (já vêm ordenados) e conta-se o resto.
+  const visibleEndingSoon = alerts.endingSoon.slice(0, MAX_ALERTS_PER_KIND);
+  const visibleStockAlerts = alerts.stockAlerts.slice(0, MAX_ALERTS_PER_KIND);
+  const hiddenAlerts =
+    alerts.endingSoon.length -
+    visibleEndingSoon.length +
+    (alerts.stockAlerts.length - visibleStockAlerts.length);
 
   return (
     <div className="p-8">
@@ -71,8 +111,35 @@ export default async function AnalyticsPage({
           </select>
         </div>
         <div>
+          <Label htmlFor="workspaceId">Espaço de trabalho</Label>
+          <select
+            id="workspaceId"
+            name="workspaceId"
+            defaultValue={params.workspaceId ?? ""}
+            className={controlClass}
+          >
+            <option value="">Todos</option>
+            {workspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>
+                {workspace.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="folderId">Pasta / marca</Label>
+          <select id="folderId" name="folderId" defaultValue={params.folderId ?? ""} className={controlClass}>
+            <option value="">Todas</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <Label htmlFor="type">Tipo de jogo</Label>
-          <select id="type" name="type" defaultValue={params.type ?? ""} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm">
+          <select id="type" name="type" defaultValue={params.type ?? ""} className={controlClass}>
             <option value="">Todos</option>
             {Object.entries(CAMPAIGN_TYPE_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -104,6 +171,82 @@ export default async function AnalyticsPage({
           Aplicar filtros
         </Button>
       </form>
+
+      {hasAlerts && (
+        <section aria-labelledby="alerts-heading" className="mb-6">
+          <h2 id="alerts-heading" className="mb-2 text-sm font-bold text-caetano-anthracite">
+            Alertas
+          </h2>
+          <ul className="space-y-2">
+            {visibleEndingSoon.map((campaign) => (
+              <li
+                key={campaign.id}
+                className="rounded-lg border border-caetano-dynamic-orange-40 bg-caetano-dynamic-orange-20 px-4 py-2 text-sm text-caetano-anthracite"
+              >
+                A campanha{" "}
+                <Link
+                  href={`/apps/${campaign.id}/agenda`}
+                  className="font-bold underline underline-offset-2 hover:no-underline"
+                >
+                  {campaign.internalName}
+                </Link>{" "}
+                {campaign.scheduleEndAt ? (
+                  <>
+                    termina a{" "}
+                    <time dateTime={campaign.scheduleEndAt.toISOString()}>
+                      {formatEndDate(campaign.scheduleEndAt)}
+                    </time>
+                    .
+                  </>
+                ) : (
+                  "termina brevemente."
+                )}
+              </li>
+            ))}
+            {visibleStockAlerts.map((prize) => (
+              <li
+                key={prize.id}
+                className="rounded-lg border border-danger bg-danger-surface px-4 py-2 text-sm text-danger-strong"
+              >
+                Stock baixo no prémio{" "}
+                <Link
+                  href={`/apps/${prize.campaignId}/jogo`}
+                  className="font-bold underline underline-offset-2 hover:no-underline"
+                >
+                  {prize.publicName}
+                </Link>{" "}
+                ({prize.remaining === 1 ? "1 restante" : `${prize.remaining} restantes`}).
+              </li>
+            ))}
+          </ul>
+          {hiddenAlerts > 0 && (
+            <p className="mt-2 text-xs text-caetano-anthracite-80">
+              {hiddenAlerts === 1 ? "Mais 1 alerta" : `Mais ${hiddenAlerts} alertas`} — filtre por
+              campanha, espaço de trabalho ou pasta para os ver.
+            </p>
+          )}
+        </section>
+      )}
+
+      <section aria-labelledby="portfolio-heading" className="mb-6">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="portfolio-heading" className="text-sm font-bold text-caetano-anthracite">
+            Estado das campanhas
+          </h2>
+          <p className="text-xs text-caetano-anthracite-80">
+            Retrato atual — não depende do período selecionado.{" "}
+            <Link href="/apps" className="text-caetano-deep-blue underline underline-offset-2 hover:no-underline">
+              Ver aplicações
+            </Link>
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Publicados" value={alerts.published} />
+          <StatCard label="Rascunhos" value={alerts.drafts} />
+          <StatCard label="Agendados" value={alerts.scheduled} />
+          <StatCard label="Pausados" value={alerts.paused} />
+        </div>
+      </section>
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Visualizações" value={stats.general.views} hint={`${stats.general.uniqueViews} únicas`} />
@@ -234,6 +377,20 @@ export default async function AnalyticsPage({
       )}
     </div>
   );
+}
+
+/**
+ * Data de fim de campanha para os alertas. O fuso é o do servidor porque o
+ * agendamento é guardado em UTC e a plataforma opera em Europe/Lisbon.
+ */
+function formatEndDate(value: Date): string {
+  return new Intl.DateTimeFormat("pt-PT", {
+    timeZone: "Europe/Lisbon",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
 }
 
 function BreakdownCard({ title, items }: { title: string; items: Array<{ key: string; count: number }> }) {
