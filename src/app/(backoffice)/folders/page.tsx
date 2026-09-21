@@ -26,11 +26,21 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_found: "Pasta não encontrada.",
 };
 
+/* Uma ação sem confirmação deixa o utilizador sem saber se resultou. */
+const SUCCESS_MESSAGES: Record<string, string> = {
+  created: "Pasta criada.",
+  renamed: "Pasta renomeada.",
+  archived: "Pasta arquivada.",
+  restored: "Pasta restaurada.",
+  deleted: "Pasta eliminada.",
+};
+
 const selectClass =
   "h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm focus-visible:border-caetano-cyan focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:outline-none";
 
 interface HomeSearchParams {
   error?: string;
+  ok?: string;
   tab?: string;
   sort?: string;
 }
@@ -91,6 +101,12 @@ export default async function FoldersPage({
       {params.error && (
         <div className="mt-4">
           <Alert variant="error">{ERROR_MESSAGES[params.error] ?? "Ocorreu um erro."}</Alert>
+        </div>
+      )}
+
+      {!params.error && params.ok && SUCCESS_MESSAGES[params.ok] && (
+        <div className="mt-4">
+          <Alert variant="success">{SUCCESS_MESSAGES[params.ok]}</Alert>
         </div>
       )}
 

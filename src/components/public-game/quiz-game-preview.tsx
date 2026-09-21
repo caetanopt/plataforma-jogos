@@ -41,7 +41,7 @@ export function QuizGamePreview({
 }) {
   if (questions.length === 0) {
     return (
-      <p className="text-sm text-caetano-medium-gray">Adicione pelo menos uma pergunta para pré-visualizar o quiz.</p>
+      <p className="text-sm text-caetano-anthracite-80">Adicione pelo menos uma pergunta para pré-visualizar o quiz.</p>
     );
   }
 

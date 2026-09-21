@@ -50,7 +50,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-caetano-anthracite">Configuração do Quiz Interativo</h2>
-          <p className="mt-1 text-sm text-caetano-medium-gray">
+          <p className="mt-1 text-sm text-caetano-anthracite-80">
             Defina as perguntas, a pontuação e os perfis de resultado.
           </p>
         </div>
@@ -120,7 +120,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
         </h3>
 
         {quizConfig.questions.length === 0 && (
-          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+          <p className="py-4 text-center text-sm text-caetano-anthracite-80">
             Ainda não há perguntas. Adicione a primeira abaixo.
           </p>
         )}
@@ -131,7 +131,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <span className="font-medium text-caetano-anthracite">{question.title}</span>
-                  <span className="ml-2 text-xs text-caetano-medium-gray">
+                  <span className="ml-2 text-xs text-caetano-anthracite-80">
                     {QUESTION_TYPE_LABELS[question.type]} · {question.points} pts
                   </span>
                 </div>
@@ -140,13 +140,13 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="questionId" value={question.id} />
                     <input type="hidden" name="direction" value="up" />
-                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">↑</button>
+                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">↑</button>
                   </form>
                   <form action={moveQuestionAction}>
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="questionId" value={question.id} />
                     <input type="hidden" name="direction" value="down" />
-                    <button type="submit" disabled={index === quizConfig.questions.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
+                    <button type="submit" disabled={index === quizConfig.questions.length - 1} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
                   </form>
                   <form action={removeQuestionAction}>
                     <input type="hidden" name="campaignId" value={campaignId} />
@@ -159,7 +159,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
               </div>
 
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-caetano-cyan">Editar pergunta e respostas</summary>
+                <summary className="cursor-pointer text-xs text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar pergunta e respostas</summary>
 
                 <form action={updateQuestionAction} className="mt-2 space-y-2">
                   <input type="hidden" name="campaignId" value={campaignId} />
@@ -267,7 +267,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
         </h3>
 
         {quizConfig.resultProfiles.length === 0 && (
-          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+          <p className="py-4 text-center text-sm text-caetano-anthracite-80">
             Ainda não há perfis de resultado (opcional).
           </p>
         )}
@@ -277,7 +277,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
             <li key={profile.id} className="flex items-center justify-between gap-2 rounded-lg border border-caetano-medium-gray-20 p-3">
               <div>
                 <span className="font-medium text-caetano-anthracite">{profile.title}</span>
-                <span className="ml-2 text-xs text-caetano-medium-gray">
+                <span className="ml-2 text-xs text-caetano-anthracite-80">
                   {profile.minPercentage}%–{profile.maxPercentage}%
                 </span>
               </div>
@@ -293,7 +293,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
         </ul>
 
         <details className="mt-4">
-          <summary className="cursor-pointer text-sm text-caetano-cyan">Adicionar perfil de resultado</summary>
+          <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Adicionar perfil de resultado</summary>
           <form action={addResultProfileAction} className="mt-2 max-w-md space-y-2">
             <input type="hidden" name="campaignId" value={campaignId} />
             <div className="grid grid-cols-2 gap-2">

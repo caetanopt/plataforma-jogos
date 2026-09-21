@@ -24,7 +24,7 @@ export default async function ScheduleStepPage({
     <div className="max-w-2xl space-y-4">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Agenda</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Datas de início e fim da campanha (fuso horário: {campaign.timezone}).
         </p>
       </div>

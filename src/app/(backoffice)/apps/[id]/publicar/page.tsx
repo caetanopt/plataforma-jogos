@@ -7,7 +7,7 @@ import { publishCampaignAction, unpublishCampaignAction } from "@/features/publi
 import { prisma } from "@/server/db/client";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { CAMPAIGN_STATUS_LABELS, CAMPAIGN_STATUS_TONE } from "@/lib/labels";
@@ -81,16 +81,16 @@ export default async function PublishStepPage({
     <div className="max-w-3xl space-y-6">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Publicação</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Publique a campanha para gerar o link público, QR code e código de incorporação.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
-        <span className="text-sm text-caetano-medium-gray">Estado:</span>
+        <span className="text-sm text-caetano-anthracite-80">Estado:</span>
         <Badge tone={CAMPAIGN_STATUS_TONE[campaign.status]}>{CAMPAIGN_STATUS_LABELS[campaign.status]}</Badge>
         {isLive && (
-          <span className="text-sm text-caetano-medium-gray">
+          <span className="text-sm text-caetano-anthracite-80">
             — {EFFECTIVE_STATE_LABELS[effectiveState]}
           </span>
         )}
@@ -117,9 +117,12 @@ export default async function PublishStepPage({
       <div className="flex flex-wrap gap-2">
         <form action={publishCampaignAction}>
           <input type="hidden" name="campaignId" value={campaign.id} />
-          <Button type="submit" disabled={!readiness.ready}>
+          {/* Publicar cria uma CampaignVersion imutável: dois cliques seguidos
+              geravam duas versões. O SubmitButton desativa-se enquanto a ação
+              corre. */}
+          <SubmitButton disabled={!readiness.ready} pendingLabel="A publicar…">
             {isLive ? "Republicar (nova versão)" : "Publicar"}
-          </Button>
+          </SubmitButton>
         </form>
         {isLive && (
           <form action={unpublishCampaignAction}>
@@ -145,12 +148,12 @@ export default async function PublishStepPage({
                 href={`${url}?test=1`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm text-caetano-cyan underline"
+                className="text-sm text-caetano-deep-blue underline"
               >
                 Testar versão publicada
               </a>
             </div>
-            <p className="text-xs text-caetano-medium-gray">
+            <p className="text-xs text-caetano-anthracite-80">
               O modo de teste (só visível para quem tem acesso de edição a esta campanha) regista
               participações marcadas como teste — não conta para estatísticas nem consome stock de
               prémios.
@@ -164,16 +167,16 @@ export default async function PublishStepPage({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrPng.url} alt="QR Code" className="h-32 w-32 rounded-lg border border-caetano-medium-gray-40" />
                 <div className="flex flex-col gap-2">
-                  <a href={qrPng.url} download className="text-sm text-caetano-cyan underline">
+                  <a href={qrPng.url} download className="text-sm text-caetano-deep-blue underline">
                     Descarregar PNG
                   </a>
-                  <a href={qrSvg.url} download className="text-sm text-caetano-cyan underline">
+                  <a href={qrSvg.url} download className="text-sm text-caetano-deep-blue underline">
                     Descarregar SVG
                   </a>
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-caetano-medium-gray">QR Code não disponível.</p>
+              <p className="text-sm text-caetano-anthracite-80">QR Code não disponível.</p>
             )}
           </section>
 
@@ -190,7 +193,7 @@ export default async function PublishStepPage({
 
           <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
             <h3 className="text-sm font-bold text-caetano-anthracite">Partilha</h3>
-            <p className="text-xs text-caetano-medium-gray">
+            <p className="text-xs text-caetano-anthracite-80">
               Adicione parâmetros UTM ao link antes de o partilhar em campanhas de marketing.
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -207,7 +210,7 @@ export default async function PublishStepPage({
               {versions.map((version) => (
                 <li key={version.id} className="flex items-center justify-between py-2">
                   <span>Versão {version.versionNumber}</span>
-                  <span className="text-caetano-medium-gray">
+                  <span className="text-caetano-anthracite-80">
                     {version.createdAt.toLocaleString("pt-PT")}
                   </span>
                 </li>

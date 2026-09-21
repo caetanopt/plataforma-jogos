@@ -174,12 +174,12 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             <img src={props.start.logoUrl} alt="" className="mx-auto mb-4 h-12 object-contain" />
           )}
           {props.start.title && <h1 className="text-2xl font-bold text-caetano-anthracite">{props.start.title}</h1>}
-          {props.start.subtitle && <p className="mt-1 text-caetano-medium-gray">{props.start.subtitle}</p>}
+          {props.start.subtitle && <p className="mt-1 text-caetano-anthracite-80">{props.start.subtitle}</p>}
           {props.start.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={props.start.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />
           )}
-          {props.start.introText && <p className="mt-4 text-sm text-caetano-medium-gray">{props.start.introText}</p>}
+          {props.start.introText && <p className="mt-4 text-sm text-caetano-anthracite-80">{props.start.introText}</p>}
           {props.start.prizeInfo && <p className="mt-2 text-sm font-medium text-caetano-deep-blue">{props.start.prizeInfo}</p>}
           <button
             type="button"
@@ -241,7 +241,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       {stage === "final" && (
         <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
           {props.final.title && <h2 className="text-xl font-bold text-caetano-anthracite">{props.final.title}</h2>}
-          {props.final.message && <p className="mt-2 text-caetano-medium-gray">{props.final.message}</p>}
+          {props.final.message && <p className="mt-2 text-caetano-anthracite-80">{props.final.message}</p>}
           {props.final.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={props.final.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />
@@ -259,7 +259,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="text-caetano-cyan underline"
+                className="text-caetano-deep-blue underline"
               >
                 Jogar novamente
               </button>
@@ -274,7 +274,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
                     void navigator.clipboard.writeText(window.location.href);
                   }
                 }}
-                className="text-caetano-cyan underline"
+                className="text-caetano-deep-blue underline"
               >
                 Partilhar
               </button>
@@ -288,12 +288,12 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
           <button
             type="button"
             onClick={() => setShowRegulation((v) => !v)}
-            className="text-xs text-caetano-medium-gray underline"
+            className="text-xs text-caetano-anthracite-80 underline"
           >
             Regulamento
           </button>
           {showRegulation && (
-            <p className="mt-2 whitespace-pre-line rounded-lg bg-caetano-medium-gray-20 p-3 text-left text-xs text-caetano-medium-gray">
+            <p className="mt-2 whitespace-pre-line rounded-lg bg-caetano-medium-gray-20 p-3 text-left text-xs text-caetano-anthracite-80">
               {props.regulationText}
             </p>
           )}
@@ -308,13 +308,13 @@ function IntermediateScreen({ screen, onContinue }: { screen: ScreenData | null;
   return (
     <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
       {screen.title && <h2 className="text-lg font-bold text-caetano-anthracite">{screen.title}</h2>}
-      {screen.text && <p className="mt-2 text-caetano-medium-gray">{screen.text}</p>}
+      {screen.text && <p className="mt-2 text-caetano-anthracite-80">{screen.text}</p>}
       {screen.mediaUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={screen.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />
       )}
       {screen.ctaLabel && screen.ctaUrl && (
-        <a href={screen.ctaUrl} className="mt-4 inline-block text-caetano-cyan underline">
+        <a href={screen.ctaUrl} className="mt-4 inline-block text-caetano-deep-blue underline">
           {screen.ctaLabel}
         </a>
       )}

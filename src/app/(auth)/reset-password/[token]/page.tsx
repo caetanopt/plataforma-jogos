@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
@@ -21,7 +21,7 @@ export default async function ResetPasswordPage({
   return (
     <div>
       <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Definir password</h1>
-      <p className="mb-6 text-sm text-caetano-medium-gray">
+      <p className="mb-6 text-sm text-caetano-anthracite-80">
         Escolha uma nova password para a sua conta.
       </p>
 
@@ -55,9 +55,9 @@ export default async function ResetPasswordPage({
             required
           />
         </div>
-        <Button type="submit" className="w-full">
+        <SubmitButton pendingLabel="A guardar…" className="w-full">
           Guardar password
-        </Button>
+        </SubmitButton>
       </form>
     </div>
   );

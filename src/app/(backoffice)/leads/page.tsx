@@ -70,7 +70,7 @@ export default async function LeadsPage({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-caetano-anthracite">Leads</h1>
-          <p className="mt-1 text-caetano-medium-gray">Participações e leads angariados nas suas campanhas.</p>
+          <p className="mt-1 text-caetano-anthracite-80">Participações e leads angariados nas suas campanhas.</p>
         </div>
         {canExport && (
           <a href={`/api/leads/export?${exportQuery}`} className={buttonVariants({ variant: "outline" })}>
@@ -131,7 +131,7 @@ export default async function LeadsPage({
       <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-medium-gray">
+            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
               <th className="px-4 py-3">Data</th>
               <th className="px-4 py-3">Campanha</th>
               <th className="px-4 py-3">Nome</th>
@@ -145,26 +145,26 @@ export default async function LeadsPage({
           <tbody className="divide-y divide-caetano-medium-gray-20">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-caetano-medium-gray">
+                <td colSpan={8} className="px-4 py-8 text-center text-caetano-anthracite-80">
                   Nenhuma participação encontrada para os filtros atuais.
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.id}>
-                  <td className="px-4 py-3 whitespace-nowrap text-caetano-medium-gray">
+                  <td className="px-4 py-3 whitespace-nowrap text-caetano-anthracite-80">
                     {row.createdAt.toLocaleString("pt-PT")}
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/apps/${row.campaignId}/informacoes`} className="hover:underline">
                       {row.campaignName}
                     </Link>
-                    <span className="ml-1 text-xs text-caetano-medium-gray">
+                    <span className="ml-1 text-xs text-caetano-anthracite-80">
                       ({CAMPAIGN_TYPE_LABELS[row.campaignType as keyof typeof CAMPAIGN_TYPE_LABELS]})
                     </span>
                   </td>
                   <td className="px-4 py-3">{row.name || "—"}</td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {row.email || row.phone || "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -175,14 +175,14 @@ export default async function LeadsPage({
                       <Badge tone="warning">Teste</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {row.result} {row.score && `· ${row.score}`}
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {row.prize}
                     {row.code && <span className="ml-1 font-mono text-xs">({row.code})</span>}
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">{row.source || row.utmSource || "—"}</td>
+                  <td className="px-4 py-3 text-caetano-anthracite-80">{row.source || row.utmSource || "—"}</td>
                 </tr>
               ))
             )}
@@ -205,7 +205,7 @@ export default async function LeadsPage({
               <Link
                 key={p}
                 href={`/leads?${pageQuery}`}
-                className={p === leads.page ? "font-bold text-caetano-deep-blue" : "text-caetano-medium-gray"}
+                className={p === leads.page ? "font-bold text-caetano-deep-blue" : "text-caetano-anthracite-80"}
               >
                 {p}
               </Link>

@@ -136,6 +136,28 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/*
+  Barra de progresso de navegação. Avança depressa até 90% e trava aí: não se
+  sabe quanto falta, e uma barra que chega a 100% antes de a página aparecer
+  mente ao utilizador. O desaparecimento é feito por opacidade quando a
+  navegação termina.
+*/
+@keyframes nav-progress {
+  0% {
+    width: 0%;
+  }
+  40% {
+    width: 55%;
+  }
+  100% {
+    width: 90%;
+  }
+}
+
+.animate-nav-progress {
+  animation: nav-progress 2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

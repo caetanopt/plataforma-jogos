@@ -47,14 +47,14 @@ export default async function BrandKitsPage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Identidade visual</h1>
-      <p className="mt-1 text-caetano-medium-gray">
+      <p className="mt-1 text-caetano-anthracite-80">
         Brand kits reutilizáveis. Cada campanha recebe sempre uma cópia ao aplicar um kit —
         alterações aqui não afetam campanhas já criadas.
       </p>
 
       <section className="mt-6 max-w-xl rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <h2 className="text-sm font-bold text-caetano-anthracite">Logótipo da organização</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Ficheiro oficial usado no backoffice. O wordmark é um desenho autoral sem fonte
           associada, por isso só pode ser apresentado a partir do ficheiro oficial da marca —
           sem ele, mostramos apenas o nome do produto.
@@ -77,7 +77,7 @@ export default async function BrandKitsPage() {
       <div className="mt-3 space-y-6">
         {kits.map((kit) => (
           <details key={kit.id} className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
-            <summary className="cursor-pointer font-medium text-caetano-anthracite">{kit.name}</summary>
+            <summary className="cursor-pointer font-medium text-caetano-anthracite list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">{kit.name}</summary>
             <AutoSaveForm action={updateBrandKitAction} className="mt-4 max-w-xl space-y-4">
               <input type="hidden" name="kitId" value={kit.id} />
               <div>

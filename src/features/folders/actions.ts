@@ -20,11 +20,11 @@ async function findOwnedWorkspace(organizationId: string, workspaceId: string) {
  * isso um valor forjado degrada para o URL por omissão em vez de virar um
  * destino de redirect arbitrário.
  */
-function returnUrl(formData: FormData, error?: string): string {
+function returnUrl(formData: FormData, outcome?: { error?: string; ok?: string }): string {
   return foldersUrl({
     tab: formData.get("tab"),
     sort: formData.get("sort"),
-    error,
+    ...outcome,
   });
 }
 
@@ -37,11 +37,11 @@ export async function createFolderAction(formData: FormData): Promise<void> {
     name: formData.get("name"),
   });
   if (!parsed.success) {
-    redirect(returnUrl(formData, "validation"));
+    redirect(returnUrl(formData, { error: "validation" }));
   }
 
   const workspace = await findOwnedWorkspace(context.organizationId, parsed.data.workspaceId);
-  if (!workspace) redirect(returnUrl(formData, "not_found"));
+  if (!workspace) redirect(returnUrl(formData, { error: "not_found" }));
 
   const folder = await prisma.folder.create({
     data: { workspaceId: parsed.data.workspaceId, name: parsed.data.name },
@@ -57,7 +57,7 @@ export async function createFolderAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/folders");
-  redirect(returnUrl(formData));
+  redirect(returnUrl(formData, { ok: "created" }));
 }
 
 export async function renameFolderAction(formData: FormData): Promise<void> {
@@ -69,13 +69,13 @@ export async function renameFolderAction(formData: FormData): Promise<void> {
     name: formData.get("name"),
   });
   if (!parsed.success) {
-    redirect(returnUrl(formData, "validation"));
+    redirect(returnUrl(formData, { error: "validation" }));
   }
 
   const folder = await prisma.folder.findFirst({
     where: { id: parsed.data.folderId, workspace: { organizationId: context.organizationId } },
   });
-  if (!folder) redirect(returnUrl(formData, "not_found"));
+  if (!folder) redirect(returnUrl(formData, { error: "not_found" }));
 
   await prisma.folder.update({ where: { id: parsed.data.folderId }, data: { name: parsed.data.name } });
 
@@ -89,7 +89,7 @@ export async function renameFolderAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/folders");
-  redirect(returnUrl(formData));
+  redirect(returnUrl(formData, { ok: "renamed" }));
 }
 
 export async function archiveFolderAction(formData: FormData): Promise<void> {
@@ -108,7 +108,7 @@ async function setFolderArchived(formData: FormData, archived: boolean): Promise
   const folder = await prisma.folder.findFirst({
     where: { id: folderId, workspace: { organizationId: context.organizationId } },
   });
-  if (!folder) redirect(returnUrl(formData, "not_found"));
+  if (!folder) redirect(returnUrl(formData, { error: "not_found" }));
 
   await prisma.folder.update({
     where: { id: folderId },
@@ -125,7 +125,7 @@ async function setFolderArchived(formData: FormData, archived: boolean): Promise
   });
 
   revalidatePath("/folders");
-  redirect(returnUrl(formData));
+  redirect(returnUrl(formData, { ok: archived ? "archived" : "restored" }));
 }
 
 export async function deleteFolderAction(formData: FormData): Promise<void> {
@@ -137,10 +137,10 @@ export async function deleteFolderAction(formData: FormData): Promise<void> {
     where: { id: folderId, workspace: { organizationId: context.organizationId } },
     include: { _count: { select: { campaigns: true } } },
   });
-  if (!folder) redirect(returnUrl(formData, "not_found"));
+  if (!folder) redirect(returnUrl(formData, { error: "not_found" }));
 
   if (folder._count.campaigns > 0) {
-    redirect(returnUrl(formData, "folder_not_empty"));
+    redirect(returnUrl(formData, { error: "folder_not_empty" }));
   }
 
   await prisma.folder.delete({ where: { id: folderId } });
@@ -155,5 +155,5 @@ export async function deleteFolderAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/folders");
-  redirect(returnUrl(formData));
+  redirect(returnUrl(formData, { ok: "deleted" }));
 }

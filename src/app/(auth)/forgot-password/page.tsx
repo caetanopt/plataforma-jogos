@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
@@ -15,7 +15,7 @@ export default async function ForgotPasswordPage({
   return (
     <div>
       <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Recuperar password</h1>
-      <p className="mb-6 text-sm text-caetano-medium-gray">
+      <p className="mb-6 text-sm text-caetano-anthracite-80">
         Introduza o seu e-mail para receber um link de recuperação.
       </p>
 
@@ -30,13 +30,13 @@ export default async function ForgotPasswordPage({
             <Label htmlFor="email">E-mail</Label>
             <Input id="email" name="email" type="email" autoComplete="email" required />
           </div>
-          <Button type="submit" className="w-full">
+          <SubmitButton pendingLabel="A enviar…" className="w-full">
             Enviar link de recuperação
-          </Button>
+          </SubmitButton>
         </form>
       )}
 
-      <Link href="/login" className="mt-4 block text-center text-sm text-caetano-cyan hover:underline">
+      <Link href="/login" className="mt-4 block text-center text-sm text-caetano-deep-blue hover:underline">
         Voltar a entrar
       </Link>
     </div>

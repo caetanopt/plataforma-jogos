@@ -47,6 +47,7 @@ export function foldersUrl(options: {
   tab?: unknown;
   sort?: unknown;
   error?: string;
+  ok?: string;
 } = {}): string {
   const tab = parseFolderTab(options.tab);
   const sort = parseFolderSort(options.sort);
@@ -55,6 +56,7 @@ export function foldersUrl(options: {
   if (tab !== "ativas") query.set("tab", tab);
   if (sort !== "name_asc") query.set("sort", sort);
   if (options.error) query.set("error", options.error);
+  if (options.ok) query.set("ok", options.ok);
 
   const suffix = query.toString();
   return suffix ? `/folders?${suffix}` : "/folders";

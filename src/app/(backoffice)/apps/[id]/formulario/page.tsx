@@ -52,7 +52,7 @@ export default async function LeadFormStepPage({
     <div className="max-w-3xl space-y-8">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Formulário de leads</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Configure onde e que dados recolher dos participantes.
         </p>
       </div>
@@ -121,7 +121,7 @@ export default async function LeadFormStepPage({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <span className="font-medium text-caetano-anthracite">{field.label}</span>
-                    <span className="ml-2 text-xs text-caetano-medium-gray">
+                    <span className="ml-2 text-xs text-caetano-anthracite-80">
                       {LEAD_FIELD_TYPE_LABELS[field.type]}
                       {field.required ? " · obrigatório" : ""}
                     </span>
@@ -134,7 +134,7 @@ export default async function LeadFormStepPage({
                       <button
                         type="submit"
                         disabled={index === 0}
-                        className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30"
+                        className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30"
                         aria-label="Mover para cima"
                       >
                         ↑
@@ -147,14 +147,14 @@ export default async function LeadFormStepPage({
                       <button
                         type="submit"
                         disabled={index === leadForm.fields.length - 1}
-                        className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30"
+                        className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30"
                         aria-label="Mover para baixo"
                       >
                         ↓
                       </button>
                     </form>
                     <details className="relative">
-                      <summary className="cursor-pointer list-none rounded px-2 py-1 text-sm text-caetano-cyan">
+                      <summary className="cursor-pointer list-none rounded px-2 py-1 text-sm text-caetano-deep-blue select-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">
                         Editar
                       </summary>
                       <AutoSaveForm
@@ -257,7 +257,7 @@ export default async function LeadFormStepPage({
 
       <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <h3 className="mb-1 text-sm font-bold text-caetano-anthracite">Consentimentos</h3>
-        <p className="mb-3 text-xs text-caetano-medium-gray">
+        <p className="mb-3 text-xs text-caetano-anthracite-80">
           Consentimentos de marketing nunca aparecem pré-selecionados aos participantes.
         </p>
 
@@ -267,7 +267,7 @@ export default async function LeadFormStepPage({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <p className="text-sm text-caetano-anthracite">{consent.text}</p>
-                  <p className="text-xs text-caetano-medium-gray">
+                  <p className="text-xs text-caetano-anthracite-80">
                     Versão {consent.version}
                     {consent.isMarketing ? " · marketing" : ""}
                     {consent.required ? " · obrigatório" : ""}
@@ -275,7 +275,7 @@ export default async function LeadFormStepPage({
                 </div>
                 <div className="flex items-center gap-2">
                   <details>
-                    <summary className="cursor-pointer text-sm text-caetano-cyan">Editar</summary>
+                    <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
                     <form action={updateConsentAction} className="mt-2 w-72 space-y-2">
                       <input type="hidden" name="campaignId" value={campaign.id} />
                       <input type="hidden" name="consentId" value={consent.id} />

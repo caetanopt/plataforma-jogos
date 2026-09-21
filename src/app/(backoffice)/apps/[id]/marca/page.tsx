@@ -46,7 +46,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
     <div className="max-w-2xl space-y-8">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Marca e design</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Personalize a identidade visual desta campanha. Cada campanha guarda a sua própria
           cópia — alterações aqui não afetam outras campanhas nem o brand kit de origem.
         </p>

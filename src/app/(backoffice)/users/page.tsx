@@ -3,7 +3,7 @@ import { assertCan, can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { inviteUserAction, removeMembershipAction, updateMembershipAction } from "@/features/users/actions";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
@@ -33,7 +33,7 @@ export default async function UsersPage({
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Utilizadores</h1>
-      <p className="mt-1 text-caetano-medium-gray">
+      <p className="mt-1 text-caetano-anthracite-80">
         Convide colegas e defina o papel de cada um na organização.
       </p>
 
@@ -46,7 +46,7 @@ export default async function UsersPage({
       <div className="mt-6 overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-medium-gray">
+            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">E-mail</th>
               <th className="px-4 py-3">Papel</th>
@@ -58,15 +58,15 @@ export default async function UsersPage({
             {memberships.map((membership) => (
               <tr key={membership.id}>
                 <td className="px-4 py-3">{membership.user.name}</td>
-                <td className="px-4 py-3 text-caetano-medium-gray">{membership.user.email}</td>
+                <td className="px-4 py-3 text-caetano-anthracite-80">{membership.user.email}</td>
                 <td className="px-4 py-3">{MEMBERSHIP_ROLE_LABELS[membership.role]}</td>
-                <td className="px-4 py-3 text-xs text-caetano-medium-gray">
+                <td className="px-4 py-3 text-xs text-caetano-anthracite-80">
                   {membership.canPublish && "Publicar "}
                   {membership.canExportLeads && "Exportar leads"}
                 </td>
                 <td className="px-4 py-3">
                   <details>
-                    <summary className="cursor-pointer text-caetano-cyan">Editar</summary>
+                    <summary className="cursor-pointer text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
                     <form action={updateMembershipAction} className="mt-2 w-56 space-y-2">
                       <input type="hidden" name="membershipId" value={membership.id} />
                       <select
@@ -98,9 +98,9 @@ export default async function UsersPage({
                         />
                         Pode exportar leads (Analista)
                       </label>
-                      <Button type="submit" size="sm" variant="outline">
+                      <SubmitButton pendingLabel="A guardar…" size="sm" variant="outline">
                         Guardar
-                      </Button>
+                      </SubmitButton>
                     </form>
                     <form action={removeMembershipAction} className="mt-2">
                       <input type="hidden" name="membershipId" value={membership.id} />
@@ -154,7 +154,7 @@ export default async function UsersPage({
               <input type="checkbox" name="canExportLeads" className="h-4 w-4 rounded border-caetano-medium-gray" />
               Pode exportar leads (aplica-se ao papel Analista)
             </label>
-            <Button type="submit">Enviar convite</Button>
+            <SubmitButton pendingLabel="A guardar…">Enviar convite</SubmitButton>
           </form>
         </div>
       )}

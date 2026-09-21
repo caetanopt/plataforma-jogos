@@ -2,7 +2,7 @@ export function StepPlaceholder({ title }: { title: string }) {
   return (
     <div className="max-w-2xl rounded-xl border border-dashed border-caetano-medium-gray-60 p-8 text-center">
       <h2 className="text-lg font-bold text-caetano-anthracite">{title}</h2>
-      <p className="mt-2 text-sm text-caetano-medium-gray">Esta etapa está em construção.</p>
+      <p className="mt-2 text-sm text-caetano-anthracite-80">Esta etapa está em construção.</p>
     </div>
   );
 }

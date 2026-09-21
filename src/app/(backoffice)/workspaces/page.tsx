@@ -2,7 +2,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { createWorkspaceAction, renameWorkspaceAction } from "@/features/workspaces/actions";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -19,12 +19,12 @@ export default async function WorkspacesPage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Espaços de trabalho</h1>
-      <p className="mt-1 text-caetano-medium-gray">
+      <p className="mt-1 text-caetano-anthracite-80">
         Agrupam campanhas, utilizadores e permissões por marca, departamento ou cliente.
       </p>
 
       {workspaces.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-medium-gray">
+        <div className="mt-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-anthracite-80">
           Ainda não existe nenhum espaço de trabalho.
         </div>
       ) : (
@@ -38,9 +38,9 @@ export default async function WorkspacesPage() {
                 <div>
                   <p className="font-medium text-caetano-anthracite">{workspace.name}</p>
                   {workspace.description && (
-                    <p className="text-sm text-caetano-medium-gray">{workspace.description}</p>
+                    <p className="text-sm text-caetano-anthracite-80">{workspace.description}</p>
                   )}
-                  <p className="mt-1 text-xs text-caetano-medium-gray">
+                  <p className="mt-1 text-xs text-caetano-anthracite-80">
                     {workspace._count.campaigns} aplicações · {workspace._count.folders} pastas
                   </p>
                 </div>
@@ -48,7 +48,7 @@ export default async function WorkspacesPage() {
 
               {canManage && (
                 <details className="mt-3">
-                  <summary className="cursor-pointer text-sm text-caetano-cyan">Editar</summary>
+                  <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
                   <form action={renameWorkspaceAction} className="mt-2 space-y-2">
                     <input type="hidden" name="workspaceId" value={workspace.id} />
                     <Input name="name" defaultValue={workspace.name} required />
@@ -57,9 +57,9 @@ export default async function WorkspacesPage() {
                       defaultValue={workspace.description ?? ""}
                       placeholder="Descrição (opcional)"
                     />
-                    <Button type="submit" size="sm" variant="outline">
+                    <SubmitButton pendingLabel="A guardar…" size="sm" variant="outline">
                       Guardar
-                    </Button>
+                    </SubmitButton>
                   </form>
                 </details>
               )}
@@ -82,7 +82,7 @@ export default async function WorkspacesPage() {
               <Label htmlFor="description">Descrição (opcional)</Label>
               <Input id="description" name="description" />
             </div>
-            <Button type="submit">Criar espaço de trabalho</Button>
+            <SubmitButton pendingLabel="A guardar…">Criar espaço de trabalho</SubmitButton>
           </form>
         </div>
       )}

@@ -44,7 +44,7 @@ export default async function IntermediateScreenStepPage({
     <div className="max-w-2xl space-y-8">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Ecrãs intermédios</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Opcional. No máximo um ecrã antes do jogo e um depois do jogo.
         </p>
       </div>
@@ -65,7 +65,7 @@ export default async function IntermediateScreenStepPage({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-medium text-caetano-anthracite">{section.title}</h3>
-                <p className="mt-0.5 text-xs text-caetano-medium-gray">{section.help}</p>
+                <p className="mt-0.5 text-xs text-caetano-anthracite-80">{section.help}</p>
               </div>
               <label className="flex shrink-0 items-center gap-2 text-sm text-caetano-anthracite">
                 <input

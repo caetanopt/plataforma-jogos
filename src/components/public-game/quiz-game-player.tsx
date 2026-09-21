@@ -110,13 +110,13 @@ export function QuizGamePlayer({
           {result.percentage.toFixed(0)}% ({result.totalScore}/{result.maxPossibleScore} pontos)
         </p>
         {result.passed != null && (
-          <p className="mt-1 text-caetano-medium-gray">{result.passed ? "Aprovado" : "Não aprovado"}</p>
+          <p className="mt-1 text-caetano-anthracite-80">{result.passed ? "Aprovado" : "Não aprovado"}</p>
         )}
         {result.resultProfile && (
           <div className="mt-4">
             <p className="font-medium text-caetano-anthracite">{result.resultProfile.title}</p>
             {result.resultProfile.description && (
-              <p className="mt-1 text-sm text-caetano-medium-gray">{result.resultProfile.description}</p>
+              <p className="mt-1 text-sm text-caetano-anthracite-80">{result.resultProfile.description}</p>
             )}
             {result.resultProfile.ctaLabel && result.resultProfile.ctaUrl && (
               <a
@@ -139,13 +139,13 @@ export function QuizGamePlayer({
   return (
     <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6">
       {showProgress && (
-        <p className="mb-3 text-xs text-caetano-medium-gray">
+        <p className="mb-3 text-xs text-caetano-anthracite-80">
           Pergunta {index + 1} de {questions.length}
         </p>
       )}
 
       <h3 className="text-lg font-bold text-caetano-anthracite">{question.title}</h3>
-      {question.supportText && <p className="mt-1 text-sm text-caetano-medium-gray">{question.supportText}</p>}
+      {question.supportText && <p className="mt-1 text-sm text-caetano-anthracite-80">{question.supportText}</p>}
 
       <div className="mt-4 space-y-2">
         {question.answers.map((answer) => {

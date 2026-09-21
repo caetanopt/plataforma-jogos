@@ -125,7 +125,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
   return (
     <div>
       {previewing && (
-        <p className="mb-3 text-center text-sm text-caetano-medium-gray" aria-live="polite">
+        <p className="mb-3 text-center text-sm text-caetano-anthracite-80" aria-live="polite">
           Memorize as cartas…
         </p>
       )}
@@ -170,7 +170,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
         })}
       </div>
 
-      <div className="mt-4 flex justify-center gap-6 text-sm text-caetano-medium-gray" aria-live="polite">
+      <div className="mt-4 flex justify-center gap-6 text-sm text-caetano-anthracite-80" aria-live="polite">
         <span>Tentativas: {attempts}</span>
         <span>Tempo: {timeSeconds}s</span>
         <span>

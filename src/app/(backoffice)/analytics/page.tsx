@@ -88,7 +88,7 @@ export default async function AnalyticsPage({
     <div className="p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-caetano-anthracite">Estatísticas</h1>
-        <p className="mt-1 text-caetano-medium-gray">
+        <p className="mt-1 text-caetano-anthracite-80">
           Métricas de visualizações, participações e conversão das suas campanhas.
         </p>
       </div>
@@ -288,12 +288,12 @@ export default async function AnalyticsPage({
           </div>
           {stats.memory.ranking.length > 0 && (
             <div className="mt-4">
-              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Ranking (top 10)</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">Ranking (top 10)</h3>
               <ol className="space-y-1 text-sm">
                 {stats.memory.ranking.map((entry, i) => (
                   <li key={i} className="flex justify-between border-b border-caetano-medium-gray-20 py-1">
                     <span>{i + 1}. {entry.name}</span>
-                    <span className="text-caetano-medium-gray">{entry.score} pts · {entry.timeSeconds}s</span>
+                    <span className="text-caetano-anthracite-80">{entry.score} pts · {entry.timeSeconds}s</span>
                   </li>
                 ))}
               </ol>
@@ -313,23 +313,23 @@ export default async function AnalyticsPage({
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Distribuição de prémios</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">Distribuição de prémios</h3>
               <ul className="space-y-1 text-sm">
                 {stats.wheel.prizeDistribution.map((p) => (
                   <li key={p.prizeName} className="flex justify-between">
                     <span>{p.prizeName}</span>
-                    <span className="text-caetano-medium-gray">{p.count}</span>
+                    <span className="text-caetano-anthracite-80">{p.count}</span>
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Stock atual</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">Stock atual</h3>
               <ul className="space-y-1 text-sm">
                 {stats.wheel.stock.map((p) => (
                   <li key={p.prizeName} className="flex justify-between">
                     <span>{p.prizeName}</span>
-                    <span className="text-caetano-medium-gray">
+                    <span className="text-caetano-anthracite-80">
                       {p.total != null ? `${p.remaining}/${p.total}` : "Ilimitado"}
                     </span>
                   </li>
@@ -350,24 +350,24 @@ export default async function AnalyticsPage({
             <StatCard label="Abandono" value={percent(stats.quiz.abandonment)} />
           </div>
           <div className="mt-4">
-            <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Acerto por pergunta</h3>
+            <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">Acerto por pergunta</h3>
             <ul className="space-y-1 text-sm">
               {stats.quiz.perQuestion.map((q) => (
                 <li key={q.title} className="flex justify-between">
                   <span>{q.title}</span>
-                  <span className="text-caetano-medium-gray">{percent(q.correctRate)}</span>
+                  <span className="text-caetano-anthracite-80">{percent(q.correctRate)}</span>
                 </li>
               ))}
             </ul>
           </div>
           {stats.quiz.profiles.length > 0 && (
             <div className="mt-4">
-              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Perfis de resultado</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">Perfis de resultado</h3>
               <ul className="space-y-1 text-sm">
                 {stats.quiz.profiles.map((p) => (
                   <li key={p.title} className="flex justify-between">
                     <span>{p.title}</span>
-                    <span className="text-caetano-medium-gray">{p.count}</span>
+                    <span className="text-caetano-anthracite-80">{p.count}</span>
                   </li>
                 ))}
               </ul>
@@ -396,15 +396,15 @@ function formatEndDate(value: Date): string {
 function BreakdownCard({ title, items }: { title: string; items: Array<{ key: string; count: number }> }) {
   return (
     <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
-      <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">{title}</h3>
+      <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">{title}</h3>
       {items.length === 0 ? (
-        <p className="text-sm text-caetano-medium-gray">Sem dados.</p>
+        <p className="text-sm text-caetano-anthracite-80">Sem dados.</p>
       ) : (
         <ul className="space-y-1 text-sm">
           {items.slice(0, 6).map((item) => (
             <li key={item.key} className="flex justify-between">
               <span>{item.key}</span>
-              <span className="text-caetano-medium-gray">{item.count}</span>
+              <span className="text-caetano-anthracite-80">{item.count}</span>
             </li>
           ))}
         </ul>

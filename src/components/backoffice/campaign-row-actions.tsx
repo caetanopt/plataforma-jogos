@@ -7,10 +7,8 @@ import {
   togglePauseCampaignAction,
 } from "@/features/campaigns/actions";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { DetailsMenu, menuItemClass } from "@/components/ui/details-menu";
 import type { CampaignStatus } from "@/generated/prisma/client";
-
-const menuItemClass =
-  "block w-full rounded-md px-3 py-1.5 text-left text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20";
 
 export function CampaignRowActions({
   campaignId,
@@ -28,11 +26,7 @@ export function CampaignRowActions({
   canDelete: boolean;
 }) {
   return (
-    <details className="relative inline-block text-left">
-      <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20">
-        ⋯
-      </summary>
-      <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border border-caetano-medium-gray-40 bg-white p-1 shadow-lg">
+    <DetailsMenu label={<span aria-hidden="true">⋯</span>} ariaLabel="Ações da aplicação">
         {canEdit && (
           <Link href={`/apps/${campaignId}/informacoes`} className={menuItemClass}>
             Editar
@@ -97,7 +91,6 @@ export function CampaignRowActions({
             </ConfirmSubmitButton>
           </form>
         )}
-      </div>
-    </details>
+    </DetailsMenu>
   );
 }

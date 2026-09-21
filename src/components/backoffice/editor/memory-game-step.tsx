@@ -47,7 +47,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
           <h2 className="text-lg font-bold text-caetano-anthracite">
             Configuração do Jogo da Memória
           </h2>
-          <p className="mt-1 text-sm text-caetano-medium-gray">
+          <p className="mt-1 text-sm text-caetano-anthracite-80">
             Defina os pares de cartas, a grelha e as mecânicas de pontuação.
           </p>
         </div>
@@ -176,7 +176,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
         </h3>
 
         {memoryConfig.pairs.length === 0 && (
-          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+          <p className="py-4 text-center text-sm text-caetano-anthracite-80">
             Ainda não há pares de cartas. Adicione o primeiro abaixo.
           </p>
         )}
@@ -190,20 +190,20 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
                   text={pair.cardAText}
                   label="Carta A"
                 />
-                <span className="text-caetano-medium-gray">↔</span>
+                <span className="text-caetano-anthracite-80">↔</span>
                 <PairThumb
                   url={pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined}
                   text={pair.cardBText}
                   label="Carta B"
                 />
-                <span className="text-xs text-caetano-medium-gray">{PAIR_KIND_LABELS[pair.kind]}</span>
+                <span className="text-xs text-caetano-anthracite-80">{PAIR_KIND_LABELS[pair.kind]}</span>
               </div>
               <div className="flex items-center gap-1">
                 <form action={moveMemoryPairAction}>
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="up" />
-                  <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">
+                  <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">
                     ↑
                   </button>
                 </form>
@@ -211,7 +211,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="down" />
-                  <button type="submit" disabled={index === memoryConfig.pairs.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">
+                  <button type="submit" disabled={index === memoryConfig.pairs.length - 1} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">
                     ↓
                   </button>
                 </form>

@@ -139,7 +139,7 @@ export default async function CampaignPreviewPage({
           }}
         />
       ) : (
-        <p className="text-center text-sm text-caetano-medium-gray">
+        <p className="text-center text-sm text-caetano-anthracite-80">
           Pré-visualização ainda não disponível para este tipo de jogo.
         </p>
       )}

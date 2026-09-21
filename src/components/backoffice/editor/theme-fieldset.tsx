@@ -33,7 +33,7 @@ function ColorField({ id, label, defaultValue }: { id: string; label: string; de
           defaultValue={defaultValue}
           className="h-10 w-14 cursor-pointer rounded-lg border border-caetano-medium-gray"
         />
-        <span className="text-sm text-caetano-medium-gray">{defaultValue}</span>
+        <span className="text-sm text-caetano-anthracite-80">{defaultValue}</span>
       </div>
     </div>
   );

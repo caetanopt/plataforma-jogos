@@ -24,7 +24,7 @@ export default async function ParticipationRulesStepPage({
     <div className="max-w-2xl space-y-4">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Regras de participação</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           Defina quantas vezes cada pessoa pode participar e requisitos de idade.
         </p>
       </div>
@@ -69,7 +69,7 @@ export default async function ParticipationRulesStepPage({
             disabled={campaign.participationLimitType !== "CUSTOM_MAX"}
             aria-describedby="participationCustomMax-help"
           />
-          <p id="participationCustomMax-help" className="mt-1 text-xs text-caetano-medium-gray">
+          <p id="participationCustomMax-help" className="mt-1 text-xs text-caetano-anthracite-80">
             Só aplicável quando o limite acima é &quot;Máximo personalizado&quot;.
           </p>
         </div>

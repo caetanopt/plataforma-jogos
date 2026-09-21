@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
@@ -22,7 +22,7 @@ export default async function LoginPage({
   return (
     <div>
       <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Entrar</h1>
-      <p className="mb-6 text-sm text-caetano-medium-gray">
+      <p className="mb-6 text-sm text-caetano-anthracite-80">
         Acesso à plataforma de jogos interativos.
       </p>
 
@@ -48,14 +48,14 @@ export default async function LoginPage({
             required
           />
         </div>
-        <Button type="submit" className="w-full">
+        <SubmitButton pendingLabel="A entrar…" className="w-full">
           Entrar
-        </Button>
+        </SubmitButton>
       </form>
 
       <Link
         href="/forgot-password"
-        className="mt-4 block text-center text-sm text-caetano-cyan hover:underline"
+        className="mt-4 block text-center text-sm text-caetano-deep-blue hover:underline"
       >
         Esqueceu a password?
       </Link>

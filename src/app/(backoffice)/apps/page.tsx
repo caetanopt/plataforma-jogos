@@ -4,6 +4,7 @@ import { prisma } from "@/server/db/client";
 import { can } from "@/server/permissions";
 import { listCampaigns } from "@/features/campaigns/queries";
 import { CAMPAIGN_TYPE_LABELS, CAMPAIGN_STATUS_LABELS, CAMPAIGN_STATUS_TONE } from "@/lib/labels";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,7 +12,14 @@ import { Input } from "@/components/ui/input";
 import { CampaignRowActions } from "@/components/backoffice/campaign-row-actions";
 import type { CampaignStatus, CampaignType } from "@/generated/prisma/client";
 
+const ERROR_MESSAGES: Record<string, string> = {
+  not_found: "Aplicação não encontrada ou sem permissão para a alterar.",
+  validation: "Dados inválidos. Verifique a pasta de destino.",
+  invalid_state: "A operação não é possível no estado atual da aplicação.",
+};
+
 interface AppsSearchParams {
+  error?: string;
   q?: string;
   status?: string;
   type?: string;
@@ -92,7 +100,7 @@ export default async function AppsListPage({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-caetano-anthracite">Aplicações</h1>
-          <p className="mt-1 text-caetano-medium-gray">{total} aplicações encontradas.</p>
+          <p className="mt-1 text-caetano-anthracite-80">{total} aplicações encontradas.</p>
         </div>
         {canCreate && (
           <Link href="/apps/new" className={buttonVariants()}>
@@ -100,6 +108,12 @@ export default async function AppsListPage({
           </Link>
         )}
       </div>
+
+      {params.error && (
+        <div className="mb-6">
+          <Alert variant="error">{ERROR_MESSAGES[params.error] ?? "Ocorreu um erro."}</Alert>
+        </div>
+      )}
 
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div className="min-w-[200px] flex-1">
@@ -180,7 +194,7 @@ export default async function AppsListPage({
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-medium-gray">
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-anthracite-80">
           Nenhuma aplicação encontrada com estes filtros.
         </div>
       ) : view === "grid" ? (
@@ -190,7 +204,7 @@ export default async function AppsListPage({
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-medium text-caetano-anthracite">{campaign.internalName}</p>
-                  <p className="text-sm text-caetano-medium-gray">
+                  <p className="text-sm text-caetano-anthracite-80">
                     {CAMPAIGN_TYPE_LABELS[campaign.type]} · {campaign.folder?.name ?? "Sem pasta"}
                   </p>
                 </div>
@@ -207,7 +221,7 @@ export default async function AppsListPage({
                 <Badge tone={CAMPAIGN_STATUS_TONE[campaign.status]}>
                   {CAMPAIGN_STATUS_LABELS[campaign.status]}
                 </Badge>
-                <span className="text-xs text-caetano-medium-gray">
+                <span className="text-xs text-caetano-anthracite-80">
                   {campaign._count.participations} participações
                 </span>
               </div>
@@ -217,7 +231,7 @@ export default async function AppsListPage({
       ) : (
         <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b border-caetano-medium-gray-40 text-caetano-medium-gray">
+            <thead className="border-b border-caetano-medium-gray-40 text-caetano-anthracite-80">
               <tr>
                 <th className="px-4 py-3 font-medium">Nome</th>
                 <th className="px-4 py-3 font-medium">Tipo</th>
@@ -235,10 +249,10 @@ export default async function AppsListPage({
                   <td className="px-4 py-3 font-medium text-caetano-anthracite">
                     {campaign.internalName}
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {CAMPAIGN_TYPE_LABELS[campaign.type]}
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {campaign.folder?.name ?? "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -246,11 +260,11 @@ export default async function AppsListPage({
                       {CAMPAIGN_STATUS_LABELS[campaign.status]}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">{campaign.owner.name}</td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">{campaign.owner.name}</td>
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {campaign.updatedAt.toLocaleDateString("pt-PT")}
                   </td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {campaign._count.participations}
                   </td>
                   <td className="px-4 py-3 text-right">

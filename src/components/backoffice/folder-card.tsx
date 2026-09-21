@@ -9,10 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { DetailsMenu, menuItemClass } from "@/components/ui/details-menu";
 import type { FolderSort, FolderTab } from "@/features/folders/view-params";
-
-const menuItemClass =
-  "block w-full rounded-md px-3 py-1.5 text-left text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20";
 
 export function FolderCard({
   id,
@@ -80,14 +78,8 @@ export function FolderCard({
         </div>
 
         {canManage && (
-          <details className="relative z-10 shrink-0 text-left">
-            <summary
-              className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 focus-visible:ring-2 focus-visible:ring-caetano-cyan"
-              aria-label={`Ações da pasta ${name}`}
-            >
-              ⋯
-            </summary>
-            <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-caetano-medium-gray-40 bg-white p-1 shadow-lg">
+          <div className="relative z-10 shrink-0">
+            <DetailsMenu label={<span aria-hidden="true">⋯</span>} ariaLabel={`Ações da pasta ${name}`} panelClassName="w-64">
               <Link href={`/apps?folderId=${id}`} className={menuItemClass}>
                 Ver aplicações
               </Link>
@@ -131,8 +123,8 @@ export function FolderCard({
                   Eliminar
                 </ConfirmSubmitButton>
               </form>
-            </div>
-          </details>
+            </DetailsMenu>
+          </div>
         )}
       </article>
     </div>

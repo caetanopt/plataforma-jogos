@@ -3,7 +3,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { prisma } from "@/server/db/client";
 import { assertCan } from "@/server/permissions";
 import { createCampaignAction } from "@/features/campaigns/actions";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Alert } from "@/components/ui/alert";
 import { WorkspaceFolderFields } from "@/components/backoffice/workspace-folder-fields";
 import type { CampaignType } from "@/generated/prisma/client";
@@ -54,7 +54,7 @@ export default async function NewAppPage({
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Escolha um tipo de jogo</h1>
-      <p className="mt-1 text-caetano-medium-gray">
+      <p className="mt-1 text-caetano-anthracite-80">
         Disponíveis nesta primeira fase: Jogo da Memória, Roda da Sorte e Quiz Interativo.
       </p>
 
@@ -82,9 +82,9 @@ export default async function NewAppPage({
                 className="flex flex-col rounded-xl border border-caetano-medium-gray-40 bg-white p-5"
               >
                 <input type="hidden" name="type" value={game.type} />
-                <Icon size={28} className="mb-3 text-caetano-cyan" aria-hidden="true" />
+                <Icon size={28} className="mb-3 text-caetano-deep-blue" aria-hidden="true" />
                 <h2 className="font-bold text-caetano-anthracite">{game.label}</h2>
-                <p className="mt-1 flex-1 text-sm text-caetano-medium-gray">{game.description}</p>
+                <p className="mt-1 flex-1 text-sm text-caetano-anthracite-80">{game.description}</p>
 
                 <WorkspaceFolderFields
                   workspaces={workspaces}
@@ -92,9 +92,9 @@ export default async function NewAppPage({
                   defaultFolderId={params.folderId}
                 />
 
-                <Button type="submit" className="mt-4 w-full">
+                <SubmitButton pendingLabel="A criar…" className="mt-4 w-full">
                   Criar
-                </Button>
+                </SubmitButton>
               </form>
             );
           })}

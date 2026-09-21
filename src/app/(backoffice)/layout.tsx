@@ -3,6 +3,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { prisma } from "@/server/db/client";
 import { Sidebar } from "@/components/backoffice/sidebar";
 import { Topbar } from "@/components/backoffice/topbar";
+import { NavigationProgressProvider } from "@/components/backoffice/navigation-progress";
 
 export default async function BackofficeLayout({ children }: { children: ReactNode }) {
   const context = await requireOrgContext();
@@ -20,21 +21,32 @@ export default async function BackofficeLayout({ children }: { children: ReactNo
   const isOrgAdmin = context.isSuperAdmin || context.membership?.role === "ORG_ADMIN";
 
   return (
-    <div className="flex min-h-screen flex-1 bg-caetano-medium-gray-20">
-      <Sidebar
-        isOrgAdmin={isOrgAdmin}
-        organizationName={organization?.name ?? ""}
-        logoUrl={logo?.url}
-      />
-      <div className="flex flex-1 flex-col">
-        <Topbar
-          organizationName={organization?.name ?? ""}
-          userName={context.userName}
+    <NavigationProgressProvider>
+      <div className="flex min-h-screen flex-1 bg-caetano-medium-gray-20">
+        {/* Primeiro elemento focável da página: permite saltar a navegação. */}
+        <a
+          href="#conteudo"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-caetano-deep-blue focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+        >
+          Saltar para o conteúdo
+        </a>
+        <Sidebar
           isOrgAdmin={isOrgAdmin}
+          organizationName={organization?.name ?? ""}
           logoUrl={logo?.url}
         />
-        <main className="flex-1">{children}</main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar
+            organizationName={organization?.name ?? ""}
+            userName={context.userName}
+            isOrgAdmin={isOrgAdmin}
+            logoUrl={logo?.url}
+          />
+          <main id="conteudo" tabIndex={-1} className="flex-1">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </NavigationProgressProvider>
   );
 }

@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 export function ParticipationTimelineChart({ data }: { data: Array<{ date: string; count: number }> }) {
   if (data.length === 0) {
-    return <p className="text-sm text-caetano-medium-gray">Sem dados suficientes para o período selecionado.</p>;
+    return <p className="text-sm text-caetano-anthracite-80">Sem dados suficientes para o período selecionado.</p>;
   }
 
   return (

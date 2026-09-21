@@ -137,11 +137,11 @@ export function MediaUploadField({
           </button>
         )}
         {status === "uploading" && (
-          <span className="text-xs text-caetano-medium-gray">A carregar…</span>
+          <span className="text-xs text-caetano-anthracite-80">A carregar…</span>
         )}
       </div>
 
-      {helpText && <p className="mt-1 text-xs text-caetano-medium-gray">{helpText}</p>}
+      {helpText && <p className="mt-1 text-xs text-caetano-anthracite-80">{helpText}</p>}
       {status === "error" && <p className="mt-1 text-xs text-danger">{errorMessage}</p>}
     </div>
   );

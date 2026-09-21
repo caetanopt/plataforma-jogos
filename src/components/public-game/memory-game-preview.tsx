@@ -19,7 +19,7 @@ export function MemoryGamePreview({
 
   if (pairs.length === 0) {
     return (
-      <p className="text-sm text-caetano-medium-gray">
+      <p className="text-sm text-caetano-anthracite-80">
         Adicione pelo menos um par de cartas para pré-visualizar o jogo.
       </p>
     );
@@ -38,7 +38,7 @@ export function MemoryGamePreview({
         <p className="text-lg font-bold text-caetano-anthracite">
           {score.completed ? "Jogo concluído!" : "Simulação terminada"}
         </p>
-        <p className="mt-2 text-caetano-medium-gray">
+        <p className="mt-2 text-caetano-anthracite-80">
           Pontuação: {score.score} · Tentativas: {result.attempts} · Tempo: {result.timeSeconds}s
         </p>
         <button

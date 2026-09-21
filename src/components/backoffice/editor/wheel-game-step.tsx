@@ -40,7 +40,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-caetano-anthracite">Configuração da Roda da Sorte</h2>
-          <p className="mt-1 text-sm text-caetano-medium-gray">
+          <p className="mt-1 text-sm text-caetano-anthracite-80">
             Defina os prémios e os segmentos da roda. O resultado é sempre calculado no servidor.
           </p>
         </div>
@@ -58,7 +58,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         </h3>
 
         {campaign.prizes.length === 0 && (
-          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+          <p className="py-4 text-center text-sm text-caetano-anthracite-80">
             Ainda não há prémios. Adicione o primeiro abaixo antes de criar segmentos.
           </p>
         )}
@@ -69,14 +69,14 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-caetano-anthracite">{prize.publicName}</p>
-                  <p className="text-xs text-caetano-medium-gray">
+                  <p className="text-xs text-caetano-anthracite-80">
                     {prize.awardedQuantity}/{prize.totalQuantity ?? "∞"} atribuídos ·{" "}
                     {prize.codes.filter((c) => c.status === "AVAILABLE").length} códigos disponíveis
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <details>
-                    <summary className="cursor-pointer text-sm text-caetano-cyan">Editar</summary>
+                    <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
                     <form action={updatePrizeAction} className="mt-2 w-72 space-y-2">
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="prizeId" value={prize.id} />
@@ -103,7 +103,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
               </div>
 
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-caetano-medium-gray">
+                <summary className="cursor-pointer text-xs text-caetano-anthracite-80 list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">
                   Códigos ({prize.codes.length})
                 </summary>
                 <ul className="mt-2 space-y-1">
@@ -138,7 +138,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         </ul>
 
         <details className="mt-4">
-          <summary className="cursor-pointer text-sm text-caetano-cyan">Adicionar prémio</summary>
+          <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Adicionar prémio</summary>
           <form action={addPrizeAction} className="mt-2 max-w-md space-y-2">
             <input type="hidden" name="campaignId" value={campaignId} />
             <Input name="internalName" placeholder="Nome interno" required />
@@ -162,7 +162,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         </h3>
 
         {wheelConfig.segments.length === 0 && (
-          <p className="py-4 text-center text-sm text-caetano-medium-gray">
+          <p className="py-4 text-center text-sm text-caetano-anthracite-80">
             Ainda não há segmentos. Adicione o primeiro abaixo.
           </p>
         )}
@@ -181,12 +181,12 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     {segment.outcome === "WIN" ? "Vencedor" : "Não vencedor"}
                   </Badge>
                   {segment.prizeId && prizeById.get(segment.prizeId) && (
-                    <span className="text-xs text-caetano-medium-gray">
+                    <span className="text-xs text-caetano-anthracite-80">
                       → {prizeById.get(segment.prizeId)?.publicName}
                     </span>
                   )}
                   {segment.totalQuantity != null && (
-                    <span className="text-xs text-caetano-medium-gray">
+                    <span className="text-xs text-caetano-anthracite-80">
                       ({segment.remainingQuantity}/{segment.totalQuantity} restantes)
                     </span>
                   )}
@@ -196,7 +196,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="segmentId" value={segment.id} />
                     <input type="hidden" name="direction" value="up" />
-                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">
+                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">
                       ↑
                     </button>
                   </form>
@@ -204,12 +204,12 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="segmentId" value={segment.id} />
                     <input type="hidden" name="direction" value="down" />
-                    <button type="submit" disabled={index === wheelConfig.segments.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">
+                    <button type="submit" disabled={index === wheelConfig.segments.length - 1} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">
                       ↓
                     </button>
                   </form>
                   <details className="relative">
-                    <summary className="cursor-pointer list-none text-sm text-caetano-cyan">Editar</summary>
+                    <summary className="cursor-pointer list-none text-sm text-caetano-deep-blue select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
                     <form
                       action={updateWheelSegmentAction}
                       className="absolute right-0 z-10 mt-1 w-80 space-y-2 rounded-lg border border-caetano-medium-gray-40 bg-white p-3 shadow-lg"

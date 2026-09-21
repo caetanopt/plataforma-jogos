@@ -55,7 +55,7 @@ export default async function SettingsPage({
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Configurações</h1>
-      <p className="mt-1 text-caetano-medium-gray">
+      <p className="mt-1 text-caetano-anthracite-80">
         Auditoria de ações relevantes {context.isSuperAdmin ? "em todas as organizações" : "nesta organização"}.
       </p>
 
@@ -90,7 +90,7 @@ export default async function SettingsPage({
       <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-medium-gray">
+            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
               <th className="px-4 py-3">Data</th>
               <th className="px-4 py-3">Utilizador</th>
               <th className="px-4 py-3">Ação</th>
@@ -101,19 +101,19 @@ export default async function SettingsPage({
           <tbody className="divide-y divide-caetano-medium-gray-20">
             {entries.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-caetano-medium-gray">
+                <td colSpan={5} className="px-4 py-8 text-center text-caetano-anthracite-80">
                   Nenhum registo de auditoria para os filtros atuais.
                 </td>
               </tr>
             ) : (
               entries.map((entry) => (
                 <tr key={entry.id}>
-                  <td className="px-4 py-3 whitespace-nowrap text-caetano-medium-gray">
+                  <td className="px-4 py-3 whitespace-nowrap text-caetano-anthracite-80">
                     {entry.createdAt.toLocaleString("pt-PT")}
                   </td>
                   <td className="px-4 py-3">{entry.user?.name ?? "—"}</td>
                   <td className="px-4 py-3">{AUDIT_ACTION_LABELS[entry.action]}</td>
-                  <td className="px-4 py-3 text-caetano-medium-gray">
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
                     {entry.entityType}
                     {entry.entityId && <span className="ml-1 font-mono text-xs">({entry.entityId.slice(0, 8)})</span>}
                   </td>
@@ -141,7 +141,7 @@ export default async function SettingsPage({
               <a
                 key={p}
                 href={`/settings?${query}`}
-                className={p === page ? "font-bold text-caetano-deep-blue" : "text-caetano-medium-gray"}
+                className={p === page ? "font-bold text-caetano-deep-blue" : "text-caetano-anthracite-80"}
               >
                 {p}
               </a>

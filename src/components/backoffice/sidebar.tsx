@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/components/backoffice/nav-items";
+import { ProgressLink } from "@/components/backoffice/navigation-progress";
 import { BrandLogo } from "@/components/backoffice/brand-logo";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +29,7 @@ export function Sidebar({
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = item.icon;
         return (
-          <Link
+          <ProgressLink
             key={item.href}
             href={item.href}
             aria-current={isActive ? "page" : undefined}
@@ -42,7 +42,7 @@ export function Sidebar({
           >
             <Icon size={18} aria-hidden="true" />
             {item.label}
-          </Link>
+          </ProgressLink>
         );
       })}
     </nav>

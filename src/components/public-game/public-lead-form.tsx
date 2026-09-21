@@ -146,7 +146,7 @@ export function PublicLeadForm({
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
           )}
-          {field.helpText && <p className="mt-1 text-xs text-caetano-medium-gray">{field.helpText}</p>}
+          {field.helpText && <p className="mt-1 text-xs text-caetano-anthracite-80">{field.helpText}</p>}
         </div>
       ))}
 

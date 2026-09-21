@@ -29,7 +29,7 @@ export default async function FinalScreenStepPage({
     <div className="max-w-2xl space-y-4">
       <div>
         <h2 className="text-lg font-bold text-caetano-anthracite">Resultado e ecrã final</h2>
-        <p className="mt-1 text-sm text-caetano-medium-gray">
+        <p className="mt-1 text-sm text-caetano-anthracite-80">
           O último ecrã que os participantes veem, depois de jogar.
         </p>
       </div>
@@ -103,7 +103,7 @@ export default async function FinalScreenStepPage({
           </label>
         </div>
 
-        <p className="text-xs text-caetano-medium-gray">
+        <p className="text-xs text-caetano-anthracite-80">
           O regulamento e o texto legal definidos no ecrã inicial ficam disponíveis por link em
           todos os ecrãs públicos, incluindo este.
         </p>

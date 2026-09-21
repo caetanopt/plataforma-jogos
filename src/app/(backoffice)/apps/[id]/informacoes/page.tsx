@@ -39,7 +39,7 @@ export default async function ProjectInfoStepPage({
   return (
     <div className="max-w-2xl">
       <h2 className="text-lg font-bold text-caetano-anthracite">Informações do projeto</h2>
-      <p className="mt-1 text-sm text-caetano-medium-gray">
+      <p className="mt-1 text-sm text-caetano-anthracite-80">
         Dados internos de organização da campanha. O tipo de jogo (
         {CAMPAIGN_TYPE_LABELS[campaign.type]}) é definido na criação e não pode ser alterado
         {hasParticipations ? " — esta campanha já tem participações reais." : "."}
@@ -165,7 +165,7 @@ export default async function ProjectInfoStepPage({
             disabled={Boolean(campaign.publishedAt)}
             aria-describedby="slug-help"
           />
-          <p id="slug-help" className="mt-1 text-xs text-caetano-medium-gray">
+          <p id="slug-help" className="mt-1 text-xs text-caetano-anthracite-80">
             URL pública: /play/{campaign.slug}
             {campaign.publishedAt &&
               " — já não pode ser alterado depois de publicado (partia o link e o QR code já partilhados)."}

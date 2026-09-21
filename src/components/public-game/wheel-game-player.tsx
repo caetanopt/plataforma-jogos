@@ -96,9 +96,9 @@ export function WheelGamePlayer({ segments, onSpin }: WheelGamePlayerProps) {
           <p className="text-lg font-bold text-caetano-anthracite">
             {result.outcome === "WIN" ? "Parabéns, ganhou!" : "Não foi desta vez"}
           </p>
-          {result.prize && <p className="mt-1 text-caetano-medium-gray">{result.prize.publicName}</p>}
+          {result.prize && <p className="mt-1 text-caetano-anthracite-80">{result.prize.publicName}</p>}
           {result.prize?.code && <p className="mt-1 font-mono text-sm">{result.prize.code}</p>}
-          {result.message && <p className="mt-2 text-sm text-caetano-medium-gray">{result.message}</p>}
+          {result.message && <p className="mt-2 text-sm text-caetano-anthracite-80">{result.message}</p>}
         </div>
       )}
     </div>
