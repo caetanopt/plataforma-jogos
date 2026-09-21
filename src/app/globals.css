@@ -1,20 +1,79 @@
 @import "tailwindcss";
 
+/*
+  Identidade Caetano — Brand Book, abril 2026.
+
+  Cores base e respetivas escalas de tons retiradas diretamente da tabela
+  "04.2 Cores & Versões" (Digital/RGB) do manual. Os sufixos -80/-60/-40/-20
+  correspondem, por ordem, aos quatro tons publicados para cada cor base.
+
+  Usar sempre estes valores em vez de opacidade sobre a cor base: um
+  `medium-gray/30` compõe-se com o que estiver por baixo e deixa de ser uma
+  cor oficial assim que o fundo não é branco.
+*/
 :root {
   --background: #ffffff;
   --foreground: #2e3a46;
 
-  /* Identidade Caetano (Brand Book, abril 2026) — tema base do backoffice.
-     Cada campanha tem o seu próprio Brand Kit, inicializado com estes valores. */
+  /* Primárias */
   --color-caetano-deep-blue: #002e5d;
-  --color-caetano-cyan: #00aeef;
-  --color-caetano-sky: #66cef5;
-  --color-caetano-anthracite: #2e3a46;
-  --color-caetano-medium-gray: #9caeb8;
+  --color-caetano-deep-blue-80: #33587d;
+  --color-caetano-deep-blue-60: #66829e;
+  --color-caetano-deep-blue-40: #99abbe;
+  --color-caetano-deep-blue-20: #ccd5df;
   --color-caetano-ultra-white: #ffffff;
+
+  /* Neutras */
+  --color-caetano-anthracite: #2e3a46;
+  --color-caetano-anthracite-80: #58616b;
+  --color-caetano-anthracite-60: #828990;
+  --color-caetano-anthracite-40: #abb0b5;
+  --color-caetano-anthracite-20: #d5d8da;
+  --color-caetano-medium-gray: #9caeb8;
+  --color-caetano-medium-gray-80: #b0bec6;
+  --color-caetano-medium-gray-60: #c4ced4;
+  --color-caetano-medium-gray-40: #d7dfe3;
+  --color-caetano-medium-gray-20: #ebeff1;
+
+  /* Secundárias */
+  --color-caetano-cyan: #00aeef;
+  --color-caetano-cyan-80: #33bef2;
+  --color-caetano-cyan-60: #66cef5;
+  --color-caetano-cyan-40: #99dff9;
+  --color-caetano-cyan-20: #cceffc;
+  /* "Azul céu" é o segundo tom do azul cyan (#66cef5) — mantido como alias
+     por ser o nome usado no manual (04.1) e no CLAUDE.md. */
+  --color-caetano-sky: #66cef5;
+
   --color-caetano-eco-green: #49b489;
+  --color-caetano-eco-green-80: #6dc3a1;
+  --color-caetano-eco-green-60: #92d2b8;
+  --color-caetano-eco-green-40: #b6e1d0;
+  --color-caetano-eco-green-20: #dbf0e7;
+  /* "Verde pastel" (04.1) é o tom claro do verde eco. */
+  --color-caetano-pastel-green: #92d2b8;
+
   --color-caetano-dynamic-orange: #ffa931;
+  --color-caetano-dynamic-orange-80: #ffba5a;
+  --color-caetano-dynamic-orange-60: #ffcb83;
+  --color-caetano-dynamic-orange-40: #ffddad;
+  --color-caetano-dynamic-orange-20: #ffeed6;
+
   --color-caetano-freedom-yellow: #ffd23f;
+  --color-caetano-freedom-yellow-80: #ffdb65;
+  --color-caetano-freedom-yellow-60: #ffe48c;
+  --color-caetano-freedom-yellow-40: #ffedb2;
+  --color-caetano-freedom-yellow-20: #fff6d9;
+
+  /*
+    Cor funcional de erro/destruição. A paleta Caetano não tem vermelho, e o
+    laranja dinâmico (#ffa931) não chega aos 4.5:1 de contraste exigidos pela
+    WCAG 2.2 AA para texto. Fica documentada como cor de sistema — nunca usar
+    em comunicação de marca.
+  */
+  --color-danger: #b3261e;
+  --color-danger-strong: #8c1d18;
+  --color-danger-surface: #fbeae9;
 }
 
 @theme inline {
@@ -23,14 +82,52 @@
   --font-sans: var(--font-montserrat);
 
   --color-caetano-deep-blue: var(--color-caetano-deep-blue);
-  --color-caetano-cyan: var(--color-caetano-cyan);
-  --color-caetano-sky: var(--color-caetano-sky);
-  --color-caetano-anthracite: var(--color-caetano-anthracite);
-  --color-caetano-medium-gray: var(--color-caetano-medium-gray);
+  --color-caetano-deep-blue-80: var(--color-caetano-deep-blue-80);
+  --color-caetano-deep-blue-60: var(--color-caetano-deep-blue-60);
+  --color-caetano-deep-blue-40: var(--color-caetano-deep-blue-40);
+  --color-caetano-deep-blue-20: var(--color-caetano-deep-blue-20);
   --color-caetano-ultra-white: var(--color-caetano-ultra-white);
+
+  --color-caetano-anthracite: var(--color-caetano-anthracite);
+  --color-caetano-anthracite-80: var(--color-caetano-anthracite-80);
+  --color-caetano-anthracite-60: var(--color-caetano-anthracite-60);
+  --color-caetano-anthracite-40: var(--color-caetano-anthracite-40);
+  --color-caetano-anthracite-20: var(--color-caetano-anthracite-20);
+  --color-caetano-medium-gray: var(--color-caetano-medium-gray);
+  --color-caetano-medium-gray-80: var(--color-caetano-medium-gray-80);
+  --color-caetano-medium-gray-60: var(--color-caetano-medium-gray-60);
+  --color-caetano-medium-gray-40: var(--color-caetano-medium-gray-40);
+  --color-caetano-medium-gray-20: var(--color-caetano-medium-gray-20);
+
+  --color-caetano-cyan: var(--color-caetano-cyan);
+  --color-caetano-cyan-80: var(--color-caetano-cyan-80);
+  --color-caetano-cyan-60: var(--color-caetano-cyan-60);
+  --color-caetano-cyan-40: var(--color-caetano-cyan-40);
+  --color-caetano-cyan-20: var(--color-caetano-cyan-20);
+  --color-caetano-sky: var(--color-caetano-sky);
+
   --color-caetano-eco-green: var(--color-caetano-eco-green);
+  --color-caetano-eco-green-80: var(--color-caetano-eco-green-80);
+  --color-caetano-eco-green-60: var(--color-caetano-eco-green-60);
+  --color-caetano-eco-green-40: var(--color-caetano-eco-green-40);
+  --color-caetano-eco-green-20: var(--color-caetano-eco-green-20);
+  --color-caetano-pastel-green: var(--color-caetano-pastel-green);
+
   --color-caetano-dynamic-orange: var(--color-caetano-dynamic-orange);
+  --color-caetano-dynamic-orange-80: var(--color-caetano-dynamic-orange-80);
+  --color-caetano-dynamic-orange-60: var(--color-caetano-dynamic-orange-60);
+  --color-caetano-dynamic-orange-40: var(--color-caetano-dynamic-orange-40);
+  --color-caetano-dynamic-orange-20: var(--color-caetano-dynamic-orange-20);
+
   --color-caetano-freedom-yellow: var(--color-caetano-freedom-yellow);
+  --color-caetano-freedom-yellow-80: var(--color-caetano-freedom-yellow-80);
+  --color-caetano-freedom-yellow-60: var(--color-caetano-freedom-yellow-60);
+  --color-caetano-freedom-yellow-40: var(--color-caetano-freedom-yellow-40);
+  --color-caetano-freedom-yellow-20: var(--color-caetano-freedom-yellow-20);
+
+  --color-danger: var(--color-danger);
+  --color-danger-strong: var(--color-danger-strong);
+  --color-danger-surface: var(--color-danger-surface);
 }
 
 body {

@@ -91,7 +91,7 @@ export default async function AppsListPage({
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-caetano-anthracite">Aplicações</h1>
+          <h1 className="text-2xl font-bold text-caetano-anthracite">Aplicações</h1>
           <p className="mt-1 text-caetano-medium-gray">{total} aplicações encontradas.</p>
         </div>
         {canCreate && (
@@ -101,7 +101,7 @@ export default async function AppsListPage({
         )}
       </div>
 
-      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div className="min-w-[200px] flex-1">
           <Label htmlFor="q">Pesquisar</Label>
           <Input id="q" name="q" defaultValue={params.q} placeholder="Nome da campanha…" />
@@ -180,13 +180,13 @@ export default async function AppsListPage({
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-10 text-center text-caetano-medium-gray">
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-medium-gray">
           Nenhuma aplicação encontrada com estes filtros.
         </div>
       ) : view === "grid" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((campaign) => (
-            <div key={campaign.id} className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+            <div key={campaign.id} className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-medium text-caetano-anthracite">{campaign.internalName}</p>
@@ -215,9 +215,9 @@ export default async function AppsListPage({
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray/30 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b border-caetano-medium-gray/30 text-caetano-medium-gray">
+            <thead className="border-b border-caetano-medium-gray-40 text-caetano-medium-gray">
               <tr>
                 <th className="px-4 py-3 font-medium">Nome</th>
                 <th className="px-4 py-3 font-medium">Tipo</th>
@@ -229,7 +229,7 @@ export default async function AppsListPage({
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-caetano-medium-gray/20">
+            <tbody className="divide-y divide-caetano-medium-gray-20">
               {items.map((campaign) => (
                 <tr key={campaign.id}>
                   <td className="px-4 py-3 font-medium text-caetano-anthracite">

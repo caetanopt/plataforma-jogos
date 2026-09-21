@@ -53,7 +53,7 @@ export default async function NewAppPage({
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-caetano-anthracite">Escolha um tipo de jogo</h1>
+      <h1 className="text-2xl font-bold text-caetano-anthracite">Escolha um tipo de jogo</h1>
       <p className="mt-1 text-caetano-medium-gray">
         Disponíveis nesta primeira fase: Jogo da Memória, Roda da Sorte e Quiz Interativo.
       </p>
@@ -79,11 +79,11 @@ export default async function NewAppPage({
               <form
                 key={game.type}
                 action={createCampaignAction}
-                className="flex flex-col rounded-xl border border-caetano-medium-gray/30 bg-white p-5"
+                className="flex flex-col rounded-xl border border-caetano-medium-gray-40 bg-white p-5"
               >
                 <input type="hidden" name="type" value={game.type} />
                 <Icon size={28} className="mb-3 text-caetano-cyan" aria-hidden="true" />
-                <h2 className="font-semibold text-caetano-anthracite">{game.label}</h2>
+                <h2 className="font-bold text-caetano-anthracite">{game.label}</h2>
                 <p className="mt-1 flex-1 text-sm text-caetano-medium-gray">{game.description}</p>
 
                 <WorkspaceFolderFields

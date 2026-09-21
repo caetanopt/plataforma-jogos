@@ -47,13 +47,13 @@ export default async function AnalyticsPage({
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-caetano-anthracite">Estatísticas</h1>
+        <h1 className="text-2xl font-bold text-caetano-anthracite">Estatísticas</h1>
         <p className="mt-1 text-caetano-medium-gray">
           Métricas de visualizações, participações e conversão das suas campanhas.
         </p>
       </div>
 
-      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div>
           <Label htmlFor="campaignId">Campanha</Label>
           <select
@@ -123,8 +123,8 @@ export default async function AnalyticsPage({
         <StatCard label="Taxa de conclusão" value={percent(stats.general.completionRate)} />
       </div>
 
-      <div className="mb-6 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-caetano-anthracite">Participações por dia</h2>
+      <div className="mb-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">Participações por dia</h2>
         <ParticipationTimelineChart data={stats.general.timeline} />
       </div>
 
@@ -135,8 +135,8 @@ export default async function AnalyticsPage({
       </div>
 
       {stats.memory && (
-        <section className="mb-6 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-caetano-anthracite">Jogo da Memória</h2>
+        <section className="mb-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">Jogo da Memória</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard label="Pontuação média" value={stats.memory.avgScore} />
             <StatCard label="Tempo médio" value={`${stats.memory.avgTimeSeconds}s`} />
@@ -145,10 +145,10 @@ export default async function AnalyticsPage({
           </div>
           {stats.memory.ranking.length > 0 && (
             <div className="mt-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase text-caetano-medium-gray">Ranking (top 10)</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Ranking (top 10)</h3>
               <ol className="space-y-1 text-sm">
                 {stats.memory.ranking.map((entry, i) => (
-                  <li key={i} className="flex justify-between border-b border-caetano-medium-gray/10 py-1">
+                  <li key={i} className="flex justify-between border-b border-caetano-medium-gray-20 py-1">
                     <span>{i + 1}. {entry.name}</span>
                     <span className="text-caetano-medium-gray">{entry.score} pts · {entry.timeSeconds}s</span>
                   </li>
@@ -160,8 +160,8 @@ export default async function AnalyticsPage({
       )}
 
       {stats.wheel && (
-        <section className="mb-6 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-caetano-anthracite">Roda da Sorte</h2>
+        <section className="mb-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">Roda da Sorte</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard label="Rotações" value={stats.wheel.spins} />
             <StatCard label="Vencedores" value={stats.wheel.winners} />
@@ -170,7 +170,7 @@ export default async function AnalyticsPage({
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase text-caetano-medium-gray">Distribuição de prémios</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Distribuição de prémios</h3>
               <ul className="space-y-1 text-sm">
                 {stats.wheel.prizeDistribution.map((p) => (
                   <li key={p.prizeName} className="flex justify-between">
@@ -181,7 +181,7 @@ export default async function AnalyticsPage({
               </ul>
             </div>
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase text-caetano-medium-gray">Stock atual</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Stock atual</h3>
               <ul className="space-y-1 text-sm">
                 {stats.wheel.stock.map((p) => (
                   <li key={p.prizeName} className="flex justify-between">
@@ -198,8 +198,8 @@ export default async function AnalyticsPage({
       )}
 
       {stats.quiz && (
-        <section className="mb-6 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-caetano-anthracite">Quiz Interativo</h2>
+        <section className="mb-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">Quiz Interativo</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard label="Pontuação média" value={`${stats.quiz.avgPercentage}%`} />
             <StatCard label="Taxa de aprovação" value={percent(stats.quiz.passRate)} />
@@ -207,7 +207,7 @@ export default async function AnalyticsPage({
             <StatCard label="Abandono" value={percent(stats.quiz.abandonment)} />
           </div>
           <div className="mt-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase text-caetano-medium-gray">Acerto por pergunta</h3>
+            <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Acerto por pergunta</h3>
             <ul className="space-y-1 text-sm">
               {stats.quiz.perQuestion.map((q) => (
                 <li key={q.title} className="flex justify-between">
@@ -219,7 +219,7 @@ export default async function AnalyticsPage({
           </div>
           {stats.quiz.profiles.length > 0 && (
             <div className="mt-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase text-caetano-medium-gray">Perfis de resultado</h3>
+              <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">Perfis de resultado</h3>
               <ul className="space-y-1 text-sm">
                 {stats.quiz.profiles.map((p) => (
                   <li key={p.title} className="flex justify-between">
@@ -238,8 +238,8 @@ export default async function AnalyticsPage({
 
 function BreakdownCard({ title, items }: { title: string; items: Array<{ key: string; count: number }> }) {
   return (
-    <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-      <h3 className="mb-2 text-xs font-semibold uppercase text-caetano-medium-gray">{title}</h3>
+    <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+      <h3 className="mb-2 text-xs font-bold uppercase text-caetano-medium-gray">{title}</h3>
       {items.length === 0 ? (
         <p className="text-sm text-caetano-medium-gray">Sem dados.</p>
       ) : (

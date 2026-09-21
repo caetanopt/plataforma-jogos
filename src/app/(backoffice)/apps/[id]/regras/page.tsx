@@ -23,7 +23,7 @@ export default async function ParticipationRulesStepPage({
   return (
     <div className="max-w-2xl space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Regras de participação</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Regras de participação</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           Defina quantas vezes cada pessoa pode participar e requisitos de idade.
         </p>
@@ -37,7 +37,7 @@ export default async function ParticipationRulesStepPage({
 
       <AutoSaveForm
         action={updateParticipationRulesAction}
-        className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+        className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 

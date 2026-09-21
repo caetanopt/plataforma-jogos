@@ -612,18 +612,38 @@ Esta plataforma é operada internamente pela Caetano. O backoffice usa a identid
 tema visual base; cada campanha tem o seu próprio Brand Kit (secção 10), inicializado com estes
 valores por defeito mas totalmente editável.
 
-Cores (RGB/hex):
-- Azul profundo (primária): `#002E5D`
-- Azul cyan (secundária/destaque): `#00AEEF`
-- Azul céu: `#66CEF5`
-- Cinza antracite: `#2E3A46`
-- Cinza médio: `#9CAEB8`
-- Ultra branco: `#FFFFFF`
-- Verde eco: `#49B489`
-- Laranja dinâmico: `#FFA931`
-- Amarelo liberdade: `#FFD23F`
+Fonte de verdade: Brand Book Caetano, abril 2026. Os valores abaixo são os da tabela
+"04.2 Cores & Versões" (Digital/RGB) e estão implementados como tokens em `src/app/globals.css`.
 
-Tipografia: Montserrat (Light, Regular, Bold).
+Cores base e respetivos tons oficiais (sufixos `-80/-60/-40/-20`):
 
-Não copiar o desenho vetorial do logótipo "caetano" (propriedade da marca); o Brand Kit permite
-upload do ficheiro oficial do logótipo por quem o possuir.
+| Cor | Base | Tons |
+| --- | --- | --- |
+| Azul profundo (primária) | `#002E5D` | `#33587D` `#66829E` `#99ABBE` `#CCD5DF` |
+| Ultra branco (primária) | `#FFFFFF` | — |
+| Cinza antracite (neutra) | `#2E3A46` | `#58616B` `#828990` `#ABB0B5` `#D5D8DA` |
+| Cinza médio (neutra) | `#9CAEB8` | `#B0BEC6` `#C4CED4` `#D7DFE3` `#EBEFF1` |
+| Azul cyan (secundária) | `#00AEEF` | `#33BEF2` `#66CEF5` `#99DFF9` `#CCEFFC` |
+| Verde eco (secundária) | `#49B489` | `#6DC3A1` `#92D2B8` `#B6E1D0` `#DBF0E7` |
+| Laranja dinâmico (secundária) | `#FFA931` | `#FFBA5A` `#FFCB83` `#FFDDAD` `#FFEED6` |
+| Amarelo liberdade (secundária) | `#FFD23F` | `#FFDB65` `#FFE48C` `#FFEDB2` `#FFF6D9` |
+
+"Azul céu" (`#66CEF5`) e "verde pastel" (`#92D2B8`) são os tons claros do azul cyan e do verde
+eco nomeados no manual (04.1).
+
+Usar sempre os tons oficiais em vez de opacidade sobre a cor base — uma cor com alfa compõe-se
+com o fundo e deixa de ser um valor oficial.
+
+A paleta não tem vermelho. Para estados de erro/destrutivos existe um token funcional
+documentado (`--color-danger`), porque o laranja dinâmico não cumpre o contraste mínimo da
+WCAG 2.2 AA para texto. Nunca usar essa cor em comunicação de marca.
+
+Tipografia: Montserrat — Light (300), Regular (400), Medium (500, usado na assinatura) e
+Bold (700). O manual não inclui SemiBold.
+
+Logótipo: o wordmark "caetano" é um desenho autoral, sem fonte associada, e o manual (03) proíbe
+expressamente substituí-lo por qualquer fonte similar. Nunca o compor tipograficamente nem
+reproduzir o desenho vetorial (propriedade da marca). O backoffice mostra o ficheiro oficial
+carregado em `Organization.logoMediaId` (Identidade visual) e, na sua ausência, apenas o nome do
+produto. Tamanho mínimo em digital: 14 px de altura. Cada campanha carrega o seu próprio
+logótipo através do Brand Kit.

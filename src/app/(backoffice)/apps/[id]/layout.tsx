@@ -27,12 +27,12 @@ export default async function CampaignEditorLayout({
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-caetano-medium-gray/30 bg-white px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-caetano-medium-gray-40 bg-white px-6 py-4">
         <div>
           <Link href="/apps" className="text-sm text-caetano-cyan hover:underline">
             ← Aplicações
           </Link>
-          <h1 className="text-lg font-semibold text-caetano-anthracite">{campaign.internalName}</h1>
+          <h1 className="text-lg font-bold text-caetano-anthracite">{campaign.internalName}</h1>
         </div>
         <div className="flex items-center gap-2">
           <Badge tone="info">{CAMPAIGN_TYPE_LABELS[campaign.type]}</Badge>

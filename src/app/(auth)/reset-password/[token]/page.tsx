@@ -20,7 +20,7 @@ export default async function ResetPasswordPage({
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-semibold text-caetano-anthracite">Definir password</h1>
+      <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Definir password</h1>
       <p className="mb-6 text-sm text-caetano-medium-gray">
         Escolha uma nova password para a sua conta.
       </p>

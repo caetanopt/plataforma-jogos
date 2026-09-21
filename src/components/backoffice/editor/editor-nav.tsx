@@ -16,7 +16,7 @@ export function EditorNav({
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Etapas do editor" className="w-full shrink-0 border-caetano-medium-gray/30 bg-white md:w-64 md:border-r">
+    <nav aria-label="Etapas do editor" className="w-full shrink-0 border-caetano-medium-gray-40 bg-white md:w-64 md:border-r">
       <ol className="flex overflow-x-auto md:flex-col md:overflow-visible">
         {EDITOR_STEPS.map((step, index) => {
           const isActive = pathname === `/apps/${campaignId}/${step.slug}`;
@@ -30,7 +30,7 @@ export function EditorNav({
                   "flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium",
                   isActive
                     ? "bg-caetano-deep-blue text-white"
-                    : "text-caetano-anthracite hover:bg-neutral-100",
+                    : "text-caetano-anthracite hover:bg-caetano-medium-gray-20",
                 )}
               >
                 <span

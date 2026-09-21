@@ -81,7 +81,7 @@ export function WheelGamePlayer({ segments, onSpin }: WheelGamePlayerProps) {
           onClick={handleSpin}
           disabled={spinning}
           className={cn(
-            "rounded-full bg-caetano-deep-blue px-8 py-3 font-semibold text-white transition-opacity",
+            "rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white transition-opacity",
             spinning && "opacity-60",
           )}
         >
@@ -89,11 +89,11 @@ export function WheelGamePlayer({ segments, onSpin }: WheelGamePlayerProps) {
         </button>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       {result && (
-        <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center" aria-live="polite">
-          <p className="text-lg font-semibold text-caetano-anthracite">
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center" aria-live="polite">
+          <p className="text-lg font-bold text-caetano-anthracite">
             {result.outcome === "WIN" ? "Parabéns, ganhou!" : "Não foi desta vez"}
           </p>
           {result.prize && <p className="mt-1 text-caetano-medium-gray">{result.prize.publicName}</p>}

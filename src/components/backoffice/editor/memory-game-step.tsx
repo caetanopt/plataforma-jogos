@@ -44,7 +44,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
     <div className="max-w-3xl space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-caetano-anthracite">
+          <h2 className="text-lg font-bold text-caetano-anthracite">
             Configuração do Jogo da Memória
           </h2>
           <p className="mt-1 text-sm text-caetano-medium-gray">
@@ -53,7 +53,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
         </div>
         <Link
           href={`/apps/${campaign.id}/preview`}
-          className="shrink-0 rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-neutral-100"
+          className="shrink-0 rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
         >
           Pré-visualizar
         </Link>
@@ -61,7 +61,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
 
       <AutoSaveForm
         action={updateMemoryConfigAction}
-        className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+        className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 
@@ -170,8 +170,8 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
         <SaveStatus />
       </AutoSaveForm>
 
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">
           Pares de cartas ({memoryConfig.pairs.length})
         </h3>
 
@@ -183,7 +183,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
 
         <ul className="space-y-2">
           {memoryConfig.pairs.map((pair, index) => (
-            <li key={pair.id} className="flex items-center justify-between gap-3 rounded-lg border border-caetano-medium-gray/20 p-2">
+            <li key={pair.id} className="flex items-center justify-between gap-3 rounded-lg border border-caetano-medium-gray-20 p-2">
               <div className="flex items-center gap-3">
                 <PairThumb
                   url={pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined}
@@ -203,7 +203,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="up" />
-                  <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30" aria-label="Mover para cima">
+                  <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">
                     ↑
                   </button>
                 </form>
@@ -211,7 +211,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="down" />
-                  <button type="submit" disabled={index === memoryConfig.pairs.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30" aria-label="Mover para baixo">
+                  <button type="submit" disabled={index === memoryConfig.pairs.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">
                     ↓
                   </button>
                 </form>
@@ -241,7 +241,7 @@ function PairThumb({ url, text, label }: { url?: string; text?: string | null; l
     return <img src={url} alt={label} className="h-12 w-12 rounded object-cover" />;
   }
   return (
-    <span className="flex h-12 w-24 items-center justify-center rounded bg-neutral-100 px-2 text-xs text-caetano-anthracite">
+    <span className="flex h-12 w-24 items-center justify-center rounded bg-caetano-medium-gray-20 px-2 text-xs text-caetano-anthracite">
       {text || "—"}
     </span>
   );

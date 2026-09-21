@@ -80,13 +80,13 @@ export default async function PublishStepPage({
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Publicação</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Publicação</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           Publique a campanha para gerar o link público, QR code e código de incorporação.
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <span className="text-sm text-caetano-medium-gray">Estado:</span>
         <Badge tone={CAMPAIGN_STATUS_TONE[campaign.status]}>{CAMPAIGN_STATUS_LABELS[campaign.status]}</Badge>
         {isLive && (
@@ -136,10 +136,10 @@ export default async function PublishStepPage({
 
       {isLive && (
         <>
-          <section className="space-y-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-            <h3 className="text-sm font-semibold text-caetano-anthracite">Link direto</h3>
+          <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+            <h3 className="text-sm font-bold text-caetano-anthracite">Link direto</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <code className="flex-1 rounded-lg bg-neutral-100 px-3 py-2 text-sm break-all">{url}</code>
+              <code className="flex-1 rounded-lg bg-caetano-medium-gray-20 px-3 py-2 text-sm break-all">{url}</code>
               <CopyButton value={url} />
               <a
                 href={`${url}?test=1`}
@@ -157,12 +157,12 @@ export default async function PublishStepPage({
             </p>
           </section>
 
-          <section className="space-y-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-            <h3 className="text-sm font-semibold text-caetano-anthracite">QR Code</h3>
+          <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+            <h3 className="text-sm font-bold text-caetano-anthracite">QR Code</h3>
             {qrPng && qrSvg ? (
               <div className="flex flex-wrap items-center gap-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrPng.url} alt="QR Code" className="h-32 w-32 rounded-lg border border-caetano-medium-gray/30" />
+                <img src={qrPng.url} alt="QR Code" className="h-32 w-32 rounded-lg border border-caetano-medium-gray-40" />
                 <div className="flex flex-col gap-2">
                   <a href={qrPng.url} download className="text-sm text-caetano-cyan underline">
                     Descarregar PNG
@@ -177,8 +177,8 @@ export default async function PublishStepPage({
             )}
           </section>
 
-          <section className="space-y-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-            <h3 className="text-sm font-semibold text-caetano-anthracite">Embed (iframe)</h3>
+          <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+            <h3 className="text-sm font-bold text-caetano-anthracite">Embed (iframe)</h3>
             <textarea
               readOnly
               rows={3}
@@ -188,22 +188,22 @@ export default async function PublishStepPage({
             <CopyButton value={embedSnippet} label="Copiar código de incorporação" />
           </section>
 
-          <section className="space-y-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-            <h3 className="text-sm font-semibold text-caetano-anthracite">Partilha</h3>
+          <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+            <h3 className="text-sm font-bold text-caetano-anthracite">Partilha</h3>
             <p className="text-xs text-caetano-medium-gray">
               Adicione parâmetros UTM ao link antes de o partilhar em campanhas de marketing.
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              <code className="rounded bg-neutral-100 px-2 py-1">?utm_source=…</code>
-              <code className="rounded bg-neutral-100 px-2 py-1">&utm_medium=…</code>
-              <code className="rounded bg-neutral-100 px-2 py-1">&utm_campaign=…</code>
-              <code className="rounded bg-neutral-100 px-2 py-1">&utm_content=…</code>
+              <code className="rounded bg-caetano-medium-gray-20 px-2 py-1">?utm_source=…</code>
+              <code className="rounded bg-caetano-medium-gray-20 px-2 py-1">&utm_medium=…</code>
+              <code className="rounded bg-caetano-medium-gray-20 px-2 py-1">&utm_campaign=…</code>
+              <code className="rounded bg-caetano-medium-gray-20 px-2 py-1">&utm_content=…</code>
             </div>
           </section>
 
-          <section className="space-y-2 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-            <h3 className="text-sm font-semibold text-caetano-anthracite">Versões publicadas</h3>
-            <ul className="divide-y divide-caetano-medium-gray/20 text-sm">
+          <section className="space-y-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+            <h3 className="text-sm font-bold text-caetano-anthracite">Versões publicadas</h3>
+            <ul className="divide-y divide-caetano-medium-gray-20 text-sm">
               {versions.map((version) => (
                 <li key={version.id} className="flex items-center justify-between py-2">
                   <span>Versão {version.versionNumber}</span>

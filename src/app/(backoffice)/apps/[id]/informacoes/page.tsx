@@ -38,7 +38,7 @@ export default async function ProjectInfoStepPage({
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold text-caetano-anthracite">Informações do projeto</h2>
+      <h2 className="text-lg font-bold text-caetano-anthracite">Informações do projeto</h2>
       <p className="mt-1 text-sm text-caetano-medium-gray">
         Dados internos de organização da campanha. O tipo de jogo (
         {CAMPAIGN_TYPE_LABELS[campaign.type]}) é definido na criação e não pode ser alterado

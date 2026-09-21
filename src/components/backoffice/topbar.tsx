@@ -5,15 +5,17 @@ export function Topbar({
   organizationName,
   userName,
   isOrgAdmin,
+  logoUrl,
 }: {
   organizationName: string;
   userName: string;
   isOrgAdmin: boolean;
+  logoUrl?: string | null;
 }) {
   return (
-    <header className="flex h-16 items-center justify-between border-b border-caetano-medium-gray/30 bg-white px-4 md:px-6">
+    <header className="flex h-16 items-center justify-between border-b border-caetano-medium-gray-40 bg-white px-4 md:px-6">
       <div className="flex items-center gap-3">
-        <MobileNav isOrgAdmin={isOrgAdmin} />
+        <MobileNav isOrgAdmin={isOrgAdmin} organizationName={organizationName} logoUrl={logoUrl} />
         <span className="text-sm font-medium text-caetano-anthracite">{organizationName}</span>
       </div>
       <div className="flex items-center gap-4">
@@ -21,7 +23,7 @@ export function Topbar({
         <form action="/api/logout" method="post">
           <button
             type="submit"
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-neutral-100"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
           >
             <LogOut size={16} aria-hidden="true" />
             <span className="hidden sm:inline">Sair</span>

@@ -54,12 +54,12 @@ export default async function SettingsPage({
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-caetano-anthracite">Configurações</h1>
+      <h1 className="text-2xl font-bold text-caetano-anthracite">Configurações</h1>
       <p className="mt-1 text-caetano-medium-gray">
         Auditoria de ações relevantes {context.isSuperAdmin ? "em todas as organizações" : "nesta organização"}.
       </p>
 
-      <form method="get" className="mt-6 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+      <form method="get" className="mt-6 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div>
           <Label htmlFor="action">Ação</Label>
           <select id="action" name="action" defaultValue={params.action ?? ""} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm">
@@ -87,10 +87,10 @@ export default async function SettingsPage({
         </Button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray/30 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-caetano-medium-gray/20 text-left text-xs uppercase text-caetano-medium-gray">
+            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-medium-gray">
               <th className="px-4 py-3">Data</th>
               <th className="px-4 py-3">Utilizador</th>
               <th className="px-4 py-3">Ação</th>
@@ -98,7 +98,7 @@ export default async function SettingsPage({
               <th className="px-4 py-3">Resultado</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-caetano-medium-gray/10">
+          <tbody className="divide-y divide-caetano-medium-gray-20">
             {entries.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-caetano-medium-gray">
@@ -118,7 +118,7 @@ export default async function SettingsPage({
                     {entry.entityId && <span className="ml-1 font-mono text-xs">({entry.entityId.slice(0, 8)})</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={entry.result === "SUCCESS" ? "text-caetano-eco-green" : "text-red-600"}>
+                    <span className={entry.result === "SUCCESS" ? "text-caetano-eco-green" : "text-danger"}>
                       {entry.result}
                     </span>
                   </td>
@@ -141,7 +141,7 @@ export default async function SettingsPage({
               <a
                 key={p}
                 href={`/settings?${query}`}
-                className={p === page ? "font-semibold text-caetano-deep-blue" : "text-caetano-medium-gray"}
+                className={p === page ? "font-bold text-caetano-deep-blue" : "text-caetano-medium-gray"}
               >
                 {p}
               </a>

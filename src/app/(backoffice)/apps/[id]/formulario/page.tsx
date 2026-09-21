@@ -51,13 +51,13 @@ export default async function LeadFormStepPage({
   return (
     <div className="max-w-3xl space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Formulário de leads</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Formulário de leads</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           Configure onde e que dados recolher dos participantes.
         </p>
       </div>
 
-      <AutoSaveForm action={updateLeadFormSettingsAction} className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+      <AutoSaveForm action={updateLeadFormSettingsAction} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <input type="hidden" name="campaignId" value={campaign.id} />
         <div>
           <Label htmlFor="position">Posição do formulário</Label>
@@ -112,12 +112,12 @@ export default async function LeadFormStepPage({
       </AutoSaveForm>
 
       {leadForm.position !== "NONE" && (
-        <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">Campos</h3>
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+          <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">Campos</h3>
 
           <ul className="space-y-2">
             {leadForm.fields.map((field, index) => (
-              <li key={field.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
+              <li key={field.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <span className="font-medium text-caetano-anthracite">{field.label}</span>
@@ -134,7 +134,7 @@ export default async function LeadFormStepPage({
                       <button
                         type="submit"
                         disabled={index === 0}
-                        className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30"
+                        className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30"
                         aria-label="Mover para cima"
                       >
                         ↑
@@ -147,7 +147,7 @@ export default async function LeadFormStepPage({
                       <button
                         type="submit"
                         disabled={index === leadForm.fields.length - 1}
-                        className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30"
+                        className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30"
                         aria-label="Mover para baixo"
                       >
                         ↓
@@ -159,7 +159,7 @@ export default async function LeadFormStepPage({
                       </summary>
                       <AutoSaveForm
                         action={updateLeadFieldAction}
-                        className="absolute right-0 z-10 mt-1 w-80 space-y-2 rounded-lg border border-caetano-medium-gray/30 bg-white p-3 shadow-lg"
+                        className="absolute right-0 z-10 mt-1 w-80 space-y-2 rounded-lg border border-caetano-medium-gray-40 bg-white p-3 shadow-lg"
                       >
                         <input type="hidden" name="campaignId" value={campaign.id} />
                         <input type="hidden" name="fieldId" value={field.id} />
@@ -255,15 +255,15 @@ export default async function LeadFormStepPage({
         </div>
       )}
 
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h3 className="mb-1 text-sm font-semibold text-caetano-anthracite">Consentimentos</h3>
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h3 className="mb-1 text-sm font-bold text-caetano-anthracite">Consentimentos</h3>
         <p className="mb-3 text-xs text-caetano-medium-gray">
           Consentimentos de marketing nunca aparecem pré-selecionados aos participantes.
         </p>
 
         <ul className="space-y-2">
           {leadForm.consentDefinitions.map((consent) => (
-            <li key={consent.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
+            <li key={consent.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <p className="text-sm text-caetano-anthracite">{consent.text}</p>

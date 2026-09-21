@@ -45,7 +45,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
   return (
     <div className="max-w-2xl space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Marca e design</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Marca e design</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           Personalize a identidade visual desta campanha. Cada campanha guarda a sua própria
           cópia — alterações aqui não afetam outras campanhas nem o brand kit de origem.
@@ -53,7 +53,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
       </div>
 
       {brandKits.length > 0 && (
-        <form action={applyBrandKitAction} className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+        <form action={applyBrandKitAction} className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
           <input type="hidden" name="campaignId" value={campaign.id} />
           <div className="flex-1">
             <Label htmlFor="brandKitId">Aplicar brand kit</Label>
@@ -86,7 +86,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
       </AutoSaveForm>
 
       {canManageBrand && (
-        <form action={saveAsBrandKitAction} className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+        <form action={saveAsBrandKitAction} className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
           <input type="hidden" name="campaignId" value={campaign.id} />
           <div className="flex-1">
             <Label htmlFor="kitName">Guardar como brand kit reutilizável</Label>

@@ -10,7 +10,7 @@ import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import type { CampaignStatus } from "@/generated/prisma/client";
 
 const menuItemClass =
-  "block w-full rounded-md px-3 py-1.5 text-left text-sm text-caetano-anthracite hover:bg-neutral-100";
+  "block w-full rounded-md px-3 py-1.5 text-left text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20";
 
 export function CampaignRowActions({
   campaignId,
@@ -29,10 +29,10 @@ export function CampaignRowActions({
 }) {
   return (
     <details className="relative inline-block text-left">
-      <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100">
+      <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20">
         ⋯
       </summary>
-      <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border border-caetano-medium-gray/30 bg-white p-1 shadow-lg">
+      <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border border-caetano-medium-gray-40 bg-white p-1 shadow-lg">
         {canEdit && (
           <Link href={`/apps/${campaignId}/informacoes`} className={menuItemClass}>
             Editar
@@ -91,7 +91,7 @@ export function CampaignRowActions({
               confirmMessage="Eliminar esta aplicação apaga também todas as participações e leads associados. Esta ação não pode ser desfeita. Continuar?"
               variant="ghost"
               size="sm"
-              className={`${menuItemClass} text-red-600`}
+              className={`${menuItemClass} text-danger`}
             >
               Eliminar
             </ConfirmSubmitButton>

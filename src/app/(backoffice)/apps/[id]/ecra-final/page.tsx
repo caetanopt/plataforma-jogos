@@ -28,7 +28,7 @@ export default async function FinalScreenStepPage({
   return (
     <div className="max-w-2xl space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Resultado e ecrã final</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Resultado e ecrã final</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           O último ecrã que os participantes veem, depois de jogar.
         </p>
@@ -42,7 +42,7 @@ export default async function FinalScreenStepPage({
 
       <AutoSaveForm
         action={updateFinalScreenAction}
-        className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+        className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 

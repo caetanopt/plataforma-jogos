@@ -44,7 +44,7 @@ export default async function FoldersPage({
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-caetano-anthracite">Pastas</h1>
+      <h1 className="text-2xl font-bold text-caetano-anthracite">Pastas</h1>
       <p className="mt-1 text-caetano-medium-gray">
         Organize as aplicações por marca, campanha ou finalidade dentro de cada espaço de trabalho.
       </p>
@@ -66,13 +66,13 @@ export default async function FoldersPage({
 
       <div className="mt-4 space-y-6">
         {workspaces.map((workspace) => (
-          <div key={workspace.id} className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-            <h2 className="mb-3 font-semibold text-caetano-anthracite">{workspace.name}</h2>
+          <div key={workspace.id} className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+            <h2 className="mb-3 font-bold text-caetano-anthracite">{workspace.name}</h2>
 
             {workspace.folders.length === 0 ? (
               <p className="text-sm text-caetano-medium-gray">Sem pastas ainda.</p>
             ) : (
-              <ul className="divide-y divide-caetano-medium-gray/20">
+              <ul className="divide-y divide-caetano-medium-gray-20">
                 {workspace.folders.map((folder) => (
                   <li key={folder.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                     <div>
@@ -90,7 +90,7 @@ export default async function FoldersPage({
                           </summary>
                           <form
                             action={renameFolderAction}
-                            className="absolute right-0 z-10 mt-1 flex w-56 gap-2 rounded-lg border border-caetano-medium-gray/30 bg-white p-2 shadow-lg"
+                            className="absolute right-0 z-10 mt-1 flex w-56 gap-2 rounded-lg border border-caetano-medium-gray-40 bg-white p-2 shadow-lg"
                           >
                             <input type="hidden" name="folderId" value={folder.id} />
                             <Input name="name" defaultValue={folder.name} required className="h-8" />

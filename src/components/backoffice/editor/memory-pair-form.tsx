@@ -20,7 +20,7 @@ export function MemoryPairForm({ campaignId }: { campaignId: string }) {
   const [kind, setKind] = useState<Kind>("SAME_IMAGE");
 
   return (
-    <form action={addMemoryPairAction} className="space-y-3 rounded-lg border border-caetano-medium-gray/20 p-3">
+    <form action={addMemoryPairAction} className="space-y-3 rounded-lg border border-caetano-medium-gray-20 p-3">
       <input type="hidden" name="campaignId" value={campaignId} />
       <div>
         <Label htmlFor="kind">Tipo de par</Label>

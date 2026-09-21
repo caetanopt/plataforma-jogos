@@ -23,7 +23,7 @@ export default async function ScheduleStepPage({
   return (
     <div className="max-w-2xl space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Agenda</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Agenda</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           Datas de início e fim da campanha (fuso horário: {campaign.timezone}).
         </p>
@@ -36,7 +36,7 @@ export default async function ScheduleStepPage({
 
       <AutoSaveForm
         action={updateScheduleAction}
-        className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+        className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 

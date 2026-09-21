@@ -110,20 +110,20 @@ export function MediaUploadField({
       {previewUrl && (
         <div className="mb-2">
           {kind === "VIDEO" ? (
-            <video src={previewUrl} controls className="h-32 rounded-lg border border-caetano-medium-gray/30" />
+            <video src={previewUrl} controls className="h-32 rounded-lg border border-caetano-medium-gray-40" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
               alt={`Pré-visualização de ${label}`}
-              className="h-32 rounded-lg border border-caetano-medium-gray/30 object-contain"
+              className="h-32 rounded-lg border border-caetano-medium-gray-40 object-contain"
             />
           )}
         </div>
       )}
 
       <div className="flex items-center gap-2">
-        <label className="cursor-pointer rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-neutral-100">
+        <label className="cursor-pointer rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20">
           {previewUrl ? "Substituir" : "Carregar ficheiro"}
           <input type="file" accept={accept} className="hidden" onChange={handleFileChange} />
         </label>
@@ -131,7 +131,7 @@ export function MediaUploadField({
           <button
             type="button"
             onClick={handleRemove}
-            className="text-sm text-red-600 hover:underline"
+            className="text-sm text-danger hover:underline"
           >
             Remover
           </button>
@@ -142,7 +142,7 @@ export function MediaUploadField({
       </div>
 
       {helpText && <p className="mt-1 text-xs text-caetano-medium-gray">{helpText}</p>}
-      {status === "error" && <p className="mt-1 text-xs text-red-600">{errorMessage}</p>}
+      {status === "error" && <p className="mt-1 text-xs text-danger">{errorMessage}</p>}
     </div>
   );
 }

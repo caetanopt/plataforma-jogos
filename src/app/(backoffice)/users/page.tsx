@@ -32,7 +32,7 @@ export default async function UsersPage({
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-caetano-anthracite">Utilizadores</h1>
+      <h1 className="text-2xl font-bold text-caetano-anthracite">Utilizadores</h1>
       <p className="mt-1 text-caetano-medium-gray">
         Convide colegas e defina o papel de cada um na organização.
       </p>
@@ -43,10 +43,10 @@ export default async function UsersPage({
         </div>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-caetano-medium-gray/30 bg-white">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-caetano-medium-gray/20 text-left text-xs uppercase text-caetano-medium-gray">
+            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-medium-gray">
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">E-mail</th>
               <th className="px-4 py-3">Papel</th>
@@ -54,7 +54,7 @@ export default async function UsersPage({
               <th className="px-4 py-3">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-caetano-medium-gray/10">
+          <tbody className="divide-y divide-caetano-medium-gray-20">
             {memberships.map((membership) => (
               <tr key={membership.id}>
                 <td className="px-4 py-3">{membership.user.name}</td>
@@ -120,8 +120,8 @@ export default async function UsersPage({
       </div>
 
       {can(context, "user:manage") && (
-        <div className="mt-8 max-w-md rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-caetano-anthracite">Convidar utilizador</h2>
+        <div className="mt-8 max-w-md rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">Convidar utilizador</h2>
           <form action={inviteUserAction} className="space-y-3">
             <div>
               <Label htmlFor="name">Nome</Label>

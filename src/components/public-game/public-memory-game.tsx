@@ -37,7 +37,7 @@ export function PublicMemoryGame({
 
   if (phase === "submitting") {
     return (
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center text-sm text-caetano-medium-gray">
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center text-sm text-caetano-medium-gray">
         A calcular o resultado…
       </div>
     );
@@ -45,8 +45,8 @@ export function PublicMemoryGame({
 
   if (phase === "error") {
     return (
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center">
-        <p className="text-sm text-red-600" role="alert">
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
+        <p className="text-sm text-danger" role="alert">
           Não foi possível calcular o resultado. Tente novamente.
         </p>
         <button
@@ -63,8 +63,8 @@ export function PublicMemoryGame({
   if (phase === "done" && result) {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center" aria-live="polite">
-          <p className="text-lg font-semibold text-caetano-anthracite">
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center" aria-live="polite">
+          <p className="text-lg font-bold text-caetano-anthracite">
             {result.completed ? "Jogo concluído!" : "Tempo esgotado"}
           </p>
           <p className="mt-1 text-caetano-medium-gray">Pontuação: {result.score}</p>

@@ -69,7 +69,7 @@ export default async function LeadsPage({
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-caetano-anthracite">Leads</h1>
+          <h1 className="text-2xl font-bold text-caetano-anthracite">Leads</h1>
           <p className="mt-1 text-caetano-medium-gray">Participações e leads angariados nas suas campanhas.</p>
         </div>
         {canExport && (
@@ -79,7 +79,7 @@ export default async function LeadsPage({
         )}
       </div>
 
-      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
+      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div>
           <Label htmlFor="campaignId">Campanha</Label>
           <select
@@ -128,10 +128,10 @@ export default async function LeadsPage({
         </Button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray/30 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-caetano-medium-gray/20 text-left text-xs uppercase text-caetano-medium-gray">
+            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-medium-gray">
               <th className="px-4 py-3">Data</th>
               <th className="px-4 py-3">Campanha</th>
               <th className="px-4 py-3">Nome</th>
@@ -142,7 +142,7 @@ export default async function LeadsPage({
               <th className="px-4 py-3">Origem</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-caetano-medium-gray/10">
+          <tbody className="divide-y divide-caetano-medium-gray-20">
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-caetano-medium-gray">
@@ -205,7 +205,7 @@ export default async function LeadsPage({
               <Link
                 key={p}
                 href={`/leads?${pageQuery}`}
-                className={p === leads.page ? "font-semibold text-caetano-deep-blue" : "text-caetano-medium-gray"}
+                className={p === leads.page ? "font-bold text-caetano-deep-blue" : "text-caetano-medium-gray"}
               >
                 {p}
               </Link>

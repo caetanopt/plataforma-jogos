@@ -34,8 +34,8 @@ export function MemoryGamePreview({
       config: scoringConfig,
     });
     return (
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center">
-        <p className="text-lg font-semibold text-caetano-anthracite">
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
+        <p className="text-lg font-bold text-caetano-anthracite">
           {score.completed ? "Jogo concluído!" : "Simulação terminada"}
         </p>
         <p className="mt-2 text-caetano-medium-gray">
@@ -44,7 +44,7 @@ export function MemoryGamePreview({
         <button
           type="button"
           onClick={() => setResult(null)}
-          className="mt-4 rounded-lg border border-caetano-medium-gray px-4 py-2 text-sm text-caetano-anthracite hover:bg-neutral-100"
+          className="mt-4 rounded-lg border border-caetano-medium-gray px-4 py-2 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
         >
           Jogar novamente
         </button>

@@ -39,21 +39,21 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
     <div className="max-w-3xl space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-caetano-anthracite">Configuração da Roda da Sorte</h2>
+          <h2 className="text-lg font-bold text-caetano-anthracite">Configuração da Roda da Sorte</h2>
           <p className="mt-1 text-sm text-caetano-medium-gray">
             Defina os prémios e os segmentos da roda. O resultado é sempre calculado no servidor.
           </p>
         </div>
         <Link
           href={`/apps/${campaignId}/preview`}
-          className="shrink-0 rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-neutral-100"
+          className="shrink-0 rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
         >
           Pré-visualizar
         </Link>
       </div>
 
-      <section className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
+      <section className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">
           Prémios ({campaign.prizes.length})
         </h3>
 
@@ -65,7 +65,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
 
         <ul className="space-y-3">
           {campaign.prizes.map((prize) => (
-            <li key={prize.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
+            <li key={prize.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-caetano-anthracite">{prize.publicName}</p>
@@ -116,7 +116,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                         <form action={removePrizeCodeAction}>
                           <input type="hidden" name="campaignId" value={campaignId} />
                           <input type="hidden" name="codeId" value={code.id} />
-                          <button type="submit" className="text-red-600 hover:underline">
+                          <button type="submit" className="text-danger hover:underline">
                             Remover
                           </button>
                         </form>
@@ -156,8 +156,8 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         </details>
       </section>
 
-      <section className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
+      <section className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">
           Segmentos ({wheelConfig.segments.length})
         </h3>
 
@@ -169,11 +169,11 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
 
         <ul className="space-y-2">
           {wheelConfig.segments.map((segment, index) => (
-            <li key={segment.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
+            <li key={segment.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span
-                    className="h-5 w-5 rounded-full border border-caetano-medium-gray/30"
+                    className="h-5 w-5 rounded-full border border-caetano-medium-gray-40"
                     style={{ backgroundColor: segment.colorHex }}
                   />
                   <span className="font-medium text-caetano-anthracite">{segment.name}</span>
@@ -196,7 +196,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="segmentId" value={segment.id} />
                     <input type="hidden" name="direction" value="up" />
-                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30" aria-label="Mover para cima">
+                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">
                       ↑
                     </button>
                   </form>
@@ -204,7 +204,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="segmentId" value={segment.id} />
                     <input type="hidden" name="direction" value="down" />
-                    <button type="submit" disabled={index === wheelConfig.segments.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30" aria-label="Mover para baixo">
+                    <button type="submit" disabled={index === wheelConfig.segments.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">
                       ↓
                     </button>
                   </form>
@@ -212,7 +212,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     <summary className="cursor-pointer list-none text-sm text-caetano-cyan">Editar</summary>
                     <form
                       action={updateWheelSegmentAction}
-                      className="absolute right-0 z-10 mt-1 w-80 space-y-2 rounded-lg border border-caetano-medium-gray/30 bg-white p-3 shadow-lg"
+                      className="absolute right-0 z-10 mt-1 w-80 space-y-2 rounded-lg border border-caetano-medium-gray-40 bg-white p-3 shadow-lg"
                     >
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="segmentId" value={segment.id} />

@@ -43,7 +43,7 @@ export default async function IntermediateScreenStepPage({
   return (
     <div className="max-w-2xl space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-caetano-anthracite">Ecrãs intermédios</h2>
+        <h2 className="text-lg font-bold text-caetano-anthracite">Ecrãs intermédios</h2>
         <p className="mt-1 text-sm text-caetano-medium-gray">
           Opcional. No máximo um ecrã antes do jogo e um depois do jogo.
         </p>
@@ -57,7 +57,7 @@ export default async function IntermediateScreenStepPage({
           <AutoSaveForm
             key={section.kind}
             action={updateIntermediateScreenAction}
-            className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+            className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
           >
             <input type="hidden" name="campaignId" value={campaign.id} />
             <input type="hidden" name="kind" value={section.kind} />

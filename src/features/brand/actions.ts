@@ -113,3 +113,44 @@ export async function deleteBrandKitAction(formData: FormData): Promise<void> {
 
   revalidatePath("/brand");
 }
+
+/**
+ * Guarda o ficheiro oficial do logótipo da organização, mostrado no
+ * backoffice. O wordmark é um desenho autoral sem fonte associada (Brand
+ * Book 03) — só pode ser apresentado a partir do ficheiro oficial, nunca
+ * composto tipograficamente.
+ */
+export async function updateOrganizationLogoAction(formData: FormData): Promise<void> {
+  const context = await requireOrgContext();
+  assertCan(context, "brand:manage");
+
+  const rawMediaId = String(formData.get("logoMediaId") ?? "").trim();
+
+  // Só aceita media da própria organização (isolamento multi-tenant).
+  let logoMediaId: string | null = null;
+  if (rawMediaId) {
+    const asset = await prisma.mediaAsset.findFirst({
+      where: { id: rawMediaId, organizationId: context.organizationId },
+      select: { id: true },
+    });
+    if (!asset) return;
+    logoMediaId = asset.id;
+  }
+
+  await prisma.organization.update({
+    where: { id: context.organizationId },
+    data: { logoMediaId },
+  });
+
+  await logAudit({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    action: "UPDATE",
+    entityType: "Organization",
+    entityId: context.organizationId,
+    result: "SUCCESS",
+    metadata: { field: "logoMediaId", cleared: logoMediaId === null },
+  });
+
+  revalidatePath("/", "layout");
+}

@@ -16,7 +16,7 @@ export function WheelSegmentForm({ campaignId, prizes }: { campaignId: string; p
   const [outcome, setOutcome] = useState<"WIN" | "NO_WIN">("WIN");
 
   return (
-    <form action={addWheelSegmentAction} className="space-y-3 rounded-lg border border-caetano-medium-gray/20 p-3">
+    <form action={addWheelSegmentAction} className="space-y-3 rounded-lg border border-caetano-medium-gray-20 p-3">
       <input type="hidden" name="campaignId" value={campaignId} />
 
       <div className="grid grid-cols-2 gap-3">

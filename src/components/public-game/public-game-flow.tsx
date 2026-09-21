@@ -153,7 +153,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 
   if (stage === "blocked") {
     return (
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center text-caetano-anthracite">
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center text-caetano-anthracite">
         {BLOCKED_MESSAGES[blockedReason ?? ""] ?? "Não foi possível continuar."}
       </div>
     );
@@ -162,18 +162,18 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   return (
     <div className="space-y-4">
       {props.isTestMode && (
-        <div className="rounded-lg border border-caetano-dynamic-orange bg-caetano-dynamic-orange/10 px-4 py-2 text-center text-sm font-medium text-caetano-anthracite">
+        <div className="rounded-lg border border-caetano-dynamic-orange bg-caetano-dynamic-orange-20 px-4 py-2 text-center text-sm font-medium text-caetano-anthracite">
           Modo de teste — esta participação não conta para estatísticas nem consome stock.
         </div>
       )}
 
       {stage === "start" && (
-        <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center">
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
           {props.start.logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={props.start.logoUrl} alt="" className="mx-auto mb-4 h-12 object-contain" />
           )}
-          {props.start.title && <h1 className="text-2xl font-semibold text-caetano-anthracite">{props.start.title}</h1>}
+          {props.start.title && <h1 className="text-2xl font-bold text-caetano-anthracite">{props.start.title}</h1>}
           {props.start.subtitle && <p className="mt-1 text-caetano-medium-gray">{props.start.subtitle}</p>}
           {props.start.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -185,7 +185,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             type="button"
             onClick={handleStart}
             disabled={starting}
-            className="mt-6 rounded-full bg-caetano-deep-blue px-8 py-3 font-semibold text-white disabled:opacity-60"
+            className="mt-6 rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white disabled:opacity-60"
           >
             {starting ? "A preparar…" : props.start.buttonLabel || "Jogar"}
           </button>
@@ -239,8 +239,8 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       )}
 
       {stage === "final" && (
-        <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center">
-          {props.final.title && <h2 className="text-xl font-semibold text-caetano-anthracite">{props.final.title}</h2>}
+        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
+          {props.final.title && <h2 className="text-xl font-bold text-caetano-anthracite">{props.final.title}</h2>}
           {props.final.message && <p className="mt-2 text-caetano-medium-gray">{props.final.message}</p>}
           {props.final.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -293,7 +293,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             Regulamento
           </button>
           {showRegulation && (
-            <p className="mt-2 whitespace-pre-line rounded-lg bg-neutral-50 p-3 text-left text-xs text-caetano-medium-gray">
+            <p className="mt-2 whitespace-pre-line rounded-lg bg-caetano-medium-gray-20 p-3 text-left text-xs text-caetano-medium-gray">
               {props.regulationText}
             </p>
           )}
@@ -306,8 +306,8 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 function IntermediateScreen({ screen, onContinue }: { screen: ScreenData | null; onContinue: () => void }) {
   if (!screen) return null;
   return (
-    <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center">
-      {screen.title && <h2 className="text-lg font-semibold text-caetano-anthracite">{screen.title}</h2>}
+    <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
+      {screen.title && <h2 className="text-lg font-bold text-caetano-anthracite">{screen.title}</h2>}
       {screen.text && <p className="mt-2 text-caetano-medium-gray">{screen.text}</p>}
       {screen.mediaUrl && (
         // eslint-disable-next-line @next/next/no-img-element

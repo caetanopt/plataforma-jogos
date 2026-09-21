@@ -72,9 +72,14 @@ model PasswordResetToken {
 }
 
 model Organization {
-  id                  String    @id @default(cuid())
-  name                String
-  slug                String    @unique
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+  /// Ficheiro oficial do logótipo da organização, mostrado no backoffice.
+  /// O wordmark "caetano" é um desenho autoral sem fonte associada (Brand
+  /// Book 03), por isso nunca é reproduzido tipograficamente — sem este
+  /// ficheiro, o backoffice mostra apenas o nome do produto.
+  logoMediaId         String?
   privacyContactEmail String?
   dataRetentionDays   Int?
   defaultTimezone     String    @default("Europe/Lisbon")

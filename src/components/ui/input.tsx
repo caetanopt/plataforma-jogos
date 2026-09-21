@@ -11,7 +11,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
           "placeholder:text-caetano-medium-gray",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:border-caetano-cyan",
           "disabled:opacity-50",
-          "aria-invalid:border-red-500",
+          "aria-invalid:border-danger",
           className,
         )}
         {...props}

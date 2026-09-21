@@ -49,14 +49,14 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
     <div className="max-w-3xl space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-caetano-anthracite">Configuração do Quiz Interativo</h2>
+          <h2 className="text-lg font-bold text-caetano-anthracite">Configuração do Quiz Interativo</h2>
           <p className="mt-1 text-sm text-caetano-medium-gray">
             Defina as perguntas, a pontuação e os perfis de resultado.
           </p>
         </div>
         <Link
           href={`/apps/${campaignId}/preview`}
-          className="shrink-0 rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-neutral-100"
+          className="shrink-0 rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
         >
           Pré-visualizar
         </Link>
@@ -64,7 +64,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
 
       <AutoSaveForm
         action={updateQuizConfigAction}
-        className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+        className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
       >
         <input type="hidden" name="campaignId" value={campaignId} />
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -114,8 +114,8 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
         <SaveStatus />
       </AutoSaveForm>
 
-      <section className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
+      <section className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">
           Perguntas ({quizConfig.questions.length})
         </h3>
 
@@ -127,7 +127,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
 
         <ul className="space-y-3">
           {quizConfig.questions.map((question, index) => (
-            <li key={question.id} className="rounded-lg border border-caetano-medium-gray/20 p-3">
+            <li key={question.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <span className="font-medium text-caetano-anthracite">{question.title}</span>
@@ -140,13 +140,13 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="questionId" value={question.id} />
                     <input type="hidden" name="direction" value="up" />
-                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30" aria-label="Mover para cima">↑</button>
+                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">↑</button>
                   </form>
                   <form action={moveQuestionAction}>
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="questionId" value={question.id} />
                     <input type="hidden" name="direction" value="down" />
-                    <button type="submit" disabled={index === quizConfig.questions.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-neutral-100 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
+                    <button type="submit" disabled={index === quizConfig.questions.length - 1} className="rounded px-2 py-1 text-caetano-medium-gray hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
                   </form>
                   <form action={removeQuestionAction}>
                     <input type="hidden" name="campaignId" value={campaignId} />
@@ -206,7 +206,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
                             <input type="hidden" name="campaignId" value={campaignId} />
                             <input type="hidden" name="questionId" value={question.id} />
                             <input type="hidden" name="answerId" value={answer.id} />
-                            <button type="submit" className="text-xs text-red-600 hover:underline">
+                            <button type="submit" className="text-xs text-danger hover:underline">
                               Remover
                             </button>
                           </form>
@@ -261,8 +261,8 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
         </form>
       </section>
 
-      <section className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-caetano-anthracite">
+      <section className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">
           Perfis de resultado ({quizConfig.resultProfiles.length})
         </h3>
 
@@ -274,7 +274,7 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
 
         <ul className="space-y-2">
           {quizConfig.resultProfiles.map((profile) => (
-            <li key={profile.id} className="flex items-center justify-between gap-2 rounded-lg border border-caetano-medium-gray/20 p-3">
+            <li key={profile.id} className="flex items-center justify-between gap-2 rounded-lg border border-caetano-medium-gray-20 p-3">
               <div>
                 <span className="font-medium text-caetano-anthracite">{profile.title}</span>
                 <span className="ml-2 text-xs text-caetano-medium-gray">

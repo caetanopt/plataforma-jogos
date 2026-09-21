@@ -5,9 +5,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { NAV_ITEMS } from "@/components/backoffice/nav-items";
+import { BrandLogo } from "@/components/backoffice/brand-logo";
 import { cn } from "@/lib/utils";
 
-export function MobileNav({ isOrgAdmin }: { isOrgAdmin: boolean }) {
+export function MobileNav({
+  isOrgAdmin,
+  organizationName,
+  logoUrl,
+}: {
+  isOrgAdmin: boolean;
+  organizationName: string;
+  logoUrl?: string | null;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -56,7 +65,7 @@ export function MobileNav({ isOrgAdmin }: { isOrgAdmin: boolean }) {
         onClick={() => setOpen(true)}
         aria-label="Abrir menu de navegação"
         aria-expanded={open}
-        className="flex h-10 w-10 items-center justify-center rounded-lg text-caetano-anthracite hover:bg-neutral-100"
+        className="flex h-10 w-10 items-center justify-center rounded-lg text-caetano-anthracite hover:bg-caetano-medium-gray-20"
       >
         <Menu size={22} aria-hidden="true" />
       </button>
@@ -71,13 +80,13 @@ export function MobileNav({ isOrgAdmin }: { isOrgAdmin: boolean }) {
             aria-label="Navegação"
           >
             <div className="mb-6 flex items-center justify-between px-2">
-              <span className="text-lg font-semibold text-caetano-deep-blue">caetano</span>
+              <BrandLogo logoUrl={logoUrl} organizationName={organizationName} />
               <button
                 ref={closeButtonRef}
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Fechar menu"
-                className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-neutral-100"
+                className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-caetano-medium-gray-20"
               >
                 <X size={18} aria-hidden="true" />
               </button>
@@ -96,7 +105,7 @@ export function MobileNav({ isOrgAdmin }: { isOrgAdmin: boolean }) {
                       "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
                       isActive
                         ? "bg-caetano-deep-blue text-white"
-                        : "text-caetano-anthracite hover:bg-neutral-100",
+                        : "text-caetano-anthracite hover:bg-caetano-medium-gray-20",
                     )}
                   >
                     <Icon size={18} aria-hidden="true" />

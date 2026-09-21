@@ -146,7 +146,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
               disabled={faceUp || finished}
               aria-label={faceUp ? tile.alt ?? tile.text ?? "Carta revelada" : "Carta virada para baixo"}
               className={cn(
-                "flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-caetano-medium-gray/30 bg-white p-1 transition-transform",
+                "flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-caetano-medium-gray-40 bg-white p-1 transition-transform",
                 matched.has(tile.pairId) && "opacity-60",
               )}
             >

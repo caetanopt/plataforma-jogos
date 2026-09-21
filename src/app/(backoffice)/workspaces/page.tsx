@@ -18,13 +18,13 @@ export default async function WorkspacesPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-caetano-anthracite">Espaços de trabalho</h1>
+      <h1 className="text-2xl font-bold text-caetano-anthracite">Espaços de trabalho</h1>
       <p className="mt-1 text-caetano-medium-gray">
         Agrupam campanhas, utilizadores e permissões por marca, departamento ou cliente.
       </p>
 
       {workspaces.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-caetano-medium-gray/30 bg-white p-10 text-center text-caetano-medium-gray">
+        <div className="mt-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-medium-gray">
           Ainda não existe nenhum espaço de trabalho.
         </div>
       ) : (
@@ -32,7 +32,7 @@ export default async function WorkspacesPage() {
           {workspaces.map((workspace) => (
             <div
               key={workspace.id}
-              className="rounded-xl border border-caetano-medium-gray/30 bg-white p-4"
+              className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -69,8 +69,8 @@ export default async function WorkspacesPage() {
       )}
 
       {canManage && (
-        <div className="mt-8 max-w-md rounded-xl border border-caetano-medium-gray/30 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-caetano-anthracite">
+        <div className="mt-8 max-w-md rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+          <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">
             Novo espaço de trabalho
           </h2>
           <form action={createWorkspaceAction} className="space-y-3">

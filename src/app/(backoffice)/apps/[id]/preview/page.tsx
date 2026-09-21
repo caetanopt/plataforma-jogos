@@ -56,7 +56,7 @@ export default async function CampaignPreviewPage({
 
   return (
     <div className="mx-auto max-w-xl">
-      <div className="mb-4 rounded-lg border border-caetano-cyan/40 bg-caetano-cyan/10 px-4 py-2 text-center text-sm text-caetano-deep-blue">
+      <div className="mb-4 rounded-lg border border-caetano-cyan-40 bg-caetano-cyan-20 px-4 py-2 text-center text-sm text-caetano-deep-blue">
         Pré-visualização — simulação local, não afeta estatísticas nem participações.
       </div>
 

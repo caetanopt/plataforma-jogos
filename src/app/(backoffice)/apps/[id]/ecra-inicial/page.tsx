@@ -29,7 +29,7 @@ export default async function StartScreenStepPage({
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold text-caetano-anthracite">Ecrã inicial</h2>
+      <h2 className="text-lg font-bold text-caetano-anthracite">Ecrã inicial</h2>
       <p className="mt-1 text-sm text-caetano-medium-gray">
         O primeiro ecrã que os participantes veem antes de jogar.
       </p>

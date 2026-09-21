@@ -21,7 +21,7 @@ export default async function LoginPage({
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-semibold text-caetano-anthracite">Entrar</h1>
+      <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Entrar</h1>
       <p className="mb-6 text-sm text-caetano-medium-gray">
         Acesso à plataforma de jogos interativos.
       </p>

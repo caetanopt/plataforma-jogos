@@ -105,8 +105,8 @@ export function QuizGamePlayer({
 
   if (result) {
     return (
-      <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6 text-center" aria-live="polite">
-        <p className="text-lg font-semibold text-caetano-anthracite">
+      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center" aria-live="polite">
+        <p className="text-lg font-bold text-caetano-anthracite">
           {result.percentage.toFixed(0)}% ({result.totalScore}/{result.maxPossibleScore} pontos)
         </p>
         {result.passed != null && (
@@ -137,14 +137,14 @@ export function QuizGamePlayer({
   const selected = selections[question.id] ?? [];
 
   return (
-    <div className="rounded-xl border border-caetano-medium-gray/30 bg-white p-6">
+    <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6">
       {showProgress && (
         <p className="mb-3 text-xs text-caetano-medium-gray">
           Pergunta {index + 1} de {questions.length}
         </p>
       )}
 
-      <h3 className="text-lg font-semibold text-caetano-anthracite">{question.title}</h3>
+      <h3 className="text-lg font-bold text-caetano-anthracite">{question.title}</h3>
       {question.supportText && <p className="mt-1 text-sm text-caetano-medium-gray">{question.supportText}</p>}
 
       <div className="mt-4 space-y-2">
@@ -159,8 +159,8 @@ export function QuizGamePlayer({
               className={cn(
                 "block w-full rounded-lg border px-4 py-2 text-left text-sm",
                 isSelected
-                  ? "border-caetano-deep-blue bg-caetano-deep-blue/5 text-caetano-deep-blue"
-                  : "border-caetano-medium-gray/40 text-caetano-anthracite hover:bg-neutral-50",
+                  ? "border-caetano-deep-blue bg-caetano-deep-blue-20 text-caetano-deep-blue"
+                  : "border-caetano-medium-gray-60 text-caetano-anthracite hover:bg-caetano-medium-gray-20",
               )}
             >
               {answer.text}
@@ -170,7 +170,7 @@ export function QuizGamePlayer({
       </div>
 
       {error && (
-        <p className="mt-4 text-sm text-red-600" role="alert">
+        <p className="mt-4 text-sm text-danger" role="alert">
           {error}
         </p>
       )}

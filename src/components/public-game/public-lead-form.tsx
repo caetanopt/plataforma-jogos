@@ -76,7 +76,7 @@ export function PublicLeadForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-caetano-medium-gray/30 bg-white p-6">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-6">
       {honeypotEnabled && (
         <div className="absolute left-[-9999px]" aria-hidden="true">
           <label htmlFor="website">Não preencher</label>
@@ -96,7 +96,7 @@ export function PublicLeadForm({
         <div key={field.id}>
           <label htmlFor={field.id} className="mb-1.5 block text-sm font-medium text-caetano-anthracite">
             {field.label}
-            {field.required && <span className="text-red-600"> *</span>}
+            {field.required && <span className="text-danger"> *</span>}
           </label>
 
           {field.type === "LONG_TEXT" ? (
@@ -161,12 +161,12 @@ export function PublicLeadForm({
           />
           <span>
             {consent.text}
-            {consent.required && <span className="text-red-600"> *</span>}
+            {consent.required && <span className="text-danger"> *</span>}
           </span>
         </label>
       ))}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <button
         type="submit"
