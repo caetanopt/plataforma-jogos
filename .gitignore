@@ -50,3 +50,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Snapshot do Redis, criado por um redis-server arrancado a partir da raiz.
+dump.rdb

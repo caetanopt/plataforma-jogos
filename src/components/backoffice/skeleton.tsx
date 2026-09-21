@@ -1,9 +1,31 @@
 /**
- * Blocos de esqueleto para os `loading.tsx` do backoffice.
+ * Blocos de esqueleto.
  *
- * Servem de fallback ao nível da rota: o Next mostra-os imediatamente
- * enquanto o Server Component obtém os dados, o que torna a navegação
- * instantânea em vez de deixar o ecrã anterior congelado.
+ * ATENÇÃO — não voltar a criar `loading.tsx` dentro de `src/app/(backoffice)`.
+ *
+ * Um `loading.tsx` em qualquer segmento ascendente de uma rota do backoffice
+ * faz com que as server actions que atualizam a página apenas com
+ * `revalidatePath` (sem `redirect`) deixem de refletir na interface: a ação
+ * corre, os dados são gravados, mas o ecrã fica na versão anterior. Medido
+ * nesta versão do Next (16.2.10) com a suite e2e e reproduzido à mão.
+ *
+ * Isso atinge todo o editor de campanhas — marca, memória, roda, quiz e
+ * prémios revalidam sem redirecionar — e falha em silêncio, que é o pior
+ * modo de falhar: o utilizador julga que a alteração não foi guardada e
+ * repete-a.
+ *
+ * A documentação instalada (03-api-reference/03-file-conventions/layout.md,
+ * "Interaction with loading.js") já avisa que um `loading.tsx` não cobre o
+ * acesso a dados em runtime feito no `layout.js` — e o layout do backoffice
+ * faz precisamente isso, em `requireOrgContext()`, que é a fronteira de
+ * autorização e não pode ser adiada por streaming.
+ *
+ * O feedback de navegação é dado pela barra de progresso no topo
+ * (`navigation-progress.tsx`), que não mexe na semântica de renderização.
+ *
+ * Estes blocos continuam disponíveis para esqueletos dentro de uma página,
+ * com `<Suspense>` explícito à volta de uma secção lenta — esse caso não tem
+ * o problema acima.
  */
 
 function Bar({ className = "" }: { className?: string }) {
@@ -53,7 +75,7 @@ export function SkeletonPage({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="p-6 md:p-8" role="status" aria-live="polite">
+    <div className="p-4 sm:p-6 md:p-8" role="status" aria-live="polite">
       <span className="sr-only">A carregar…</span>
       <Bar className={`h-7 ${titleWidth}`} />
       <Bar className="mt-2 h-3 w-72 max-w-full" />
