@@ -27,6 +27,17 @@ npm run dev                   # http://localhost:3000
 
 Credenciais do superadmin semeado: ver output do `npm run db:seed`.
 
+Sem Docker, o storage pode ser substituído pelo mock s3rver, na mesma porta:
+
+```bash
+npm run dev:storage           # s3rver em http://localhost:9000
+```
+
+Nesse caso, trocar `STORAGE_ACCESS_KEY_ID` e `STORAGE_SECRET_ACCESS_KEY` no
+`.env` por `S3RVER` — é a única conta que o s3rver aceita. Publicar uma
+campanha carrega os QR codes para o storage: sem ele a publicar corretamente,
+a publicação falha e os testes end-to-end falham com ela.
+
 ## Comandos
 
 ```bash
