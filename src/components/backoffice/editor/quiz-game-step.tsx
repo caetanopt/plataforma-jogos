@@ -140,13 +140,13 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="questionId" value={question.id} />
                     <input type="hidden" name="direction" value="up" />
-                    <button type="submit" disabled={index === 0} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para cima">↑</button>
+                    <button type="submit" disabled={index === 0} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30" aria-label="Mover para cima">↑</button>
                   </form>
                   <form action={moveQuestionAction}>
                     <input type="hidden" name="campaignId" value={campaignId} />
                     <input type="hidden" name="questionId" value={question.id} />
                     <input type="hidden" name="direction" value="down" />
-                    <button type="submit" disabled={index === quizConfig.questions.length - 1} className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30" aria-label="Mover para baixo">↓</button>
+                    <button type="submit" disabled={index === quizConfig.questions.length - 1} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30" aria-label="Mover para baixo">↓</button>
                   </form>
                   <form action={removeQuestionAction}>
                     <input type="hidden" name="campaignId" value={campaignId} />
@@ -197,8 +197,19 @@ export async function QuizGameStep({ campaignId }: { campaignId: string }) {
                             type="submit"
                             disabled={question.type === "TRUE_FALSE"}
                             aria-label={answer.isCorrect ? "Resposta correta" : "Marcar como correta"}
-                            className={`h-5 w-5 rounded-full border ${answer.isCorrect ? "border-caetano-eco-green bg-caetano-eco-green" : "border-caetano-medium-gray"}`}
-                          />
+                            // A área de toque passa a 24x24 (WCAG 2.2 2.5.8);
+                            // o círculo visível continua com 20px, centrado.
+                            className={`flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan disabled:pointer-events-none disabled:opacity-50`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`block h-5 w-5 rounded-full border transition-colors ${
+                                answer.isCorrect
+                                  ? "border-caetano-eco-green bg-caetano-eco-green"
+                                  : "border-caetano-medium-gray"
+                              }`}
+                            />
+                          </button>
                           <span>{answer.text}</span>
                         </form>
                         {question.type !== "TRUE_FALSE" && (

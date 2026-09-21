@@ -35,9 +35,10 @@ export function Sidebar({
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan",
               isActive
                 ? "bg-caetano-deep-blue text-white"
-                : "text-caetano-anthracite hover:bg-caetano-medium-gray-20",
+                : "text-caetano-anthracite hover:bg-caetano-medium-gray-20 active:bg-caetano-medium-gray-40",
             )}
           >
             <Icon size={18} aria-hidden="true" />

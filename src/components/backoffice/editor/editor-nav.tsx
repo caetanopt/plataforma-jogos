@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check, TriangleAlert } from "lucide-react";
 import { EDITOR_STEPS } from "@/components/backoffice/editor/steps";
+import { ProgressLink } from "@/components/backoffice/navigation-progress";
 import { cn } from "@/lib/utils";
 
 export function EditorNav({
@@ -23,14 +23,15 @@ export function EditorNav({
           const isIncomplete = incompleteSteps.includes(step.slug);
           return (
             <li key={step.slug} className="shrink-0 md:shrink">
-              <Link
+              <ProgressLink
                 href={`/apps/${campaignId}/${step.slug}`}
                 aria-current={isActive ? "step" : undefined}
                 className={cn(
-                  "flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium",
+                  "flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-caetano-cyan",
                   isActive
                     ? "bg-caetano-deep-blue text-white"
-                    : "text-caetano-anthracite hover:bg-caetano-medium-gray-20",
+                    : "text-caetano-anthracite hover:bg-caetano-medium-gray-20 active:bg-caetano-medium-gray-40",
                 )}
               >
                 <span
@@ -58,7 +59,7 @@ export function EditorNav({
                     decorativo (aria-hidden). Este texto dá a mesma
                     informação a leitores de ecrã. */}
                 {!isActive && <span className="sr-only">{isIncomplete ? " (incompleta)" : " (completa)"}</span>}
-              </Link>
+              </ProgressLink>
             </li>
           );
         })}

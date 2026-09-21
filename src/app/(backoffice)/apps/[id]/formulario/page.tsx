@@ -134,7 +134,7 @@ export default async function LeadFormStepPage({
                       <button
                         type="submit"
                         disabled={index === 0}
-                        className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30"
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30"
                         aria-label="Mover para cima"
                       >
                         ↑
@@ -147,7 +147,7 @@ export default async function LeadFormStepPage({
                       <button
                         type="submit"
                         disabled={index === leadForm.fields.length - 1}
-                        className="rounded px-2 py-1 text-caetano-anthracite-80 hover:bg-caetano-medium-gray-20 disabled:opacity-30"
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30"
                         aria-label="Mover para baixo"
                       >
                         ↓

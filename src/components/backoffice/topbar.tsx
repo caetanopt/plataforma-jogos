@@ -23,7 +23,7 @@ export function Topbar({
         <form action="/api/logout" method="post">
           <button
             type="submit"
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
+            className="flex cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
           >
             <LogOut size={16} aria-hidden="true" />
             <span className="hidden sm:inline">Sair</span>

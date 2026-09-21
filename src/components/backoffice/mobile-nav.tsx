@@ -65,7 +65,7 @@ export function MobileNav({
         onClick={() => setOpen(true)}
         aria-label="Abrir menu de navegação"
         aria-expanded={open}
-        className="flex h-10 w-10 items-center justify-center rounded-lg text-caetano-anthracite hover:bg-caetano-medium-gray-20"
+        className="flex h-10 w-10 cursor-pointer touch-manipulation items-center justify-center rounded-lg text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
       >
         <Menu size={22} aria-hidden="true" />
       </button>
@@ -86,7 +86,7 @@ export function MobileNav({
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Fechar menu"
-                className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-caetano-medium-gray-20"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
               >
                 <X size={18} aria-hidden="true" />
               </button>

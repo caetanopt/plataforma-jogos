@@ -18,6 +18,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/ui/empty-state";
 import { FolderCard } from "@/components/backoffice/folder-card";
 
 export const metadata = { title: "Início" };
@@ -217,13 +218,28 @@ export default async function FoldersPage({
         </div>
 
         {folders.length === 0 ? (
-          <p className="py-12 text-center text-sm text-caetano-anthracite-80">
-            {tab === "arquivadas"
-              ? "Não há pastas arquivadas."
-              : canManage
-                ? "Ainda não há pastas. Crie a primeira para organizar as suas aplicações."
-                : "Ainda não há pastas neste espaço."}
-          </p>
+          tab === "arquivadas" ? (
+            <EmptyState
+              title="Não há pastas arquivadas"
+              description="As pastas que arquivar aparecem aqui e podem ser restauradas a qualquer momento."
+            />
+          ) : (
+            <EmptyState
+              title="Ainda não há pastas"
+              description={
+                canManage
+                  ? "As pastas agrupam as aplicações por marca, campanha ou finalidade."
+                  : "Quando um administrador criar pastas, elas aparecem aqui."
+              }
+              action={
+                canManage && workspaces.length > 0 ? (
+                  <Link href="/apps/new" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    Criar a primeira aplicação
+                  </Link>
+                ) : undefined
+              }
+            />
+          )
         ) : (
           <ul className="mt-6 grid gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
             {folders.map((folder) => (

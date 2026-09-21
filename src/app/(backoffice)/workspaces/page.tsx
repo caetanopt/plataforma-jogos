@@ -3,6 +3,8 @@ import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { createWorkspaceAction, renameWorkspaceAction } from "@/features/workspaces/actions";
 import { Alert } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,9 +61,12 @@ export default async function WorkspacesPage({
       )}
 
       {workspaces.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-caetano-medium-gray-40 bg-white p-10 text-center text-caetano-anthracite-80">
-          Ainda não existe nenhum espaço de trabalho.
-        </div>
+        <Card className="mt-6">
+          <EmptyState
+            title="Ainda não existe nenhum espaço de trabalho"
+            description="Os espaços agrupam campanhas, utilizadores e permissões por marca, departamento ou cliente."
+          />
+        </Card>
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {workspaces.map((workspace) => (
