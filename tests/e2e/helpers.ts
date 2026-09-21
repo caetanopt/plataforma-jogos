@@ -8,7 +8,7 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await page.fill('input[name="email"]', E2E_ADMIN_EMAIL);
   await page.fill('input[name="password"]', E2E_ADMIN_PASSWORD);
   await page.click('button[type="submit"]');
-  await page.waitForURL(/\/dashboard/, { timeout: 15_000 });
+  await page.waitForURL(/\/folders/, { timeout: 15_000 });
 }
 
 export async function createCampaign(

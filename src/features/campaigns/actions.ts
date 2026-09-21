@@ -85,6 +85,9 @@ export async function createCampaignAction(formData: FormData): Promise<void> {
     metadata: { type },
   });
 
+  // A contagem de aplicações por pasta aparece na página inicial.
+  revalidatePath("/folders");
+
   redirect(`/apps/${campaign.id}/informacoes`);
 }
 
@@ -397,6 +400,8 @@ export async function duplicateCampaignAction(formData: FormData): Promise<void>
   });
 
   revalidatePath("/apps");
+  // A contagem de aplicações por pasta aparece na página inicial.
+  revalidatePath("/folders");
   redirect(`/apps/${duplicate.id}/informacoes`);
 }
 
@@ -479,6 +484,8 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/apps");
+  // A contagem de aplicações por pasta aparece na página inicial.
+  revalidatePath("/folders");
 }
 
 export async function moveCampaignAction(formData: FormData): Promise<void> {
@@ -512,6 +519,8 @@ export async function moveCampaignAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/apps");
+  // A contagem de aplicações por pasta aparece na página inicial.
+  revalidatePath("/folders");
 }
 
 export async function togglePauseCampaignAction(formData: FormData): Promise<void> {

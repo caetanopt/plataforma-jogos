@@ -9,3 +9,9 @@ export const createFolderSchema = z.object({
   workspaceId: z.string().min(1),
   name: z.string().trim().min(1, "O nome é obrigatório.").max(120),
 });
+
+export const renameFolderSchema = z.object({
+  folderId: z.string().min(1),
+  // Mesmo limite do criar: um nome sem limite rebenta o cartão da grelha.
+  name: z.string().trim().min(1, "O nome é obrigatório.").max(120),
+});

@@ -6,7 +6,7 @@ import { BrandLogo } from "@/components/backoffice/brand-logo";
 export default async function AuthLayout({ children }: { children: ReactNode }) {
   const session = await auth();
   if (session?.user) {
-    redirect("/dashboard");
+    redirect("/folders");
   }
 
   return (

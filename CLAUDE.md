@@ -69,7 +69,15 @@ Navegação principal:
 - Configurações.
 - Ajuda.
 
+### Página inicial
+
+A página inicial é a grelha de pastas (`/folders`), orientada ao trabalho do dia a dia: saudação,
+botão "Criar aplicação", separadores Ativas/Arquivadas, ordenação e um cartão por pasta com o
+espaço de trabalho, o número de aplicações e as ações rápidas. É o destino do login e da raiz `/`.
+
 ### Dashboard
+
+Destino secundário (`/dashboard`), listado na navegação junto às estatísticas.
 
 Apresentar botão "Criar aplicação", jogos publicados, rascunhos, campanhas agendadas, visualizações, participações, leads, taxa de conversão, campanhas recentes, campanhas ativas, alertas de fim e alertas de stock.
 

@@ -58,7 +58,10 @@ test.describe("Segurança", () => {
       await page.fill('input[name="password"]', process.env.E2E_ADMIN_PASSWORD ?? "E2eSuite!Passw0rd");
       await page.click('button[type="submit"]');
       await page.waitForLoadState("networkidle");
-      await expect(page).not.toHaveURL(/\/dashboard/);
+      // Afirmação positiva: continuar em /login é a prova de que o bloqueio
+      // se manteve. Um `not.toHaveURL(/\/dashboard/)` passaria trivialmente se
+      // o destino pós-login mudasse, escondendo uma falha no rate limiting.
+      await expect(page).toHaveURL(/\/login/);
     } finally {
       // Repõe o limite para não afetar outros testes que ainda precisam de iniciar sessão.
       await redis.del(`ratelimit:login:${E2E_ADMIN_EMAIL}`);

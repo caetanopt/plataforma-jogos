@@ -22,7 +22,7 @@ export async function loginAction(formData: FormData): Promise<void> {
     await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
-      redirectTo: "/dashboard",
+      redirectTo: "/folders",
     });
   } catch (error) {
     if (error instanceof AuthError) {

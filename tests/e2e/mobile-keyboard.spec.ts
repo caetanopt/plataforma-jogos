@@ -52,13 +52,13 @@ test.describe("Mobile e navegação por teclado", () => {
     await page.keyboard.press("Tab");
     await page.keyboard.type(E2E_ADMIN_PASSWORD);
     await page.keyboard.press("Enter");
-    await page.waitForURL(/\/dashboard/, { timeout: 15_000 });
-    await expect(page).toHaveURL(/\/dashboard/);
+    await page.waitForURL(/\/folders/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/folders/);
   });
 
   test("navegação lateral do backoffice é operável apenas com teclado (foco visível)", async ({ page }) => {
     await loginAsAdmin(page);
-    await page.goto("/dashboard");
+    await page.goto("/folders");
     await page.keyboard.press("Tab");
     const focused = page.locator(":focus");
     await expect(focused).toBeVisible();
