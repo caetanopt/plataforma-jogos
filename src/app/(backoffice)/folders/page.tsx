@@ -132,7 +132,22 @@ export default async function FoldersPage({
                   <input type="hidden" name="sort" value={sort} />
                   <div>
                     <Label htmlFor="new-folder-name">Nome da pasta</Label>
-                    <Input id="new-folder-name" name="name" required maxLength={120} autoComplete="off" />
+                    <Input
+                      id="new-folder-name"
+                      name="name"
+                      required
+                      maxLength={120}
+                      autoComplete="off"
+                      // O erro de validação destas ações é sempre sobre o nome:
+                      // marcá-lo diz ao leitor de ecrã qual é o campo em falta.
+                      aria-invalid={params.error === "validation" || undefined}
+                      aria-describedby={params.error === "validation" ? "new-folder-error" : undefined}
+                    />
+                    {params.error === "validation" && (
+                      <p id="new-folder-error" className="mt-1 text-xs text-danger-strong">
+                        Indique um nome com até 120 caracteres.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="new-folder-workspace">Espaço de trabalho</Label>

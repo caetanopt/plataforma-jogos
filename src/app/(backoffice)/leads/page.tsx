@@ -6,6 +6,7 @@ import { resolveDateRange } from "@/lib/dates/range";
 import { listLeads } from "@/features/leads/queries";
 import { toLeadRow } from "@/features/leads/format";
 import { Label } from "@/components/ui/label";
+import { Pagination } from "@/components/ui/pagination";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -190,29 +191,22 @@ export default async function LeadsPage({
         </table>
       </div>
 
-      {leads.pageCount > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2 text-sm">
-          {Array.from({ length: leads.pageCount }, (_, i) => i + 1).map((p) => {
-            const pageQuery = new URLSearchParams({
-              ...(params.campaignId ? { campaignId: params.campaignId } : {}),
-              ...(params.search ? { search: params.search } : {}),
-              period: range.preset,
-              ...(range.preset === "custom" ? { from: params.from ?? "", to: params.to ?? "" } : {}),
-              excludeTest: String(excludeTest),
-              page: String(p),
-            }).toString();
-            return (
-              <Link
-                key={p}
-                href={`/leads?${pageQuery}`}
-                className={p === leads.page ? "font-bold text-caetano-deep-blue" : "text-caetano-anthracite-80"}
-              >
-                {p}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <Pagination
+        page={leads.page}
+        pageCount={leads.pageCount}
+        total={leads.total}
+        label="Paginação de leads"
+        buildHref={(target) =>
+          `/leads?${new URLSearchParams({
+            ...(params.campaignId ? { campaignId: params.campaignId } : {}),
+            ...(params.search ? { search: params.search } : {}),
+            period: range.preset,
+            ...(range.preset === "custom" ? { from: params.from ?? "", to: params.to ?? "" } : {}),
+            excludeTest: String(excludeTest),
+            page: String(target),
+          }).toString()}`
+        }
+      />
     </div>
   );
 }

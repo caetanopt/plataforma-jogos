@@ -3,6 +3,7 @@ import { assertCan } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { AUDIT_ACTION_LABELS } from "@/lib/labels";
 import type { AuditAction } from "@/generated/prisma/client";
 
@@ -129,26 +130,19 @@ export default async function SettingsPage({
         </table>
       </div>
 
-      {pageCount > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2 text-sm">
-          {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => {
-            const query = new URLSearchParams({
-              ...(params.action ? { action: params.action } : {}),
-              ...(params.entityType ? { entityType: params.entityType } : {}),
-              page: String(p),
-            }).toString();
-            return (
-              <a
-                key={p}
-                href={`/settings?${query}`}
-                className={p === page ? "font-bold text-caetano-deep-blue" : "text-caetano-anthracite-80"}
-              >
-                {p}
-              </a>
-            );
-          })}
-        </div>
-      )}
+      <Pagination
+        page={page}
+        pageCount={pageCount}
+        total={total}
+        label="Paginação da auditoria"
+        buildHref={(target) =>
+          `/settings?${new URLSearchParams({
+            ...(params.action ? { action: params.action } : {}),
+            ...(params.entityType ? { entityType: params.entityType } : {}),
+            page: String(target),
+          }).toString()}`
+        }
+      />
     </div>
   );
 }

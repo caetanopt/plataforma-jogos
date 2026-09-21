@@ -7,7 +7,11 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { Pagination } from "@/components/ui/pagination";
 import { MEMBERSHIP_ROLE_LABELS } from "@/lib/labels";
+
+/** Uma organização grande fazia esta página carregar todos os membros. */
+const PAGE_SIZE = 25;
 
 const ERROR_MESSAGES: Record<string, string> = {
   validation: "Verifique os dados do convite.",
@@ -18,17 +22,26 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; page?: string }>;
 }) {
   const context = await requireOrgContext();
   assertCan(context, "user:manage");
   const search = await searchParams;
 
-  const memberships = await prisma.membership.findMany({
-    where: { organizationId: context.organizationId },
-    include: { user: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const page = Math.max(1, Number(search.page ?? 1) || 1);
+  const where = { organizationId: context.organizationId };
+
+  const [memberships, total] = await Promise.all([
+    prisma.membership.findMany({
+      where,
+      include: { user: true },
+      orderBy: { createdAt: "asc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.membership.count({ where }),
+  ]);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="p-8">
@@ -118,6 +131,14 @@ export default async function UsersPage({
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        page={page}
+        pageCount={pageCount}
+        total={total}
+        label="Paginação de utilizadores"
+        buildHref={(target) => `/users?page=${target}`}
+      />
 
       {can(context, "user:manage") && (
         <div className="mt-8 max-w-md rounded-xl border border-caetano-medium-gray-40 bg-white p-4">

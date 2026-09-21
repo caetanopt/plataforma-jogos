@@ -124,6 +124,8 @@ export function PublicLeadForm({
           ) : field.type === "SINGLE_CHOICE" || field.type === "DROPDOWN" ? (
             <select
               id={field.id}
+              aria-required={field.required || undefined}
+              aria-describedby={field.helpText ? `${field.id}-help` : undefined}
               required={field.required}
               className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
               value={values[field.internalKey] ?? ""}
@@ -141,6 +143,8 @@ export function PublicLeadForm({
               id={field.id}
               type="checkbox"
               required={field.required}
+              aria-required={field.required || undefined}
+              aria-describedby={field.helpText ? `${field.id}-help` : undefined}
               className="h-4 w-4 rounded border-caetano-medium-gray"
               checked={values[field.internalKey] === "true"}
               onChange={(e) =>
@@ -152,13 +156,19 @@ export function PublicLeadForm({
               id={field.id}
               type={fieldInputType(field.type)}
               required={field.required}
+              aria-required={field.required || undefined}
+              aria-describedby={field.helpText ? `${field.id}-help` : undefined}
               placeholder={field.placeholder ?? undefined}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
           )}
-          {field.helpText && <p className="mt-1 text-xs text-caetano-anthracite-80">{field.helpText}</p>}
+          {field.helpText && (
+            <p id={`${field.id}-help`} className="mt-1 text-xs text-caetano-anthracite-80">
+              {field.helpText}
+            </p>
+          )}
         </div>
       ))}
 
