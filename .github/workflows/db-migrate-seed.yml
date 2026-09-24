@@ -7,6 +7,10 @@ on:
         description: "Também correr o seed inicial (organização/admin) além das migrações?"
         type: boolean
         default: true
+      reset_superadmin_password:
+        description: "Substituir a password do superadmin pela do secret SEED_SUPERADMIN_PASSWORD? (exige o seed ativo)"
+        type: boolean
+        default: false
 
 jobs:
   migrate-seed:
@@ -30,3 +34,8 @@ jobs:
         run: npm run db:seed
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # A password vem sempre de um secret e o seed nunca a escreve no
+          # output em CI (ver prisma/seed-superadmin.ts). Sem o secret, o seed
+          # recusa criar o superadmin em vez de gerar uma password para o log.
+          SEED_SUPERADMIN_PASSWORD: ${{ secrets.SEED_SUPERADMIN_PASSWORD }}
+          SEED_SUPERADMIN_RESET_PASSWORD: ${{ inputs.reset_superadmin_password }}

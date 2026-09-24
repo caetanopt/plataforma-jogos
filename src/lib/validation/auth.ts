@@ -9,10 +9,13 @@ export const requestPasswordResetSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
 });
 
+/** Política para passwords novas — reposição pela app e seed do superadmin. */
+export const newPasswordSchema = z.string().min(10, "A password deve ter pelo menos 10 caracteres.");
+
 export const resetPasswordSchema = z
   .object({
     token: z.string().min(1),
-    password: z.string().min(10, "A password deve ter pelo menos 10 caracteres."),
+    password: newPasswordSchema,
     confirmPassword: z.string().min(1),
   })
   .refine((data) => data.password === data.confirmPassword, {

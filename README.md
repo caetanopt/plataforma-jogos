@@ -25,7 +25,25 @@ npm run db:seed               # cria a organização Caetano + utilizador supera
 npm run dev                   # http://localhost:3000
 ```
 
-Credenciais do superadmin semeado: ver output do `npm run db:seed`.
+Credenciais do superadmin semeado: num terminal local, o `npm run db:seed` gera a password e
+mostra-a uma única vez. Em CI, ou com o output redirecionado, nunca a escreve: exige
+`SEED_SUPERADMIN_PASSWORD` para criar o superadmin (ver `.env.example`).
+
+### Produção: migrações, seed e password do superadmin
+
+O workflow manual **BD - Migrações + Seed** (`.github/workflows/db-migrate-seed.yml`) aplica as
+migrações e, opcionalmente, corre o seed contra o secret `DATABASE_URL`. A password do
+superadmin vem do secret `SEED_SUPERADMIN_PASSWORD` e nunca aparece no log.
+
+Para substituir a password do superadmin em produção (por exemplo, se tiver sido exposta):
+
+1. Em *Settings → Secrets and variables → Actions*, criar ou atualizar o secret
+   `SEED_SUPERADMIN_PASSWORD` com a nova password (mínimo 10 caracteres).
+2. Correr o workflow com "Também correr o seed" e "Substituir a password do superadmin"
+   ativos, no branch que contém esta versão do workflow.
+
+A reposição invalida os links de recuperação pendentes e fica registada na auditoria. As
+sessões já abertas continuam válidas até expirarem (8 horas).
 
 Sem Docker, o storage pode ser substituído pelo mock s3rver, na mesma porta:
 
