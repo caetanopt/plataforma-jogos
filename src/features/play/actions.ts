@@ -4,6 +4,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { checkParticipationAllowed } from "@/features/play/limits";
+import { extractLeadIdentity } from "@/features/play/identity";
+import { openGameGate } from "@/features/play/participation-access";
+import { projectWheelOutcome } from "@/features/play/reveal";
+import type { GameActionResponse, ParticipationRef } from "@/features/play/types";
+import { runSerializable } from "@/lib/db/transaction-retry";
 import { createParticipationIfAllowed } from "@/features/play/create-participation";
 import { getOrCreateVisitorCookieId } from "@/features/play/cookie";
 import { getRequestIp } from "@/lib/security/request-ip";
@@ -13,11 +18,7 @@ import { headers } from "next/headers";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
 import { computeMemoryScore } from "@/features/memory-game/scoring";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
-import {
-  drawAndAwardPrize,
-  NoEligibleSegmentsError,
-  type WheelDrawResult,
-} from "@/features/wheel-game/draw";
+import { drawAndAwardPrize, NoEligibleSegmentsError } from "@/features/wheel-game/draw";
 import type {
   QuizPlayerResult,
   QuizPlayerSubmission,
@@ -167,7 +168,7 @@ export async function startParticipationAction(
 }
 
 export interface SubmitLeadFormInput {
-  participationId: string;
+  ref: ParticipationRef;
   values: Record<string, string>;
   consents: Record<string, boolean>;
   honeypot?: string;
@@ -182,11 +183,13 @@ export async function submitLeadFormAction(
   const ip = await getRequestIp();
   // Sem IP, usa o id da participação (único por submissão) em vez de um
   // balde "unknown" partilhado por todos os visitantes sem IP detetável.
-  const rateLimit = await checkRateLimit(`leadform:${ip ?? input.participationId}`, 30, 3600);
+  const rateLimit = await checkRateLimit(`leadform:${ip ?? input.ref.participationId}`, 30, 3600);
   if (!rateLimit.allowed) return { ok: false, reason: "invalid" };
 
-  const participation = await prisma.participation.findUnique({
-    where: { id: input.participationId },
+  // Posse: sem o token certo, não se associa uma lead à participação de outra
+  // pessoa (ver ParticipationRef).
+  const participation = await prisma.participation.findFirst({
+    where: { id: input.ref.participationId, idempotencyKey: input.ref.token },
     include: {
       campaign: {
         include: {
@@ -197,8 +200,14 @@ export async function submitLeadFormAction(
   });
   if (!participation?.campaign.leadForm) return { ok: false, reason: "invalid" };
 
+  // Já submetido: não se grava outra vez nem se duplicam os registos de
+  // consentimento. O fluxo público pode repetir o envio depois de uma falha
+  // de rede e tem de receber sucesso.
+  if (participation.leadFormResponse !== null) return { ok: true };
+
   if (input.honeypot) {
-    // Bot detetado — finge sucesso sem gravar nada real (secção 25).
+    // Bot detetado — finge sucesso sem gravar nada real (secção 25). Como
+    // nada fica gravado, os portões do jogo continuam fechados para ele.
     await recordEvent(
       participation.campaignId,
       "PARTICIPATION_BLOCKED",
@@ -239,12 +248,7 @@ export async function submitLeadFormAction(
     }
   }
 
-  const emailField = leadForm.fields.find((f) => f.type === "EMAIL");
-  const phoneField = leadForm.fields.find((f) => f.type === "PHONE");
   const birthDateField = leadForm.fields.find((f) => f.type === "BIRTH_DATE");
-  const email = emailField ? input.values[emailField.internalKey]?.trim() || undefined : undefined;
-  const phone = phoneField ? input.values[phoneField.internalKey]?.trim() || undefined : undefined;
-
   if (minAge != null) {
     // Falha fechado: se a campanha exige idade mínima mas não há campo de
     // data de nascimento configurado (ou foi deixado em branco/inválido),
@@ -261,65 +265,69 @@ export async function submitLeadFormAction(
     }
   }
 
-  if (!participation.isTest && (email || phone)) {
-    const allowed = await checkParticipationAllowed(prisma, {
-      organizationId,
-      campaignId,
-      limitType: participation.campaign.participationLimitType,
-      customMax: participation.campaign.participationCustomMax,
-      dedupStrategies,
-      email,
-      phone,
-      now: new Date(),
-    });
-    if (!allowed) return { ok: false, reason: "duplicate" };
-  }
-
-  const firstNameField = leadForm.fields.find(
-    (f) => f.type === "FIRST_NAME" || f.type === "FULL_NAME",
+  // Minimização (secção 24): só se guardam os campos que o formulário tem.
+  const knownKeys = new Set(leadForm.fields.map((f) => f.internalKey));
+  const values = Object.fromEntries(
+    Object.entries(input.values).filter(([key]) => knownKeys.has(key)),
   );
-  const lastNameField = leadForm.fields.find((f) => f.type === "LAST_NAME");
+  const identity = extractLeadIdentity(leadForm.fields, values);
 
-  const participant = await prisma.participant.update({
-    where: { id: participation.participantId ?? "" },
-    data: {
-      email: email ?? undefined,
-      phone: phone ?? undefined,
-      firstName: firstNameField ? input.values[firstNameField.internalKey] || undefined : undefined,
-      lastName: lastNameField ? input.values[lastNameField.internalKey] || undefined : undefined,
-    },
-  });
+  // Controlo de duplicados e gravação na mesma transação serializável: duas
+  // submissões concorrentes com o mesmo e-mail não passam ambas a
+  // verificação. A gravação só acontece se a participação ainda não tiver
+  // formulário, por isso um duplo clique não duplica os consentimentos.
+  const outcome = await runSerializable(async (tx) => {
+    if (!participation.isTest && (identity.email || identity.phone)) {
+      const allowed = await checkParticipationAllowed(tx, {
+        organizationId,
+        campaignId,
+        limitType: participation.campaign.participationLimitType,
+        customMax: participation.campaign.participationCustomMax,
+        dedupStrategies,
+        email: identity.email,
+        phone: identity.phone,
+        excludeParticipationId: participation.id,
+        now: new Date(),
+      });
+      if (!allowed) return "duplicate" as const;
+    }
 
-  await prisma.$transaction([
-    prisma.participation.update({
-      where: { id: input.participationId },
-      data: { leadFormResponse: input.values, participantId: participant.id },
-    }),
-    ...leadForm.consentDefinitions.map((consent) =>
-      prisma.consentRecord.create({
-        data: {
-          participationId: input.participationId,
+    const saved = await tx.participation.updateMany({
+      where: { id: participation.id, leadFormResponse: { equals: Prisma.DbNull } },
+      data: { leadFormResponse: values, ...identity },
+    });
+    if (saved.count === 0) return "already_saved" as const;
+
+    if (leadForm.consentDefinitions.length > 0) {
+      await tx.consentRecord.createMany({
+        data: leadForm.consentDefinitions.map((consent) => ({
+          participationId: participation.id,
           consentDefinitionId: consent.id,
-          status: input.consents[consent.id] ? "GRANTED" : "DECLINED",
+          status: input.consents[consent.id] ? ("GRANTED" as const) : ("DECLINED" as const),
           text: consent.text,
           version: consent.version,
-        },
-      }),
-    ),
-  ]);
+        })),
+      });
+    }
+    return "saved" as const;
+  });
 
-  await recordEvent(
-    campaignId,
-    "LEAD_FORM_SUBMITTED",
-    participation.isTest,
-    participation.sessionId,
-  );
+  if (outcome === "duplicate") return { ok: false, reason: "duplicate" };
+
+  if (outcome === "saved") {
+    await recordEvent(
+      campaignId,
+      "LEAD_FORM_SUBMITTED",
+      participation.isTest,
+      participation.sessionId,
+    );
+  }
 
   return { ok: true };
 }
 
 export interface MemorySubmitInput {
-  participationId: string;
+  ref: ParticipationRef;
   attempts: number;
   pairsFound: number;
   timeSeconds: number;
@@ -332,13 +340,21 @@ export interface MemorySubmitResult {
 
 export async function submitMemoryResultAction(
   input: MemorySubmitInput,
-): Promise<MemorySubmitResult> {
-  const rateLimit = await checkRateLimit(`submit:${input.participationId}`, 10, 60);
+): Promise<GameActionResponse<MemorySubmitResult>> {
+  const rateLimit = await checkRateLimit(`submit:${input.ref.participationId}`, 10, 60);
   if (!rateLimit.allowed)
     throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
+  const access = await openGameGate(input.ref);
+  if (!access.ok) return { status: "blocked", reason: access.reason };
+  const { gate } = access;
+  if (gate.campaignType !== "MEMORY") return { status: "blocked", reason: "not_found" };
+
+  const reveal = (result: MemorySubmitResult): GameActionResponse<MemorySubmitResult> =>
+    gate.policy === "withhold_result" ? { status: "lead_required" } : { status: "revealed", result };
+
   const participation = await prisma.participation.findUniqueOrThrow({
-    where: { id: input.participationId },
+    where: { id: gate.participationId },
     include: {
       campaign: { include: { memoryConfig: { include: { pairs: true } } } },
       memoryResult: true,
@@ -346,10 +362,10 @@ export async function submitMemoryResultAction(
   });
 
   if (participation.memoryResult) {
-    return {
+    return reveal({
       score: participation.memoryResult.score,
       completed: participation.memoryResult.completed,
-    };
+    });
   }
 
   const config = participation.campaign.memoryConfig;
@@ -372,7 +388,7 @@ export async function submitMemoryResultAction(
   await prisma.$transaction([
     prisma.memoryResult.create({
       data: {
-        participationId: input.participationId,
+        participationId: gate.participationId,
         timeSeconds: result.timeSeconds,
         attempts: result.attempts,
         pairsFound: result.pairsFound,
@@ -381,7 +397,7 @@ export async function submitMemoryResultAction(
       },
     }),
     prisma.participation.update({
-      where: { id: input.participationId },
+      where: { id: gate.participationId },
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
@@ -390,95 +406,67 @@ export async function submitMemoryResultAction(
     }),
   ]);
 
-  await recordEvent(
-    participation.campaignId,
-    "GAME_COMPLETED",
-    participation.isTest,
-    participation.sessionId,
-  );
+  await recordEvent(gate.campaignId, "GAME_COMPLETED", gate.isTest, gate.sessionId);
 
-  return { score: result.score, completed: result.completed };
+  return reveal({ score: result.score, completed: result.completed });
 }
 
-/**
- * Projeção explícita do resultado para o browser. O resultado gravado
- * guarda o id interno do prémio, e tudo o que esta ação devolve chega ao
- * cliente tal como está: foi por aí que os ids de prémios de outras
- * organizações ficaram à vista de quem jogasse.
- */
-function toClientWheelResult(result: WheelDrawResult): WheelSpinResult {
-  return {
-    segmentId: result.segmentId,
-    segmentName: result.segmentName,
-    outcome: result.outcome,
-    message: result.message,
-    prize: result.prize
-      ? {
-          publicName: result.prize.publicName,
-          instructions: result.prize.instructions,
-          code: result.prize.code,
-        }
-      : null,
-  };
-}
-
-export async function spinWheelAction(participationId: string): Promise<WheelSpinResult> {
-  const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
+export async function spinWheelAction(
+  ref: ParticipationRef,
+): Promise<GameActionResponse<WheelSpinResult>> {
+  const rateLimit = await checkRateLimit(`submit:${ref.participationId}`, 10, 60);
   if (!rateLimit.allowed)
     throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
+  const access = await openGameGate(ref);
+  if (!access.ok) return { status: "blocked", reason: access.reason };
+  const { gate } = access;
+  if (gate.campaignType !== "WHEEL") return { status: "blocked", reason: "not_found" };
+
   try {
-    const result = await drawAndAwardPrize(participationId, new Date());
-    const participation = await prisma.participation.findUnique({ where: { id: participationId } });
-    if (participation) {
-      await recordEvent(
-        participation.campaignId,
-        "GAME_COMPLETED",
-        participation.isTest,
-        participation.sessionId,
-      );
+    const result = await drawAndAwardPrize(gate.participationId, new Date());
+    // Só a primeira rotação conta: repetir o pedido (incluindo para revelar
+    // o resultado depois do formulário) devolve o resultado gravado e não
+    // pode gerar eventos duplicados.
+    if (!result.alreadyResolved) {
+      await recordEvent(gate.campaignId, "GAME_COMPLETED", gate.isTest, gate.sessionId);
       if (result.prize) {
-        await recordEvent(
-          participation.campaignId,
-          "PRIZE_AWARDED",
-          participation.isTest,
-          participation.sessionId,
-        );
+        await recordEvent(gate.campaignId, "PRIZE_AWARDED", gate.isTest, gate.sessionId);
       }
     }
-    return toClientWheelResult(result);
+    // Projeção explícita: o resultado gravado guarda o id interno do prémio,
+    // e tudo o que esta ação devolve chega ao browser tal como está.
+    if (gate.policy === "withhold_result") return { status: "lead_required" };
+    return { status: "revealed", result: projectWheelOutcome(result, gate.policy) };
   } catch (error) {
     if (error instanceof NoEligibleSegmentsError) {
-      const participation = await prisma.participation.findUnique({
-        where: { id: participationId },
+      await recordEvent(gate.campaignId, "PARTICIPATION_BLOCKED", gate.isTest, gate.sessionId, {
+        reason: "no_eligible_segments",
       });
-      if (participation) {
-        await recordEvent(
-          participation.campaignId,
-          "PARTICIPATION_BLOCKED",
-          participation.isTest,
-          participation.sessionId,
-          {
-            reason: "no_eligible_segments",
-          },
-        );
-      }
     }
     throw error;
   }
 }
 
 export async function submitQuizAction(
-  participationId: string,
+  ref: ParticipationRef,
   submissions: QuizPlayerSubmission[],
   timeSeconds: number,
-): Promise<QuizPlayerResult> {
-  const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
+): Promise<GameActionResponse<QuizPlayerResult>> {
+  const rateLimit = await checkRateLimit(`submit:${ref.participationId}`, 10, 60);
   if (!rateLimit.allowed)
     throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
 
+  const access = await openGameGate(ref);
+  if (!access.ok) return { status: "blocked", reason: access.reason };
+  const { gate } = access;
+  if (gate.campaignType !== "QUIZ") return { status: "blocked", reason: "not_found" };
+
+  const reveal = (result: QuizPlayerResult): GameActionResponse<QuizPlayerResult> =>
+    gate.policy === "withhold_result" ? { status: "lead_required" } : { status: "revealed", result };
+
   const participation = await prisma.participation.findUniqueOrThrow({
-    where: { id: participationId },
+    where: { id: gate.participationId },
     include: {
       campaign: {
         include: {
@@ -494,24 +482,28 @@ export async function submitQuizAction(
   const config = participation.campaign.quizConfig;
   if (!config) throw new Error("Quiz não configurado para esta campanha.");
 
-  if (participation.quizResponse) {
-    const profile = participation.quizResponse.resultProfileId
-      ? config.resultProfiles.find((p) => p.id === participation.quizResponse!.resultProfileId)
+  const toClientProfile = (profile: (typeof config.resultProfiles)[number] | null | undefined) =>
+    profile
+      ? {
+          title: profile.title,
+          description: profile.description,
+          ctaLabel: profile.ctaLabel,
+          ctaUrl: profile.ctaUrl,
+        }
       : null;
-    return {
-      totalScore: participation.quizResponse.totalScore,
+
+  const existing = participation.quizResponse;
+  if (existing) {
+    const profile = existing.resultProfileId
+      ? config.resultProfiles.find((p) => p.id === existing.resultProfileId)
+      : null;
+    return reveal({
+      totalScore: existing.totalScore,
       maxPossibleScore: config.questions.reduce((sum, q) => sum + q.points, 0),
-      percentage: participation.quizResponse.percentage,
-      passed: participation.quizResponse.passed,
-      resultProfile: profile
-        ? {
-            title: profile.title,
-            description: profile.description,
-            ctaLabel: profile.ctaLabel,
-            ctaUrl: profile.ctaUrl,
-          }
-        : null,
-    };
+      percentage: existing.percentage,
+      passed: existing.passed,
+      resultProfile: toClientProfile(profile),
+    });
   }
 
   const scored = computeQuizScore(
@@ -535,7 +527,7 @@ export async function submitQuizAction(
   await prisma.$transaction([
     prisma.quizResponse.create({
       data: {
-        participationId,
+        participationId: gate.participationId,
         answers: submissions as unknown as Prisma.InputJsonValue,
         totalScore: scored.totalScore,
         percentage: scored.percentage,
@@ -545,7 +537,7 @@ export async function submitQuizAction(
       },
     }),
     prisma.participation.update({
-      where: { id: participationId },
+      where: { id: gate.participationId },
       data: {
         status: "COMPLETED",
         completedAt: new Date(),
@@ -554,25 +546,13 @@ export async function submitQuizAction(
     }),
   ]);
 
-  await recordEvent(
-    participation.campaignId,
-    "GAME_COMPLETED",
-    participation.isTest,
-    participation.sessionId,
-  );
+  await recordEvent(gate.campaignId, "GAME_COMPLETED", gate.isTest, gate.sessionId);
 
-  return {
+  return reveal({
     totalScore: scored.totalScore,
     maxPossibleScore: scored.maxPossibleScore,
     percentage: scored.percentage,
     passed: scored.passed,
-    resultProfile: profile
-      ? {
-          title: profile.title,
-          description: profile.description,
-          ctaLabel: profile.ctaLabel,
-          ctaUrl: profile.ctaUrl,
-        }
-      : null,
-  };
+    resultProfile: toClientProfile(profile),
+  });
 }

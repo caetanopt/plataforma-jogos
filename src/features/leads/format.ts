@@ -3,7 +3,6 @@ import type { Prisma } from "@/generated/prisma/client";
 type LeadParticipation = Prisma.ParticipationGetPayload<{
   include: {
     campaign: { select: { internalName: true; type: true } };
-    participant: true;
     prizeAward: { include: { prize: true; prizeCode: true } };
   };
 }>;
@@ -34,9 +33,13 @@ export interface LeadRow {
   sessionId: string;
 }
 
-function fullName(participant: LeadParticipation["participant"]): string {
-  if (!participant) return "";
-  return [participant.firstName, participant.lastName].filter(Boolean).join(" ");
+/**
+ * A identidade é a desta participação. O Participant é partilhado por quem
+ * usa o mesmo browser e, lido daí, todas as leads de um quiosque mostravam a
+ * última pessoa.
+ */
+function fullName(p: Pick<LeadParticipation, "firstName" | "lastName">): string {
+  return [p.firstName, p.lastName].filter(Boolean).join(" ");
 }
 
 function summarizeResult(p: LeadParticipation): { result: string; score: string; timeSeconds: string } {
@@ -73,9 +76,9 @@ export function toLeadRow(p: LeadParticipation): LeadRow {
     campaignId: p.campaignId,
     campaignName: p.campaign.internalName,
     campaignType: p.campaign.type,
-    name: fullName(p.participant),
-    email: p.participant?.email ?? "",
-    phone: p.participant?.phone ?? "",
+    name: fullName(p),
+    email: p.email ?? "",
+    phone: p.phone ?? "",
     result,
     score,
     timeSeconds,

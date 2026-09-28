@@ -25,6 +25,8 @@ interface PublicLeadFormProps {
   consents: PublicConsentDefinition[];
   honeypotEnabled: boolean;
   submitLabel?: string;
+  /** Frase de contexto no topo, ex.: porque é que o formulário aparece agora. */
+  intro?: string;
   onSubmit: (
     values: Record<string, string>,
     consents: Record<string, boolean>,
@@ -56,6 +58,7 @@ export function PublicLeadForm({
   consents,
   honeypotEnabled,
   submitLabel = "Continuar",
+  intro,
   onSubmit,
 }: PublicLeadFormProps) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -89,6 +92,7 @@ export function PublicLeadForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-6">
+      {intro && <p className="font-medium text-caetano-anthracite">{intro}</p>}
       {honeypotEnabled && (
         <div className="absolute left-[-9999px]" aria-hidden="true">
           <label htmlFor="website">Não preencher</label>

@@ -24,14 +24,13 @@ function buildWhere(
     createdAt: { gte: range.from, lte: range.to },
     ...(filters.search
       ? {
-          participant: {
-            OR: [
-              { email: { contains: filters.search, mode: "insensitive" } },
-              { phone: { contains: filters.search, mode: "insensitive" } },
-              { firstName: { contains: filters.search, mode: "insensitive" } },
-              { lastName: { contains: filters.search, mode: "insensitive" } },
-            ],
-          },
+          // A identidade de cada lead é a da participação (ver identity.ts).
+          OR: [
+            { email: { contains: filters.search, mode: "insensitive" } },
+            { phone: { contains: filters.search, mode: "insensitive" } },
+            { firstName: { contains: filters.search, mode: "insensitive" } },
+            { lastName: { contains: filters.search, mode: "insensitive" } },
+          ],
         }
       : {}),
   };
@@ -50,7 +49,6 @@ export async function listLeads(organizationId: string, range: DateRange, filter
       take: pageSize,
       include: {
         campaign: { select: { id: true, internalName: true, type: true } },
-        participant: true,
         prizeAward: { include: { prize: true, prizeCode: true } },
       },
     }),
@@ -67,7 +65,6 @@ export async function listLeadsForExport(organizationId: string, range: DateRang
     orderBy: { createdAt: "desc" },
     include: {
       campaign: { select: { internalName: true, type: true } },
-      participant: true,
       prizeAward: { include: { prize: true, prizeCode: true } },
     },
   });

@@ -16,6 +16,11 @@ export interface WheelSpinResult {
   message: string | null;
   /** Sem o id interno do prémio: o browser só recebe o que mostra. */
   prize: { publicName: string; instructions: string | null; code: string | null } | null;
+  /**
+   * Ganhou, mas o prémio só é revelado depois do formulário (posição "Antes
+   * de revelar o prémio"). O servidor não envia qual é até lá.
+   */
+  prizePending: boolean;
 }
 
 interface WheelGamePlayerProps {
@@ -146,6 +151,11 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
             </p>
             {result.prize && <p className="mt-1 text-caetano-anthracite-80">{result.prize.publicName}</p>}
             {result.prize?.code && <p className="mt-1 font-mono text-sm">{result.prize.code}</p>}
+            {result.prizePending && (
+              <p className="mt-1 text-caetano-anthracite-80">
+                Preencha os seus dados a seguir para receber o prémio.
+              </p>
+            )}
             {result.message && <p className="mt-2 text-sm text-caetano-anthracite-80">{result.message}</p>}
           </div>
         )}

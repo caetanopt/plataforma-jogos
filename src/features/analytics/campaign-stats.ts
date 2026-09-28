@@ -145,7 +145,7 @@ async function getMemoryStats(campaignIds: string[], range: DateRange) {
     },
     include: {
       participation: {
-        include: { participant: true, campaign: { include: { memoryConfig: true } } },
+        include: { campaign: { include: { memoryConfig: true } } },
       },
     },
     orderBy: { score: "desc" },
@@ -172,7 +172,7 @@ async function getMemoryStats(campaignIds: string[], range: DateRange) {
     completionRate: results.length ? results.filter((r) => r.completed).length / results.length : 0,
     ranking: rankable.slice(0, Number.isFinite(maxEntries) ? maxEntries : 10).map((r) => {
       const anonymize = r.participation.campaign.memoryConfig?.rankingAnonymize ?? false;
-      const realName = [r.participation.participant?.firstName, r.participation.participant?.lastName]
+      const realName = [r.participation.firstName, r.participation.lastName]
         .filter(Boolean)
         .join(" ");
       return {

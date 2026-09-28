@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MemoryPlayerConfig, MemoryPlayerPair } from "@/components/public-game/memory-game-player";
-import type { WheelPlayerSegment } from "@/components/public-game/wheel-game-player";
+import type { WheelPlayerSegment, WheelSpinResult } from "@/components/public-game/wheel-game-player";
 import type { QuizPlayerQuestion } from "@/components/public-game/quiz-game-player";
 import { PublicMemoryGame } from "@/components/public-game/public-memory-game";
 import { PublicWheelGame } from "@/components/public-game/public-wheel-game";
@@ -16,6 +16,7 @@ import {
   submitQuizAction,
   spinWheelAction,
 } from "@/features/play/actions";
+import type { GameActionResponse, ParticipationRef } from "@/features/play/types";
 
 interface ScreenData {
   title: string | null;
@@ -79,13 +80,20 @@ type Stage =
   | "final"
   | "blocked";
 
+/**
+ * "Antes de revelar o resultado" não é uma etapa própria: o formulário
+ * aparece dentro do jogo, no momento em que o servidor responde que o
+ * resultado está calculado mas retido (ver `runGameAction`). "Antes de
+ * revelar o prémio" usa a etapa depois do jogo — a roda mostra que ganhou e o
+ * prémio só aparece no ecrã final.
+ */
 function buildSequence(props: PublicGameFlowProps): Stage[] {
   const sequence: Stage[] = ["start"];
   if (props.leadForm && props.leadForm.position === "BEFORE_GAME") sequence.push("lead-before");
   if (props.intermediateBefore) sequence.push("intermediate-before");
   sequence.push("game");
   if (props.intermediateAfter) sequence.push("intermediate-after");
-  if (props.leadForm && props.leadForm.position !== "BEFORE_GAME" && props.leadForm.position !== "NONE") {
+  if (props.leadForm && (props.leadForm.position === "AFTER_GAME" || props.leadForm.position === "BEFORE_PRIZE")) {
     sequence.push("lead-after");
   }
   sequence.push("final");
@@ -97,7 +105,15 @@ const BLOCKED_MESSAGES: Record<string, string> = {
   rate_limited: "Demasiadas tentativas em pouco tempo. Tente novamente mais tarde.",
   not_active: "Esta campanha não está disponível neste momento.",
   not_found: "Campanha não encontrada.",
+  lead_missing: "É preciso preencher o formulário antes de jogar.",
 };
+
+class GameBlockedError extends Error {
+  constructor() {
+    super("Participação bloqueada pelo servidor.");
+    this.name = "GameBlockedError";
+  }
+}
 
 export function PublicGameFlow(props: PublicGameFlowProps) {
   const sequence = buildSequence(props);
@@ -109,8 +125,21 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   const [showRegulation, setShowRegulation] = useState(false);
   const viewedRef = useRef(false);
 
+  // A chave de idempotência é também o token de posse da participação: o
+  // servidor exige-a em todas as ações depois do início (ParticipationRef).
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [sessionId] = useState(() => crypto.randomUUID());
+  const ref: ParticipationRef | null = participationId ? { participationId, token: idempotencyKey } : null;
+
+  // Formulário a meio do jogo ("Antes de revelar o resultado"): o jogo fica
+  // montado mas escondido, à espera, e retoma quando o formulário é aceite.
+  const [awaitingLead, setAwaitingLead] = useState(false);
+  const leadGateResolver = useRef<(() => void) | null>(null);
+
+  // Prémio da roda para o ecrã final. Com "Antes de revelar o prémio" só é
+  // conhecido depois do formulário.
+  const [wheelPrize, setWheelPrize] = useState<WheelSpinResult["prize"]>(null);
+  const [prizePending, setPrizePending] = useState(false);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -155,10 +184,59 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     }
   }
 
+  /**
+   * Corre uma ação de jogo e trata as respostas do servidor que não são o
+   * resultado: com o resultado retido, mostra o formulário e repete a mesma
+   * ação depois (é idempotente — devolve o resultado já gravado); bloqueada,
+   * passa ao ecrã de bloqueio.
+   */
+  async function runGameAction<T>(call: () => Promise<GameActionResponse<T>>): Promise<T> {
+    let response = await call();
+    if (response.status === "lead_required") {
+      await new Promise<void>((resolve) => {
+        leadGateResolver.current = resolve;
+        setAwaitingLead(true);
+      });
+      response = await call();
+    }
+    if (response.status === "revealed") return response.result;
+    setBlockedReason(response.status === "blocked" ? response.reason : "not_found");
+    throw new GameBlockedError();
+  }
+
+  async function spinWheel(currentRef: ParticipationRef): Promise<WheelSpinResult> {
+    const result = await runGameAction(() => spinWheelAction(currentRef));
+    setPrizePending(result.prizePending);
+    if (result.prize) setWheelPrize(result.prize);
+    return result;
+  }
+
   async function handleLeadSubmit(values: Record<string, string>, consents: Record<string, boolean>, honeypot: string) {
-    if (!participationId) return { ok: false, reason: "invalid" };
-    const result = await submitLeadFormAction({ participationId, values, consents, honeypot });
-    if (result.ok) advance();
+    if (!ref) return { ok: false, reason: "invalid" };
+    const result = await submitLeadFormAction({ ref, values, consents, honeypot });
+    if (!result.ok) return result;
+
+    if (leadGateResolver.current) {
+      const resume = leadGateResolver.current;
+      leadGateResolver.current = null;
+      setAwaitingLead(false);
+      resume();
+      return result;
+    }
+
+    if (prizePending) {
+      // O formulário foi aceite: agora o servidor já envia o prémio.
+      try {
+        const revealed = await spinWheelAction(ref);
+        if (revealed.status === "revealed") {
+          setPrizePending(false);
+          setWheelPrize(revealed.result.prize);
+        }
+      } catch (error) {
+        console.error("[play] Falha ao obter o prémio:", error);
+      }
+    }
+    advance();
     return result;
   }
 
@@ -216,11 +294,19 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         </div>
       )}
 
-      {(stage === "lead-before" || stage === "lead-after") && props.leadForm && (
+      {(stage === "lead-before" || stage === "lead-after" || awaitingLead) && props.leadForm && (
         <PublicLeadForm
           fields={props.leadForm.fields}
           consents={props.leadForm.consents}
           honeypotEnabled={props.leadForm.honeypotEnabled}
+          intro={
+            awaitingLead
+              ? "O seu resultado está pronto. Preencha os seus dados para o ver."
+              : prizePending
+                ? "Preencha os seus dados para receber o prémio."
+                : undefined
+          }
+          submitLabel={awaitingLead ? "Ver o resultado" : undefined}
           onSubmit={handleLeadSubmit}
         />
       )}
@@ -232,20 +318,22 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         />
       )}
 
-      {stage === "game" && participationId && (
-        <>
+      {stage === "game" && ref && (
+        // Escondido (não desmontado) enquanto o formulário está aberto, para
+        // o jogo retomar exatamente onde estava.
+        <div hidden={awaitingLead}>
           {props.campaignType === "MEMORY" && props.memory && (
             <PublicMemoryGame
               pairs={props.memory.pairs}
               config={props.memory.config}
-              onSubmit={(raw) => submitMemoryResultAction({ participationId, ...raw })}
+              onSubmit={(raw) => runGameAction(() => submitMemoryResultAction({ ref, ...raw }))}
               onContinue={advance}
             />
           )}
           {props.campaignType === "WHEEL" && props.wheel && (
             <PublicWheelGame
               segments={props.wheel.segments}
-              onSpin={() => spinWheelAction(participationId)}
+              onSpin={() => spinWheel(ref)}
               onContinue={advance}
             />
           )}
@@ -255,17 +343,29 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
               allowGoBack={props.quiz.allowGoBack}
               showProgress={props.quiz.showProgress}
               totalTimeLimitSeconds={props.quiz.totalTimeLimitSeconds}
-              onSubmit={(submissions, timeSeconds) => submitQuizAction(participationId, submissions, timeSeconds)}
+              onSubmit={(submissions, timeSeconds) =>
+                runGameAction(() => submitQuizAction(ref, submissions, timeSeconds))
+              }
               onContinue={advance}
             />
           )}
-        </>
+        </div>
       )}
 
       {stage === "final" && (
         <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
           {props.final.title && <h2 className="text-xl font-bold text-caetano-anthracite">{props.final.title}</h2>}
           {props.final.message && <p className="mt-2 text-caetano-anthracite-80">{props.final.message}</p>}
+          {wheelPrize && (
+            <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
+              <p className="text-sm">O seu prémio</p>
+              <p className="text-lg font-bold">{wheelPrize.publicName}</p>
+              {wheelPrize.code && <p className="mt-1 font-mono">{wheelPrize.code}</p>}
+              {wheelPrize.instructions && (
+                <p className="mt-2 whitespace-pre-line text-sm text-caetano-anthracite-80">{wheelPrize.instructions}</p>
+              )}
+            </div>
+          )}
           {props.final.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={props.final.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />

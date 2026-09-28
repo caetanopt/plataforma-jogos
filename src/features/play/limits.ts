@@ -7,10 +7,18 @@ export interface ParticipationLimitCheckInput {
   customMax: number | null;
   dedupStrategies: DedupStrategy[];
   cookieId?: string | null;
+  /** Já normalizado (ver `normalizeEmail`), tal como está gravado na participação. */
   email?: string | null;
   phone?: string | null;
   ip?: string | null;
   sessionId?: string | null;
+  /**
+   * Participação que está a ser validada, fora da contagem. Na submissão do
+   * formulário a participação já existe; contá-la fazia com que quem voltasse
+   * no dia seguinte fosse aceite no início e recusado como "duplicado" ao
+   * enviar o formulário.
+   */
+  excludeParticipationId?: string;
   now: Date;
 }
 
@@ -21,6 +29,10 @@ export interface ParticipationLimitCheckInput {
  * só entram se o admin ativou essa estratégia. As estratégias "Código" e
  * "Combinação de campos" ficam por implementar — não têm UI de configuração
  * ainda e ficam documentadas como trabalho futuro.
+ *
+ * E-mail e telefone comparam-se com a identidade gravada em cada
+ * participação, não com o Participant: esse é partilhado por quem usa o
+ * mesmo browser e só guardava os dados da última pessoa.
  *
  * Recebe explicitamente o cliente Prisma (`db`) para poder correr dentro da
  * mesma transação serializável que cria a participação — ler a contagem
@@ -43,31 +55,16 @@ export async function checkParticipationAllowed(
 
   const maxAllowed = input.limitType === "CUSTOM_MAX" ? Math.max(1, input.customMax ?? 1) : 1;
 
-  const participantIds = new Set<string>();
+  const or: Prisma.ParticipationWhereInput[] = [];
   if (input.cookieId) {
     const participant = await db.participant.findFirst({
       where: { organizationId: input.organizationId, cookieId: input.cookieId },
       select: { id: true },
     });
-    if (participant) participantIds.add(participant.id);
+    if (participant) or.push({ participantId: participant.id });
   }
-  if (input.dedupStrategies.includes("EMAIL") && input.email) {
-    const participant = await db.participant.findFirst({
-      where: { organizationId: input.organizationId, email: input.email },
-      select: { id: true },
-    });
-    if (participant) participantIds.add(participant.id);
-  }
-  if (input.dedupStrategies.includes("PHONE") && input.phone) {
-    const participant = await db.participant.findFirst({
-      where: { organizationId: input.organizationId, phone: input.phone },
-      select: { id: true },
-    });
-    if (participant) participantIds.add(participant.id);
-  }
-
-  const or: Prisma.ParticipationWhereInput[] = [];
-  if (participantIds.size > 0) or.push({ participantId: { in: [...participantIds] } });
+  if (input.dedupStrategies.includes("EMAIL") && input.email) or.push({ email: input.email });
+  if (input.dedupStrategies.includes("PHONE") && input.phone) or.push({ phone: input.phone });
   if (input.dedupStrategies.includes("IP") && input.ip) or.push({ ipAddress: input.ip });
   if (input.dedupStrategies.includes("SESSION") && input.sessionId)
     or.push({ sessionId: input.sessionId });
@@ -79,6 +76,7 @@ export async function checkParticipationAllowed(
       campaignId: input.campaignId,
       isTest: false,
       createdAt: { gte: windowStart },
+      ...(input.excludeParticipationId ? { id: { not: input.excludeParticipationId } } : {}),
       OR: or,
     },
   });

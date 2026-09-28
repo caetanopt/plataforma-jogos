@@ -535,6 +535,15 @@ model Participation {
   os                String?
   sessionId         String?
   ipAddress         String?
+  /// Identidade declarada no formulário DESTA participação. Vive aqui e não
+  /// no Participant, que é partilhado por quem usa o mesmo browser (um
+  /// quiosque num evento): guardada lá, cada nova submissão reescrevia as
+  /// leads anteriores com o nome e o e-mail da última pessoa.
+  /// O e-mail é guardado normalizado (minúsculas, sem espaços).
+  email             String?
+  phone             String?
+  firstName         String?
+  lastName          String?
   startedAt         DateTime            @default(now())
   completedAt       DateTime?
   createdAt         DateTime            @default(now())
@@ -550,6 +559,9 @@ model Participation {
 
   @@index([campaignId, status, createdAt])
   @@index([campaignId, participantId])
+  // Controlo de duplicados por e-mail/telefone dentro da campanha (secção 11).
+  @@index([campaignId, email])
+  @@index([campaignId, phone])
 }
 
 enum ConsentStatus {

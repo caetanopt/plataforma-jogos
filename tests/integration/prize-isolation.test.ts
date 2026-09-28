@@ -58,6 +58,8 @@ async function createOrgWithWheel(label: string) {
       internalName: `Roda ${suffix}`,
       ownerId: user.id,
       slug: `roda-${suffix}`,
+      // Publicada: a rotação só é aceite com a campanha ativa.
+      status: "PUBLISHED",
       wheelConfig: { create: {} },
     },
     include: { wheelConfig: true },
@@ -283,10 +285,14 @@ describe("o browser não recebe ids internos de prémios", () => {
   it("a rotação devolve o prémio sem o id, também quando repetida", async () => {
     const participation = await victim.createParticipation();
 
-    const first = await spinWheelAction(participation.id);
-    const repeated = await spinWheelAction(participation.id);
+    const ref = { participationId: participation.id, token: participation.idempotencyKey };
+    const first = await spinWheelAction(ref);
+    const repeated = await spinWheelAction(ref);
 
-    for (const result of [first, repeated]) {
+    for (const response of [first, repeated]) {
+      expect(response.status).toBe("revealed");
+      if (response.status !== "revealed") continue;
+      const result = response.result;
       expect(result.outcome).toBe("WIN");
       expect(result.prize).not.toBeNull();
       expect(result.prize).not.toHaveProperty("id");
