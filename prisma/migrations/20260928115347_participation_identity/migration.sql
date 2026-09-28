@@ -57,22 +57,42 @@ SET
 WHERE p."leadFormResponse" IS NOT NULL
   AND jsonb_typeof(p."leadFormResponse") = 'object';
 
--- Backfill 2: quando a resposta já não se consegue mapear (campo apagado ou
--- renomeado depois da submissão), usa-se o Participant — mas só se ele tiver
--- exatamente UMA participação com formulário. Nesse caso os dados do
--- Participant vieram de certeza dessa submissão; com mais do que uma podiam
--- ser de outra pessoa, e fica em branco em vez de errado.
+-- Backfill 2: quando a resposta já não se consegue mapear (campo renomeado
+-- ou recriado depois da submissão), usa-se o Participant — mas só se ele
+-- tiver exatamente UMA participação com formulário (os dados vieram dessa
+-- submissão; com mais do que uma podiam ser de outra pessoa) e só para os
+-- tipos de campo que o formulário da campanha tem (o Participant é da
+-- organização inteira e podia trazer um e-mail de outra campanha, já
+-- apagada). Na dúvida fica em branco em vez de errado.
+--
+-- As contagens são agregadas uma vez (CTE) em vez de uma subconsulta por
+-- linha, que tornava isto quadrático no número de participações.
+WITH "singleLead" AS (
+  SELECT "participantId"
+  FROM "Participation"
+  WHERE "leadFormResponse" IS NOT NULL AND "participantId" IS NOT NULL
+  GROUP BY "participantId"
+  HAVING COUNT(*) = 1
+),
+"formTypes" AS (
+  SELECT
+    lf."campaignId",
+    BOOL_OR(f."type" = 'EMAIL') AS "hasEmail",
+    BOOL_OR(f."type" = 'PHONE') AS "hasPhone",
+    BOOL_OR(f."type" IN ('FIRST_NAME', 'FULL_NAME')) AS "hasFirstName",
+    BOOL_OR(f."type" = 'LAST_NAME') AS "hasLastName"
+  FROM "LeadForm" lf
+  JOIN "LeadFormField" f ON f."leadFormId" = lf."id"
+  GROUP BY lf."campaignId"
+)
 UPDATE "Participation" AS p
 SET
-  "email" = COALESCE(p."email", LOWER(NULLIF(BTRIM(pt."email"), ''))),
-  "phone" = COALESCE(p."phone", NULLIF(BTRIM(pt."phone"), '')),
-  "firstName" = COALESCE(p."firstName", NULLIF(BTRIM(pt."firstName"), '')),
-  "lastName" = COALESCE(p."lastName", NULLIF(BTRIM(pt."lastName"), ''))
-FROM "Participant" AS pt
+  "email" = COALESCE(p."email", CASE WHEN ft."hasEmail" THEN LOWER(NULLIF(BTRIM(pt."email"), '')) END),
+  "phone" = COALESCE(p."phone", CASE WHEN ft."hasPhone" THEN NULLIF(BTRIM(pt."phone"), '') END),
+  "firstName" = COALESCE(p."firstName", CASE WHEN ft."hasFirstName" THEN NULLIF(BTRIM(pt."firstName"), '') END),
+  "lastName" = COALESCE(p."lastName", CASE WHEN ft."hasLastName" THEN NULLIF(BTRIM(pt."lastName"), '') END)
+FROM "Participant" AS pt, "singleLead" AS s, "formTypes" AS ft
 WHERE pt."id" = p."participantId"
-  AND p."leadFormResponse" IS NOT NULL
-  AND (
-    SELECT COUNT(*)
-    FROM "Participation" o
-    WHERE o."participantId" = pt."id" AND o."leadFormResponse" IS NOT NULL
-  ) = 1;
+  AND s."participantId" = pt."id"
+  AND ft."campaignId" = p."campaignId"
+  AND p."leadFormResponse" IS NOT NULL;
