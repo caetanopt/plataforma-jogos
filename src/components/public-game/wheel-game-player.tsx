@@ -14,7 +14,8 @@ export interface WheelSpinResult {
   segmentName: string;
   outcome: "WIN" | "NO_WIN";
   message: string | null;
-  prize: { id: string; publicName: string; instructions: string | null; code: string | null } | null;
+  /** Sem o id interno do prémio: o browser só recebe o que mostra. */
+  prize: { publicName: string; instructions: string | null; code: string | null } | null;
 }
 
 interface WheelGamePlayerProps {

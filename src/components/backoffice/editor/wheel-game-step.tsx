@@ -27,7 +27,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
     where: { id: campaignId, organizationId: context.organizationId, type: "WHEEL" },
     include: {
       wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
-      prizes: { include: { codes: true } },
+      prizes: { include: { codes: true, _count: { select: { awards: true } } } },
     },
   });
   if (!campaign?.wheelConfig) notFound();
@@ -92,13 +92,20 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                       <Button type="submit" size="sm" variant="outline">Guardar</Button>
                     </form>
                   </details>
-                  <form action={removePrizeAction}>
-                    <input type="hidden" name="campaignId" value={campaignId} />
-                    <input type="hidden" name="prizeId" value={prize.id} />
-                    <ConfirmSubmitButton confirmMessage={`Eliminar o prémio "${prize.publicName}"?`} size="sm">
-                      Eliminar
-                    </ConfirmSubmitButton>
-                  </form>
+                  {/* Um prémio já atribuído guarda o registo de quem o ganhou e não pode ser eliminado. */}
+                  {prize._count.awards > 0 ? (
+                    <span className="max-w-40 text-right text-xs text-caetano-anthracite-80">
+                      Já atribuído, não pode ser eliminado.
+                    </span>
+                  ) : (
+                    <form action={removePrizeAction}>
+                      <input type="hidden" name="campaignId" value={campaignId} />
+                      <input type="hidden" name="prizeId" value={prize.id} />
+                      <ConfirmSubmitButton confirmMessage={`Eliminar o prémio "${prize.publicName}"?`} size="sm">
+                        Eliminar
+                      </ConfirmSubmitButton>
+                    </form>
+                  )}
                 </div>
               </div>
 

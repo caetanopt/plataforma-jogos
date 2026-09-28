@@ -38,12 +38,17 @@ export interface WheelDrawResult extends PersistedWheelResult {
  * "elegível" mesmo com o prémio esgotado — era escolhido pelo sorteio
  * ponderado e só depois falhava (abortando a rotação inteira), distorcendo
  * a distribuição real de probabilidade e bloqueando rotações legítimas.
+ *
+ * Um segmento ligado a um prémio de outra campanha nunca é elegível. As
+ * ações do editor já recusam essa ligação; isto é a segunda barreira, para
+ * dados gravados antes dessa verificação existir.
  */
-function isSegmentEligible(segment: WheelSegmentWithPrize, now: Date): boolean {
+function isSegmentEligible(segment: WheelSegmentWithPrize, campaignId: string, now: Date): boolean {
   if (!segment.isActive) return false;
   if (segment.periodStart && segment.periodStart > now) return false;
   if (segment.periodEnd && segment.periodEnd < now) return false;
   if (segment.totalQuantity != null && (segment.remainingQuantity ?? 0) <= 0) return false;
+  if (segment.prize && segment.prize.campaignId !== campaignId) return false;
   if (segment.outcome === "WIN" && segment.prize) {
     const prize = segment.prize;
     if (prize.totalQuantity != null && prize.awardedQuantity >= prize.totalQuantity) return false;
@@ -101,7 +106,9 @@ export async function drawAndAwardPrize(
     });
     if (!wheelConfig) throw new Error("Roda da Sorte não configurada para esta campanha.");
 
-    const eligible = wheelConfig.segments.filter((segment) => isSegmentEligible(segment, now));
+    const eligible = wheelConfig.segments.filter((segment) =>
+      isSegmentEligible(segment, participation.campaignId, now),
+    );
     if (eligible.length === 0) throw new NoEligibleSegmentsError();
 
     const chosen = weightedPick(eligible);
@@ -109,7 +116,9 @@ export async function drawAndAwardPrize(
     let prize: WheelPrizeResult | null = null;
 
     if (chosen.outcome === "WIN" && chosen.prizeId) {
-      const prizeRecord = await tx.prize.findUniqueOrThrow({ where: { id: chosen.prizeId } });
+      const prizeRecord = await tx.prize.findFirstOrThrow({
+        where: { id: chosen.prizeId, campaignId: participation.campaignId },
+      });
 
       if (isTest) {
         // Modo de teste: nunca consome stock nem atribui código real (secção 18).

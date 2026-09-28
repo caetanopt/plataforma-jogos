@@ -151,8 +151,24 @@ export async function removePrizeAction(formData: FormData): Promise<void> {
   const campaign = await getOwnedCampaign(context.organizationId, campaignId);
   if (!campaign) notFound();
 
-  await prisma.wheelSegment.updateMany({ where: { prizeId }, data: { prizeId: null } });
-  const deleted = await prisma.prize.deleteMany({ where: { id: prizeId, campaignId } });
+  // A pertença é confirmada antes de qualquer escrita. Antes, os segmentos
+  // eram desligados só pelo `prizeId` do formulário, sem filtro de campanha,
+  // e um id alheio desligava os segmentos de outra organização.
+  const prize = await prisma.prize.findFirst({
+    where: { id: prizeId, campaignId },
+    select: { id: true, _count: { select: { awards: true } } },
+  });
+  if (!prize) notFound();
+
+  // Um prémio já atribuído não se elimina: o PrizeAward é o registo de quem
+  // ganhou o quê, e a base de dados recusa-o (ON DELETE RESTRICT). O editor
+  // não mostra o botão nesse caso; isto trava pedidos feitos à mão.
+  if (prize._count.awards > 0) return;
+
+  // Os segmentos ligados ficam sem prémio pela própria chave estrangeira
+  // (ON DELETE SET NULL), no mesmo comando — não há um passo intermédio que
+  // possa ficar a meio.
+  const deleted = await prisma.prize.deleteMany({ where: { id: prize.id, campaignId } });
 
   if (deleted.count > 0) {
     await logAudit({

@@ -17,6 +17,27 @@ async function getOwnedWheelConfig(organizationId: string, campaignId: string) {
   return campaign?.wheelConfig ? { campaign, wheelConfig: campaign.wheelConfig } : null;
 }
 
+/**
+ * Um segmento só pode apontar para um prémio da própria campanha.
+ *
+ * O `prizeId` chega do formulário, e o sorteio consome o stock e os códigos
+ * do prémio ligado. Sem esta verificação, um editor podia ligar os seus
+ * segmentos ao prémio de outra organização e esgotar-lhe os vouchers.
+ */
+async function resolveSegmentPrizeId(
+  campaignId: string,
+  data: { outcome: "WIN" | "NO_WIN"; prizeId?: string },
+): Promise<string | null> {
+  if (data.outcome !== "WIN" || !data.prizeId) return null;
+
+  const prize = await prisma.prize.findFirst({
+    where: { id: data.prizeId, campaignId },
+    select: { id: true },
+  });
+  if (!prize) notFound();
+  return prize.id;
+}
+
 function parseSegmentForm(formData: FormData) {
   return wheelSegmentSchema.safeParse({
     name: getField(formData, "name"),
@@ -51,7 +72,7 @@ export async function addWheelSegmentAction(formData: FormData): Promise<void> {
   });
   const nextOrder = existing.reduce((max, s) => Math.max(max, s.order), -1) + 1;
 
-  const prizeId = parsed.data.outcome === "WIN" && parsed.data.prizeId ? parsed.data.prizeId : null;
+  const prizeId = await resolveSegmentPrizeId(owned.campaign.id, parsed.data);
 
   const segment = await prisma.wheelSegment.create({
     data: {
@@ -102,7 +123,7 @@ export async function updateWheelSegmentAction(formData: FormData): Promise<void
   const parsed = parseSegmentForm(formData);
   if (!parsed.success) return;
 
-  const prizeId = parsed.data.outcome === "WIN" && parsed.data.prizeId ? parsed.data.prizeId : null;
+  const prizeId = await resolveSegmentPrizeId(owned.campaign.id, parsed.data);
 
   // Ajusta o stock restante proporcionalmente se o total for alterado, preservando o já atribuído.
   const awarded = segment.totalQuantity != null ? segment.totalQuantity - (segment.remainingQuantity ?? 0) : 0;

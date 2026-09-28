@@ -13,7 +13,11 @@ import { headers } from "next/headers";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
 import { computeMemoryScore } from "@/features/memory-game/scoring";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
-import { drawAndAwardPrize, NoEligibleSegmentsError } from "@/features/wheel-game/draw";
+import {
+  drawAndAwardPrize,
+  NoEligibleSegmentsError,
+  type WheelDrawResult,
+} from "@/features/wheel-game/draw";
 import type {
   QuizPlayerResult,
   QuizPlayerSubmission,
@@ -396,6 +400,28 @@ export async function submitMemoryResultAction(
   return { score: result.score, completed: result.completed };
 }
 
+/**
+ * Projeção explícita do resultado para o browser. O resultado gravado
+ * guarda o id interno do prémio, e tudo o que esta ação devolve chega ao
+ * cliente tal como está: foi por aí que os ids de prémios de outras
+ * organizações ficaram à vista de quem jogasse.
+ */
+function toClientWheelResult(result: WheelDrawResult): WheelSpinResult {
+  return {
+    segmentId: result.segmentId,
+    segmentName: result.segmentName,
+    outcome: result.outcome,
+    message: result.message,
+    prize: result.prize
+      ? {
+          publicName: result.prize.publicName,
+          instructions: result.prize.instructions,
+          code: result.prize.code,
+        }
+      : null,
+  };
+}
+
 export async function spinWheelAction(participationId: string): Promise<WheelSpinResult> {
   const rateLimit = await checkRateLimit(`submit:${participationId}`, 10, 60);
   if (!rateLimit.allowed)
@@ -420,7 +446,7 @@ export async function spinWheelAction(participationId: string): Promise<WheelSpi
         );
       }
     }
-    return result;
+    return toClientWheelResult(result);
   } catch (error) {
     if (error instanceof NoEligibleSegmentsError) {
       const participation = await prisma.participation.findUnique({
