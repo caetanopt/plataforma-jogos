@@ -1,8 +1,28 @@
+import { timingSafeEqual } from "node:crypto";
 import type { CampaignType } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
+import { participationRefSchema } from "@/lib/validation/play";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
 import { leadMissingBeforePlay, revealPolicy, type RevealPolicy } from "@/features/play/reveal";
 import type { GameBlockedReason, ParticipationRef } from "@/features/play/types";
+
+/**
+ * Compara o token recebido com a chave gravada. Só depois de o ler pelo id,
+ * e nunca como condição do `where`: um valor que não seja uma string não
+ * pode transformar-se num filtro. Comparação em tempo constante.
+ */
+export function tokenMatches(stored: string, received: unknown): boolean {
+  if (typeof received !== "string") return false;
+  const a = Buffer.from(stored);
+  const b = Buffer.from(received);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Valida a forma do ParticipationRef recebido do browser. */
+export function parseParticipationRef(ref: unknown): ParticipationRef | null {
+  const parsed = participationRefSchema.safeParse(ref);
+  return parsed.success ? parsed.data : null;
+}
 
 export interface GameGate {
   participationId: string;
@@ -21,21 +41,29 @@ export interface GameGate {
  * para jogar sem formulário, com a campanha pausada, ou na participação de
  * outra pessoa. Aqui confirma-se, por esta ordem:
  *
- * 1. Posse: id e token têm de corresponder (ver `ParticipationRef`).
- * 2. Campanha ativa — só quando ainda não há resultado. Repetir um pedido já
- *    resolvido devolve o resultado gravado, mesmo que a campanha tenha
- *    entretanto terminado (idempotência).
+ * 1. Posse: id e token têm de corresponder (ver `ParticipationRef`), com a
+ *    forma validada antes de tocar na base de dados.
+ * 2. Roda: campanha ativa quando ainda não há resultado — sortear consome
+ *    stock e atribui códigos, e isso não pode acontecer com a campanha
+ *    pausada ou terminada. Repetir um pedido já resolvido devolve o
+ *    resultado gravado (idempotência). Memória e quiz não têm prémios: quem
+ *    começou enquanto a campanha estava ativa pode acabar, em vez de perder
+ *    as respostas porque ela terminou a meio do jogo.
  * 3. Formulário antes do jogo: sem ele submetido, não se joga. A idade
  *    mínima, os campos obrigatórios, os consentimentos e os duplicados por
  *    e-mail/telefone são validados nessa submissão.
  */
 export async function openGameGate(
-  ref: ParticipationRef,
+  rawRef: unknown,
 ): Promise<{ ok: true; gate: GameGate } | { ok: false; reason: GameBlockedReason }> {
-  const participation = await prisma.participation.findFirst({
-    where: { id: ref.participationId, idempotencyKey: ref.token },
+  const ref = parseParticipationRef(rawRef);
+  if (!ref) return { ok: false, reason: "not_found" };
+
+  const participation = await prisma.participation.findUnique({
+    where: { id: ref.participationId },
     select: {
       id: true,
+      idempotencyKey: true,
       campaignId: true,
       isTest: true,
       sessionId: true,
@@ -52,10 +80,16 @@ export async function openGameGate(
       },
     },
   });
-  if (!participation) return { ok: false, reason: "not_found" };
+  if (!participation || !tokenMatches(participation.idempotencyKey, ref.token)) {
+    return { ok: false, reason: "not_found" };
+  }
 
   const alreadyPlayed = participation.resultSummary !== null;
-  if (!alreadyPlayed && getEffectivePublicState(participation.campaign) !== "active") {
+  if (
+    participation.campaign.type === "WHEEL" &&
+    !alreadyPlayed &&
+    getEffectivePublicState(participation.campaign) !== "active"
+  ) {
     return { ok: false, reason: "not_active" };
   }
 

@@ -203,6 +203,50 @@ describe("posse da participação", () => {
   });
 });
 
+describe("argumentos malformados", () => {
+  // As server actions aceitam qualquer valor serializável: um token em falta
+  // chegava ao Prisma como undefined (ignorado) e um objeto como filtro.
+  const malformed = (participationId: string): unknown[] => [
+    { participationId },
+    { participationId, token: { not: "" } },
+    { participationId, token: undefined },
+    { participationId: { not: "" }, token: randomUUID() },
+    {},
+    null,
+    "texto",
+  ];
+
+  it("a roda recusa refs sem token ou com filtros e não sorteia", async () => {
+    const f = await createFixture({ type: "WHEEL", position: null });
+    const ref = await f.participate();
+
+    for (const bad of malformed(ref.participationId)) {
+      expect(await spinWheelAction(bad as ParticipationRef)).toEqual({ status: "blocked", reason: "not_found" });
+    }
+    expect(await awardedQuantity(f.prizeId)).toBe(0);
+  });
+
+  it("o formulário recusa refs sem token ou com filtros e não grava nada", async () => {
+    const f = await createFixture({ type: "WHEEL", position: "AFTER_GAME" });
+    const ref = await f.participate();
+
+    for (const bad of malformed(ref.participationId)) {
+      const result = await f.lead(bad as ParticipationRef, "intruso@example.com", "X");
+      expect(result.ok).toBe(false);
+    }
+    const saved = await prisma.participation.findUniqueOrThrow({ where: { id: ref.participationId } });
+    expect(saved.leadFormResponse).toBeNull();
+  });
+
+  it("o quiz recusa um tempo negativo", async () => {
+    const f = await createFixture({ type: "QUIZ", position: null });
+    const ref = await f.participate();
+
+    expect(await submitQuizAction(ref, [], -60)).toEqual({ status: "blocked", reason: "not_found" });
+    expect(await prisma.quizResponse.count({ where: { participationId: ref.participationId } })).toBe(0);
+  });
+});
+
 describe("formulário antes do jogo", () => {
   it("não se joga sem o formulário submetido", async () => {
     const f = await createFixture({ type: "WHEEL", position: "BEFORE_GAME" });
@@ -249,16 +293,28 @@ describe("estado da campanha", () => {
     expect(await spinWheelAction(played)).toEqual(first);
     expect(await awardedQuantity(f.prizeId)).toBe(1);
   });
+
+  it("um quiz começado com a campanha ativa pode terminar depois de ela ser pausada", async () => {
+    const f = await createFixture({ type: "QUIZ", position: null });
+    const ref = await f.participate();
+    await prisma.campaign.update({ where: { id: f.campaignId }, data: { status: "PAUSED" } });
+
+    const response = await submitQuizAction(ref, [], 30);
+
+    expect(response.status).toBe("revealed");
+  });
 });
 
 describe("antes de revelar o resultado", () => {
-  it("roda: o sorteio fica gravado, mas nada do resultado chega ao browser antes do formulário", async () => {
+  it("roda: nada chega ao browser nem se sorteia antes do formulário", async () => {
     const f = await createFixture({ type: "WHEEL", position: "BEFORE_RESULT" });
     const ref = await f.participate();
 
     const before = await spinWheelAction(ref);
     expect(before).toEqual({ status: "lead_required" });
-    expect(await awardedQuantity(f.prizeId)).toBe(1);
+    // Sem sorteio antes do formulário: uma lead recusada ou abandonada não
+    // prende um prémio nem um código.
+    expect(await awardedQuantity(f.prizeId)).toBe(0);
 
     expect((await f.lead(ref, "ana@example.com", "Ana")).ok).toBe(true);
     const after = await spinWheelAction(ref);

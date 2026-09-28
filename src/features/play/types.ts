@@ -28,10 +28,12 @@ export type GameBlockedReason =
 /**
  * Resposta de uma ação de jogo (rodar, terminar a memória, submeter o quiz).
  *
- * `lead_required` significa que o resultado já está calculado e gravado no
- * servidor, mas só é revelado depois do formulário (posição "Antes de
- * revelar o resultado"). Repetir a mesma ação depois de submeter o
- * formulário devolve-o — as ações são idempotentes.
+ * `lead_required` significa que o resultado só é revelado depois do
+ * formulário (posição "Antes de revelar o resultado"). Na memória e no quiz
+ * a pontuação já fica gravada; na roda nem se sorteia antes do formulário,
+ * para não prender um prémio a uma lead que pode ser recusada. Repetir a
+ * mesma ação depois de submeter o formulário devolve o resultado — as ações
+ * são idempotentes.
  */
 export type GameActionResponse<T> =
   | { status: "revealed"; result: T }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export interface PublicLeadField {
@@ -51,6 +51,7 @@ function fieldInputType(type: string): string {
 const ERROR_MESSAGES: Record<string, string> = {
   invalid: "Verifique os campos obrigatórios e tente novamente.",
   duplicate: "Já detetámos uma participação anterior com estes dados.",
+  prize_unavailable: "Os seus dados foram guardados, mas não foi possível mostrar o prémio. Tente novamente.",
 };
 
 export function PublicLeadForm({
@@ -66,6 +67,14 @@ export function PublicLeadForm({
   const [honeypot, setHoneypot] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // O formulário substitui o ecrã anterior (ou aparece a meio do jogo) e o
+  // botão que tinha o foco desaparece: sem isto, o foco caía no início da
+  // página e um leitor de ecrã não anunciava nada (secção 27).
+  useEffect(() => {
+    formRef.current?.focus();
+  }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -91,7 +100,13 @@ export function PublicLeadForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-6">
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      tabIndex={-1}
+      aria-label={intro ?? "Formulário de participação"}
+      className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-6 outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+    >
       {intro && <p className="font-medium text-caetano-anthracite">{intro}</p>}
       {honeypotEnabled && (
         <div className="absolute left-[-9999px]" aria-hidden="true">

@@ -140,6 +140,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   // conhecido depois do formulário.
   const [wheelPrize, setWheelPrize] = useState<WheelSpinResult["prize"]>(null);
   const [prizePending, setPrizePending] = useState(false);
+  const gameContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -200,7 +201,10 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       response = await call();
     }
     if (response.status === "revealed") return response.result;
-    setBlockedReason(response.status === "blocked" ? response.reason : "not_found");
+    // Um segundo lead_required não devia acontecer (só com o honeypot, que
+    // finge sucesso sem gravar): mensagem genérica em vez de "Campanha não
+    // encontrada", que não é verdade.
+    setBlockedReason(response.status === "blocked" ? response.reason : "unexpected");
     throw new GameBlockedError();
   }
 
@@ -221,19 +225,27 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       leadGateResolver.current = null;
       setAwaitingLead(false);
       resume();
+      // O jogo volta a ficar visível: o foco acompanha-o, para o resultado ser
+      // lido a seguir em vez de o foco cair no início da página.
+      requestAnimationFrame(() => gameContainerRef.current?.focus());
       return result;
     }
 
     if (prizePending) {
-      // O formulário foi aceite: agora o servidor já envia o prémio.
+      // O formulário foi aceite: agora o servidor já envia o prémio. Sem ele
+      // não se avança — o ecrã final ficava sem prémio e sem forma de o
+      // recuperar. Repetir o envio é seguro: o formulário já gravado devolve
+      // sucesso e a revelação é tentada outra vez.
       try {
         const revealed = await spinWheelAction(ref);
-        if (revealed.status === "revealed") {
-          setPrizePending(false);
-          setWheelPrize(revealed.result.prize);
+        if (revealed.status !== "revealed" || revealed.result.prizePending) {
+          return { ok: false, reason: "prize_unavailable" };
         }
+        setPrizePending(false);
+        setWheelPrize(revealed.result.prize);
       } catch (error) {
         console.error("[play] Falha ao obter o prémio:", error);
+        return { ok: false, reason: "prize_unavailable" };
       }
     }
     advance();
@@ -321,7 +333,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       {stage === "game" && ref && (
         // Escondido (não desmontado) enquanto o formulário está aberto, para
         // o jogo retomar exatamente onde estava.
-        <div hidden={awaitingLead}>
+        <div ref={gameContainerRef} hidden={awaitingLead} tabIndex={-1} className="outline-none">
           {props.campaignType === "MEMORY" && props.memory && (
             <PublicMemoryGame
               pairs={props.memory.pairs}

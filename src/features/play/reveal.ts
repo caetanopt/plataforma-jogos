@@ -4,8 +4,9 @@ import type { LeadFormPosition } from "@/generated/prisma/client";
  * Que parte do resultado pode chegar ao browser, dada a posição do
  * formulário de leads e se ele já foi submetido (secção 11).
  *
- * O resultado é sempre calculado e gravado no servidor no momento em que se
- * joga; o que muda é só o que se devolve. Antes, o browser recebia sempre o
+ * O resultado é sempre calculado no servidor (na roda com "antes do
+ * resultado", só depois do formulário); o que muda é o que se devolve e
+ * quando. Antes, o browser recebia sempre o
  * resultado completo e era o próprio browser que decidia quando mostrá-lo —
  * nas posições "antes do resultado" e "antes do prémio", o prémio chegava
  * antes do formulário e bastava ler a resposta da rede.

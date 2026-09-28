@@ -5,10 +5,18 @@ import { prisma } from "@/server/db/client";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { checkParticipationAllowed } from "@/features/play/limits";
 import { extractLeadIdentity } from "@/features/play/identity";
-import { openGameGate } from "@/features/play/participation-access";
+import { openGameGate, parseParticipationRef, tokenMatches } from "@/features/play/participation-access";
 import { projectWheelOutcome } from "@/features/play/reveal";
 import type { GameActionResponse, ParticipationRef } from "@/features/play/types";
 import { runSerializable } from "@/lib/db/transaction-retry";
+import {
+  analyticsEventSchema,
+  memorySubmitSchema,
+  quizSubmissionsSchema,
+  quizTimeSecondsSchema,
+  startParticipationSchema,
+  submitLeadFormSchema,
+} from "@/lib/validation/play";
 import { createParticipationIfAllowed } from "@/features/play/create-participation";
 import { getOrCreateVisitorCookieId } from "@/features/play/cookie";
 import { getRequestIp } from "@/lib/security/request-ip";
@@ -60,7 +68,10 @@ export async function recordAnalyticsEventAction(
   isTest: boolean,
   sessionId?: string,
 ): Promise<void> {
-  await recordEvent(campaignId, type, isTest, sessionId);
+  // Server action pública: os argumentos chegam como o browser os mandar.
+  const parsed = analyticsEventSchema.safeParse({ campaignId, type, isTest, sessionId });
+  if (!parsed.success) return;
+  await recordEvent(parsed.data.campaignId, parsed.data.type, parsed.data.isTest, parsed.data.sessionId);
 }
 
 export interface StartParticipationInput {
@@ -77,8 +88,14 @@ export type StartParticipationResult =
   | { ok: false; reason: "not_active" | "limit_reached" | "rate_limited" | "not_found" };
 
 export async function startParticipationAction(
-  input: StartParticipationInput,
+  rawInput: StartParticipationInput,
 ): Promise<StartParticipationResult> {
+  // Server action pública: os argumentos chegam como o browser os mandar
+  // (ver src/lib/validation/play.ts).
+  const parsedInput = startParticipationSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { ok: false, reason: "not_found" };
+  const input = parsedInput.data;
+
   const campaign = await prisma.campaign.findUnique({
     where: { id: input.campaignId },
     select: {
@@ -178,8 +195,14 @@ export type SubmitLeadFormResult =
   { ok: true } | { ok: false; reason: "duplicate" | "invalid" | "bot" };
 
 export async function submitLeadFormAction(
-  input: SubmitLeadFormInput,
+  rawInput: SubmitLeadFormInput,
 ): Promise<SubmitLeadFormResult> {
+  // Server action pública: sem validar a forma, um token em falta ou em
+  // objeto transformava-se num filtro do Prisma (ver validation/play.ts).
+  const parsedInput = submitLeadFormSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { ok: false, reason: "invalid" };
+  const input = parsedInput.data;
+
   const ip = await getRequestIp();
   // Sem IP, usa o id da participação (único por submissão) em vez de um
   // balde "unknown" partilhado por todos os visitantes sem IP detetável.
@@ -188,8 +211,8 @@ export async function submitLeadFormAction(
 
   // Posse: sem o token certo, não se associa uma lead à participação de outra
   // pessoa (ver ParticipationRef).
-  const participation = await prisma.participation.findFirst({
-    where: { id: input.ref.participationId, idempotencyKey: input.ref.token },
+  const participation = await prisma.participation.findUnique({
+    where: { id: input.ref.participationId },
     include: {
       campaign: {
         include: {
@@ -198,7 +221,10 @@ export async function submitLeadFormAction(
       },
     },
   });
-  if (!participation?.campaign.leadForm) return { ok: false, reason: "invalid" };
+  if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) {
+    return { ok: false, reason: "invalid" };
+  }
+  if (!participation.campaign.leadForm) return { ok: false, reason: "invalid" };
 
   // Já submetido: não se grava outra vez nem se duplicam os registos de
   // consentimento. O fluxo público pode repetir o envio depois de uma falha
@@ -339,8 +365,12 @@ export interface MemorySubmitResult {
 }
 
 export async function submitMemoryResultAction(
-  input: MemorySubmitInput,
+  rawInput: MemorySubmitInput,
 ): Promise<GameActionResponse<MemorySubmitResult>> {
+  const parsedInput = memorySubmitSchema.safeParse(rawInput);
+  if (!parsedInput.success) return { status: "blocked", reason: "not_found" };
+  const input = parsedInput.data;
+
   const rateLimit = await checkRateLimit(`submit:${input.ref.participationId}`, 10, 60);
   if (!rateLimit.allowed)
     throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
@@ -412,8 +442,11 @@ export async function submitMemoryResultAction(
 }
 
 export async function spinWheelAction(
-  ref: ParticipationRef,
+  rawRef: ParticipationRef,
 ): Promise<GameActionResponse<WheelSpinResult>> {
+  const ref = parseParticipationRef(rawRef);
+  if (!ref) return { status: "blocked", reason: "not_found" };
+
   const rateLimit = await checkRateLimit(`submit:${ref.participationId}`, 10, 60);
   if (!rateLimit.allowed)
     throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
@@ -422,6 +455,12 @@ export async function spinWheelAction(
   if (!access.ok) return { status: "blocked", reason: access.reason };
   const { gate } = access;
   if (gate.campaignType !== "WHEEL") return { status: "blocked", reason: "not_found" };
+
+  // "Antes de revelar o resultado": nada se sorteia antes do formulário. Para
+  // quem joga é igual — não vê nada até o submeter —, mas assim uma lead
+  // recusada (duplicado, idade) ou abandonada não fica com um prémio e um
+  // código atribuídos que nunca vai ver.
+  if (gate.policy === "withhold_result") return { status: "lead_required" };
 
   try {
     const result = await drawAndAwardPrize(gate.participationId, new Date());
@@ -436,7 +475,6 @@ export async function spinWheelAction(
     }
     // Projeção explícita: o resultado gravado guarda o id interno do prémio,
     // e tudo o que esta ação devolve chega ao browser tal como está.
-    if (gate.policy === "withhold_result") return { status: "lead_required" };
     return { status: "revealed", result: projectWheelOutcome(result, gate.policy) };
   } catch (error) {
     if (error instanceof NoEligibleSegmentsError) {
@@ -449,10 +487,19 @@ export async function spinWheelAction(
 }
 
 export async function submitQuizAction(
-  ref: ParticipationRef,
-  submissions: QuizPlayerSubmission[],
-  timeSeconds: number,
+  rawRef: ParticipationRef,
+  rawSubmissions: QuizPlayerSubmission[],
+  rawTimeSeconds: number,
 ): Promise<GameActionResponse<QuizPlayerResult>> {
+  const ref = parseParticipationRef(rawRef);
+  const parsedSubmissions = quizSubmissionsSchema.safeParse(rawSubmissions);
+  const parsedTime = quizTimeSecondsSchema.safeParse(rawTimeSeconds);
+  if (!ref || !parsedSubmissions.success || !parsedTime.success) {
+    return { status: "blocked", reason: "not_found" };
+  }
+  const submissions = parsedSubmissions.data;
+  const timeSeconds = parsedTime.data;
+
   const rateLimit = await checkRateLimit(`submit:${ref.participationId}`, 10, 60);
   if (!rateLimit.allowed)
     throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
