@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { requireApiPermission } from "@/server/auth/api-guard";
-import { s3, MEDIA_BUCKET } from "@/server/storage/client";
+import { presignUploadUrl } from "@/server/storage/client";
 import {
   classifyMimeType,
   extensionForMimeType,
@@ -37,13 +35,9 @@ export async function POST(request: Request) {
 
   const key = uploadKeyFor(access.context.organizationId, extensionForMimeType(contentType));
 
-  // O tipo e o tamanho entram na assinatura: o browser não pode carregar
-  // outra coisa (um SVG com script, um ficheiro maior) com este URL.
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: MEDIA_BUCKET, Key: key, ContentType: contentType, ContentLength: sizeBytes }),
-    { expiresIn: 300 },
-  );
+  // O URL continua reutilizável até expirar: a confirmação copia o objeto
+  // para uma chave definitiva (ver confirmedKeyFor).
+  const uploadUrl = await presignUploadUrl(key, contentType, sizeBytes);
 
   return NextResponse.json({ key, uploadUrl, kind });
 }

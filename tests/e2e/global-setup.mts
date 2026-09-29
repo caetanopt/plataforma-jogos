@@ -10,6 +10,7 @@ import { disconnectPrisma, getPrisma } from "./db.mts";
  */
 export const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "e2e-admin@example.test";
 export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "E2eSuite!Passw0rd";
+const REMOTE_ALLOWED = process.env.E2E_ALLOW_REMOTE_SERVICES === "true" && !process.env.CI;
 export const E2E_ORG_SLUG = "caetano";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
@@ -24,7 +25,7 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 function assertLocalService(name: string, url: string | undefined): void {
   // Em CI nunca: os traces e o relatório do Playwright (publicados como
   // artefacto) guardam o que é preenchido e os cookies de sessão.
-  if (process.env.E2E_ALLOW_REMOTE_SERVICES === "true" && !process.env.CI) return;
+  if (REMOTE_ALLOWED) return;
   let host: string | null = null;
   try {
     host = url ? new URL(url).hostname : null;
@@ -47,6 +48,11 @@ function assertLocalService(name: string, url: string | undefined): void {
  * para a suite não depender de `npm run db:seed` ter corrido antes.
  */
 export default async function globalSetup(): Promise<void> {
+  // Numa máquina de testes remota, a password por omissão (escrita neste
+  // ficheiro) daria a qualquer leitor do repositório acesso à conta.
+  if (REMOTE_ALLOWED && (!process.env.E2E_ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD.length < 16)) {
+    throw new Error("[e2e] Com E2E_ALLOW_REMOTE_SERVICES=true, defina E2E_ADMIN_PASSWORD (16+ caracteres).");
+  }
   assertLocalService("DATABASE_URL", process.env.DATABASE_URL);
   assertLocalService("REDIS_URL", process.env.REDIS_URL ?? "redis://localhost:6379");
 
@@ -66,12 +72,14 @@ export default async function globalSetup(): Promise<void> {
   const passwordHash = await hashPassword(E2E_ADMIN_PASSWORD);
   const user = await prisma.user.upsert({
     where: { email: E2E_ADMIN_EMAIL },
-    update: { passwordHash },
+    // Administrador da organização chega à suite; superadmin daria acesso a
+    // todas as organizações da base de dados onde a suite corre.
+    update: { passwordHash, isSuperAdmin: false },
     create: {
       name: "Administrador e2e",
       email: E2E_ADMIN_EMAIL,
       passwordHash,
-      isSuperAdmin: true,
+      isSuperAdmin: false,
       emailVerifiedAt: new Date(),
     },
   });

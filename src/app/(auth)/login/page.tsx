@@ -9,6 +9,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_credentials: "E-mail ou password inválidos.",
   reset_token_invalid: "O link de recuperação é inválido ou expirou.",
   no_organization: "A sua conta não está associada a nenhuma organização.",
+  suspended: "O acesso da sua organização está suspenso. Contacte o administrador da plataforma.",
 };
 
 export default async function LoginPage({

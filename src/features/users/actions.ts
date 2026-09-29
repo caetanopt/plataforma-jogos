@@ -99,8 +99,20 @@ export async function inviteUserAction(formData: FormData): Promise<void> {
       await prisma.$transaction([
         prisma.passwordResetToken.deleteMany({ where: { userId: user.id, token } }),
         prisma.membership.delete({ where: { id: membership.id } }),
-        prisma.user.delete({ where: { id: user.id } }),
+        // Só se ninguém mais o convidou entretanto: o envio pode demorar e,
+        // nesse intervalo, outra organização pode ter adicionado o mesmo
+        // e-mail — apagar o utilizador levava essa membership em cascata.
+        prisma.user.deleteMany({ where: { id: user.id, memberships: { none: {} } } }),
       ]);
+      await logAudit({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        action: "PERMISSION_CHANGE",
+        entityType: "Membership",
+        entityId: membership.id,
+        result: "FAILURE",
+        metadata: { action: "invite", reason: "email_failed", rolledBack: true },
+      });
       redirect("/users?error=invite_email_failed");
     }
   }

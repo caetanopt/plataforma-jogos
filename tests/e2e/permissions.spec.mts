@@ -42,6 +42,13 @@ test.describe("Reposição de password e papel de Visualizador", () => {
       // O token sai da barra de endereço assim que o formulário o lê.
       expect(page.url()).not.toContain(token);
 
+      // Primeiro um erro de validação: o token tem de sobreviver a ele (antes
+      // perdia-se e todos os envios seguintes falhavam).
+      await page.fill("#password", password);
+      await page.fill("#confirmPassword", `${password}-diferente`);
+      await page.getByRole("button", { name: "Guardar password" }).click();
+      await expect(page.getByText("as duas entradas devem coincidir")).toBeVisible();
+
       await page.fill("#password", password);
       await page.fill("#confirmPassword", password);
       await page.getByRole("button", { name: "Guardar password" }).click();

@@ -96,9 +96,11 @@ export default async function FoldersPage({
           {getGreeting(new Date())}
           {greetingName ? `, ${greetingName}` : ""} <span aria-hidden="true">👋</span>
         </h1>
-        <Link href="/apps/new" className={buttonVariants()}>
-          Criar aplicação
-        </Link>
+        {can(context, "campaign:create") && (
+          <Link href="/apps/new" className={buttonVariants()}>
+            Criar aplicação
+          </Link>
+        )}
       </header>
 
       {params.error && (

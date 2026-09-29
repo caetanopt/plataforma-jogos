@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/server/auth/page-guard";
+import { can } from "@/server/permissions";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { getPublishReadiness } from "@/features/publishing/readiness";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
@@ -52,7 +53,10 @@ export default async function PublishStepPage({
 
   const readiness = getPublishReadiness(campaign);
   const effectiveState = getEffectivePublicState(campaign);
-  const isLive = campaign.status !== "DRAFT" && campaign.status !== "IN_REVIEW" && campaign.status !== "ARCHIVED";
+  const isLive =
+    campaign.status !== "DRAFT" &&
+    campaign.status !== "IN_REVIEW" &&
+    campaign.status !== "ARCHIVED";
 
   const versions = await prisma.campaignVersion.findMany({
     where: { campaignId: id },
@@ -68,13 +72,23 @@ export default async function PublishStepPage({
     : null;
   const [qrPng, qrSvg] = publication
     ? await Promise.all([
-        publication.qrPngMediaId ? prisma.mediaAsset.findFirst({ where: { id: publication.qrPngMediaId, organizationId: context.organizationId } }) : null,
-        publication.qrSvgMediaId ? prisma.mediaAsset.findFirst({ where: { id: publication.qrSvgMediaId, organizationId: context.organizationId } }) : null,
+        publication.qrPngMediaId
+          ? prisma.mediaAsset.findFirst({
+              where: { id: publication.qrPngMediaId, organizationId: context.organizationId },
+            })
+          : null,
+        publication.qrSvgMediaId
+          ? prisma.mediaAsset.findFirst({
+              where: { id: publication.qrSvgMediaId, organizationId: context.organizationId },
+            })
+          : null,
       ])
     : [null, null];
 
   const url = publicPlayUrl(campaign.slug);
-  const embedTitle = escapeHtmlAttribute(campaign.publicTitle ?? campaign.internalName);
+  const canPublish = can(context, "campaign:publish");
+  // Nunca o nome interno: o snippet vai para o site de terceiros.
+  const embedTitle = escapeHtmlAttribute(campaign.publicTitle || campaign.startTitle || "Campanha");
   const embedSnippet = `<iframe src="${url}?embed=1" width="100%" height="${publication?.embedHeightPx ?? 720}" style="border:0" title="${embedTitle}"></iframe>`;
 
   return (
@@ -88,7 +102,9 @@ export default async function PublishStepPage({
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <span className="text-sm text-caetano-anthracite-80">Estado:</span>
-        <Badge tone={CAMPAIGN_STATUS_TONE[campaign.status]}>{CAMPAIGN_STATUS_LABELS[campaign.status]}</Badge>
+        <Badge tone={CAMPAIGN_STATUS_TONE[campaign.status]}>
+          {CAMPAIGN_STATUS_LABELS[campaign.status]}
+        </Badge>
         {isLive && (
           <span className="text-sm text-caetano-anthracite-80">
             — {EFFECTIVE_STATE_LABELS[effectiveState]}
@@ -114,35 +130,46 @@ export default async function PublishStepPage({
         </Alert>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <form action={publishCampaignAction}>
-          <input type="hidden" name="campaignId" value={campaign.id} />
-          {/* Publicar cria uma CampaignVersion imutável: dois cliques seguidos
+      {!canPublish && (
+        <p className="text-sm text-caetano-anthracite-80">
+          Publicar e despublicar exige permissão de publicação. Peça a um administrador da
+          organização.
+        </p>
+      )}
+
+      {canPublish && (
+        <div className="flex flex-wrap gap-2">
+          <form action={publishCampaignAction}>
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            {/* Publicar cria uma CampaignVersion imutável: dois cliques seguidos
               geravam duas versões. O SubmitButton desativa-se enquanto a ação
               corre. */}
-          <SubmitButton disabled={!readiness.ready} pendingLabel="A publicar…">
-            {isLive ? "Republicar (nova versão)" : "Publicar"}
-          </SubmitButton>
-        </form>
-        {isLive && (
-          <form action={unpublishCampaignAction}>
-            <input type="hidden" name="campaignId" value={campaign.id} />
-            <ConfirmSubmitButton
-              confirmMessage="Despublicar a campanha? O link público deixa de aceitar participações e a campanha volta a rascunho."
-              variant="outline"
-            >
-              Despublicar (voltar a rascunho)
-            </ConfirmSubmitButton>
+            <SubmitButton disabled={!readiness.ready} pendingLabel="A publicar…">
+              {isLive ? "Republicar (nova versão)" : "Publicar"}
+            </SubmitButton>
           </form>
-        )}
-      </div>
+          {isLive && (
+            <form action={unpublishCampaignAction}>
+              <input type="hidden" name="campaignId" value={campaign.id} />
+              <ConfirmSubmitButton
+                confirmMessage="Despublicar a campanha? O link público deixa de aceitar participações e a campanha volta a rascunho."
+                variant="outline"
+              >
+                Despublicar (voltar a rascunho)
+              </ConfirmSubmitButton>
+            </form>
+          )}
+        </div>
+      )}
 
       {isLive && (
         <>
           <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
             <h3 className="text-sm font-bold text-caetano-anthracite">Link direto</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <code className="flex-1 rounded-lg bg-caetano-medium-gray-20 px-3 py-2 text-sm break-all">{url}</code>
+              <code className="flex-1 rounded-lg bg-caetano-medium-gray-20 px-3 py-2 text-sm break-all">
+                {url}
+              </code>
               <CopyButton value={url} />
               <a
                 href={`${url}?test=1`}
@@ -165,7 +192,11 @@ export default async function PublishStepPage({
             {qrPng && qrSvg ? (
               <div className="flex flex-wrap items-center gap-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrPng.url} alt="QR Code" className="h-32 w-32 rounded-lg border border-caetano-medium-gray-40" />
+                <img
+                  src={qrPng.url}
+                  alt="QR Code"
+                  className="h-32 w-32 rounded-lg border border-caetano-medium-gray-40"
+                />
                 <div className="flex flex-col gap-2">
                   <a href={qrPng.url} download className="text-sm text-caetano-deep-blue underline">
                     Descarregar PNG

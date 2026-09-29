@@ -22,6 +22,7 @@ export async function getCampaignStats(
   organizationId: string,
   range: DateRange,
   filters: CampaignStatsFilters,
+  options: { showParticipantNames: boolean } = { showParticipantNames: false },
 ) {
   const campaignWhere = {
     organizationId,
@@ -124,7 +125,7 @@ export async function getCampaignStats(
   } = { general };
 
   if (singleType === "MEMORY") {
-    result.memory = await getMemoryStats(campaignIds, range);
+    result.memory = await getMemoryStats(campaignIds, range, options.showParticipantNames);
   } else if (singleType === "WHEEL") {
     result.wheel = await getWheelStats(campaignIds, range);
   } else if (singleType === "QUIZ") {
@@ -134,7 +135,7 @@ export async function getCampaignStats(
   return result;
 }
 
-async function getMemoryStats(campaignIds: string[], range: DateRange) {
+async function getMemoryStats(campaignIds: string[], range: DateRange, showParticipantNames: boolean) {
   const results = await prisma.memoryResult.findMany({
     where: {
       participation: {
@@ -176,7 +177,8 @@ async function getMemoryStats(campaignIds: string[], range: DateRange) {
         .filter(Boolean)
         .join(" ");
       return {
-        name: anonymize || !realName ? "Anónimo" : realName,
+        // Nome real só para quem pode ver leads (ver getCampaignStats).
+        name: anonymize || !showParticipantNames || !realName ? "Anónimo" : realName,
         score: r.score,
         timeSeconds: r.timeSeconds,
       };

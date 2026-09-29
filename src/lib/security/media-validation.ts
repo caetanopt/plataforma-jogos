@@ -36,3 +36,29 @@ export function extensionForMimeType(mimeType: string): string {
       return "bin";
   }
 }
+
+/**
+ * Confirma o tipo pelo conteúdo (secção 9: "validar MIME, tamanho e
+ * conteúdo"). O Content-Type declarado não chega: é o browser que o escolhe.
+ */
+export function matchesMagicBytes(mimeType: string, bytes: Uint8Array): boolean {
+  const at = (offset: number, expected: number[]) => expected.every((byte, i) => bytes[offset + i] === byte);
+  const ascii = (offset: number, text: string) => at(offset, [...text].map((c) => c.charCodeAt(0)));
+  switch (mimeType) {
+    case "image/png":
+      return at(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case "image/jpeg":
+      return at(0, [0xff, 0xd8, 0xff]);
+    case "image/gif":
+      return ascii(0, "GIF87a") || ascii(0, "GIF89a");
+    case "image/webp":
+      return ascii(0, "RIFF") && ascii(8, "WEBP");
+    case "video/mp4":
+      return ascii(4, "ftyp");
+    default:
+      return false;
+  }
+}
+
+/** Bytes a ler para `matchesMagicBytes`. */
+export const MAGIC_BYTES_LENGTH = 16;

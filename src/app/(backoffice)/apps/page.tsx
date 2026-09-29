@@ -83,6 +83,7 @@ export default async function AppsListPage({
   ]);
 
   const canEdit = can(context, "campaign:edit");
+  const canViewLeads = can(context, "leads:view");
   const canPublish = can(context, "campaign:publish");
   const canArchive = can(context, "campaign:archive");
   const canDelete = can(context, "campaign:delete");
@@ -214,6 +215,7 @@ export default async function AppsListPage({
                   campaignId={campaign.id}
                   status={campaign.status}
                   canEdit={canEdit}
+                  canViewLeads={canViewLeads}
                   canPublish={canPublish}
                   canArchive={canArchive}
                   canDelete={canDelete}
@@ -280,6 +282,7 @@ export default async function AppsListPage({
                       campaignId={campaign.id}
                       status={campaign.status}
                       canEdit={canEdit}
+                      canViewLeads={canViewLeads}
                       canPublish={canPublish}
                       canArchive={canArchive}
                       canDelete={canDelete}

@@ -15,6 +15,9 @@ export type ApiAccess = { ok: true; context: OrgContext } | { ok: false; respons
 export async function requireApiPermission(anyOf: readonly PermissionAction[]): Promise<ApiAccess> {
   const result = await resolveOrgContext();
   if (!result.ok) {
+    if (result.reason === "suspended") {
+      return { ok: false, response: NextResponse.json({ error: "Organização suspensa." }, { status: 403 }) };
+    }
     return { ok: false, response: NextResponse.json({ error: "Sessão necessária." }, { status: 401 }) };
   }
   if (!anyOf.some((action) => can(result.context, action))) {

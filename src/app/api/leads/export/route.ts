@@ -10,7 +10,11 @@ export async function GET(request: Request) {
   // 401/403 em vez do redirect para o login (307) ou do erro 500 de um
   // assertCan falhado. A tentativa recusada fica na auditoria (§26).
   const result = await resolveOrgContext();
-  if (!result.ok) return NextResponse.json({ error: "Sessão necessária." }, { status: 401 });
+  if (!result.ok) {
+    return result.reason === "suspended"
+      ? NextResponse.json({ error: "Organização suspensa." }, { status: 403 })
+      : NextResponse.json({ error: "Sessão necessária." }, { status: 401 });
+  }
   const { context } = result;
   if (!can(context, "leads:export")) {
     await logAudit({

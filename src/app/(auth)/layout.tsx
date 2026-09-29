@@ -1,11 +1,14 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { auth } from "@/server/auth";
+import { resolveOrgContext } from "@/server/auth/session";
 import { BrandLogo } from "@/components/backoffice/brand-logo";
 
 export default async function AuthLayout({ children }: { children: ReactNode }) {
-  const session = await auth();
-  if (session?.user) {
+  // Só quem tem um contexto válido segue para o backoffice. Com "tem sessão"
+  // bastava, um utilizador sem organização, desativado ou de uma organização
+  // suspensa ficava num ciclo /folders -> /login -> /folders.
+  const context = await resolveOrgContext();
+  if (context.ok) {
     redirect("/folders");
   }
 

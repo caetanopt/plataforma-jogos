@@ -14,6 +14,7 @@ export function CampaignRowActions({
   campaignId,
   status,
   canEdit,
+  canViewLeads,
   canPublish,
   canArchive,
   canDelete,
@@ -21,6 +22,8 @@ export function CampaignRowActions({
   campaignId: string;
   status: CampaignStatus;
   canEdit: boolean;
+  /** Sem leads:view (Visualizador, Editor) a ligação acabava em "Sem permissão". */
+  canViewLeads: boolean;
   canPublish: boolean;
   canArchive: boolean;
   canDelete: boolean;
@@ -32,12 +35,17 @@ export function CampaignRowActions({
             Editar
           </Link>
         )}
-        <Link href={`/apps/${campaignId}/publicar`} className={menuItemClass}>
-          Pré-visualizar / testar
-        </Link>
-        <Link href={`/leads?campaignId=${campaignId}`} className={menuItemClass}>
-          Leads
-        </Link>
+        {/* A pré-visualização vive no editor (exige campaign:edit). */}
+        {canEdit && (
+          <Link href={`/apps/${campaignId}/publicar`} className={menuItemClass}>
+            Pré-visualizar / testar
+          </Link>
+        )}
+        {canViewLeads && (
+          <Link href={`/leads?campaignId=${campaignId}`} className={menuItemClass}>
+            Leads
+          </Link>
+        )}
         <Link href={`/analytics?campaignId=${campaignId}`} className={menuItemClass}>
           Estatísticas
         </Link>

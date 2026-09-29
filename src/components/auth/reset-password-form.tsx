@@ -18,14 +18,24 @@ function tokenFromHash(): string | null {
 }
 
 export function ResetPasswordForm({ legacyToken }: { legacyToken?: string }) {
-  const [state, formAction] = useActionState(resetPasswordAction, { error: null });
-  const tokenInput = useRef<HTMLInputElement>(null);
+  // O token fica numa ref e é juntado no envio. Antes ia num input hidden
+  // alterado pelo DOM: depois de um erro de validação o React repunha o
+  // defaultValue (vazio), o hash já tinha sido apagado, e todos os envios
+  // seguintes falhavam — o utilizador ficava preso.
+  const token = useRef(legacyToken ?? "");
+  const [state, formAction] = useActionState(
+    (previous: ResetPasswordState, formData: FormData) => {
+      formData.set("token", token.current);
+      return resetPasswordAction(previous, formData);
+    },
+    { error: null },
+  );
 
   useEffect(() => {
     if (legacyToken) return;
-    const token = tokenFromHash();
-    if (token && tokenInput.current) {
-      tokenInput.current.value = token;
+    const fromHash = tokenFromHash();
+    if (fromHash) {
+      token.current = fromHash;
       // Tira o token da barra de endereço e do histórico do browser.
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -40,7 +50,6 @@ export function ResetPasswordForm({ legacyToken }: { legacyToken?: string }) {
       )}
 
       <form action={formAction} className="space-y-4">
-        <input ref={tokenInput} type="hidden" name="token" defaultValue={legacyToken ?? ""} />
         <div>
           <Label htmlFor="password">Nova password</Label>
           <Input id="password" name="password" type="password" autoComplete="new-password" minLength={10} required />

@@ -31,14 +31,22 @@ vi.mock("@/lib/security/rate-limit", () => ({
 }));
 vi.mock("@/lib/security/request-ip", () => ({ getRequestIp: async () => null }));
 
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0]);
 const storage = vi.hoisted(() => ({
   head: null as null | { contentLength: number; contentType: string },
+  prefix: new Uint8Array(),
+  moved: [] as Array<{ from: string; to: string }>,
 }));
 vi.mock("@/server/storage/client", () => ({
   s3: { send: async () => ({}) },
   MEDIA_BUCKET: "teste",
   publicUrlForKey: (key: string) => `https://cdn.test/${key}`,
   headObject: async () => storage.head,
+  readObjectPrefix: async () => storage.prefix,
+  moveObject: async (from: string, to: string) => {
+    storage.moved.push({ from, to });
+  },
+  presignUploadUrl: async () => "https://storage.test/assinado",
   StorageError: class StorageError extends Error {},
   uploadBuffer: async () => "https://cdn.test/x",
 }));
@@ -194,6 +202,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   storage.head = null;
+  storage.prefix = PNG_BYTES;
+  storage.moved = [];
   mail.fail = false;
 });
 
@@ -278,7 +288,21 @@ describe("confirmação de uploads", () => {
     expect((await confirm()).status).toBe(400);
   });
 
-  it("deriva o URL no servidor (ignora o que o browser manda) e não duplica ao repetir", async () => {
+  it("recusa quando o conteúdo não corresponde ao tipo declarado (ex.: SVG com nome de PNG)", async () => {
+    state.current = org.contexts.EDITOR;
+    storage.head = { contentLength: 100, contentType: "image/png" };
+    storage.prefix = new TextEncoder().encode("<svg onload=alert(1)>");
+    const key = uploadKeyFor(org.id, "png");
+
+    const response = await confirmRoute.POST(
+      jsonRequest("/api/uploads/confirm", { key, mimeType: "image/png", sizeBytes: 100 }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(storage.moved).toHaveLength(0);
+  });
+
+  it("copia para a chave definitiva, deriva o URL no servidor e não duplica ao repetir", async () => {
     state.current = org.contexts.EDITOR;
     storage.head = { contentLength: 100, contentType: "image/png" };
     const key = uploadKeyFor(org.id, "png");
@@ -289,7 +313,11 @@ describe("confirmação de uploads", () => {
 
     expect(first.status).toBe(200);
     const created = (await first.json()) as { id: string; url: string };
-    expect(created.url).toBe(`https://cdn.test/${key}`);
+    // O URL de upload assinado continua válido uns minutos; a media fica
+    // numa chave que ele não pode escrever.
+    const finalKey = key.replace(/^uploads\//, "media/");
+    expect(storage.moved).toEqual([{ from: key, to: finalKey }]);
+    expect(created.url).toBe(`https://cdn.test/${finalKey}`);
     expect(((await second.json()) as { id: string }).id).toBe(created.id);
   });
 });
@@ -376,9 +404,12 @@ describe("convite com falha no envio do e-mail", () => {
 describe("logout", () => {
   it("apaga os cookies __Secure-/__Host- com o atributo Secure", async () => {
     const response = await logoutRoute.POST(
-      new Request("https://app.example/api/logout", {
+      new Request("http://localhost:3000/api/logout", {
         method: "POST",
         headers: {
+          // Atrás de um proxy: o Next vê localhost, o browser usou o domínio público.
+          host: "localhost:3000",
+          "x-forwarded-host": "app.example",
           origin: "https://app.example",
           cookie: "__Secure-authjs.session-token=abc; __Host-authjs.csrf-token=def; outro=1",
         },
@@ -386,6 +417,7 @@ describe("logout", () => {
     );
 
     expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
     const cookies = response.headers.getSetCookie();
     const session = cookies.find((c) => c.startsWith("__Secure-authjs.session-token="));
     const csrf = cookies.find((c) => c.startsWith("__Host-authjs.csrf-token="));
@@ -396,7 +428,10 @@ describe("logout", () => {
 
   it("recusa um pedido de outra origem", async () => {
     const response = await logoutRoute.POST(
-      new Request("https://app.example/api/logout", { method: "POST", headers: { origin: "https://evil.example" } }),
+      new Request("https://app.example/api/logout", {
+        method: "POST",
+        headers: { host: "app.example", origin: "https://evil.example" },
+      }),
     );
     expect(response.status).toBe(403);
   });

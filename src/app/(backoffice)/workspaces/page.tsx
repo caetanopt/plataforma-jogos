@@ -1,4 +1,4 @@
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { createWorkspaceAction, renameWorkspaceAction } from "@/features/workspaces/actions";
@@ -29,7 +29,9 @@ export default async function WorkspacesPage({
   searchParams: Promise<{ error?: string; page?: string }>;
 }) {
   const params = await searchParams;
-  const context = await requireOrgContext();
+  // A navegação só mostra a entrada a quem gere espaços; a página segue a
+  // mesma regra.
+  const context = await requirePagePermission("workspace:manage");
   const canManage = can(context, "workspace:manage");
 
   const page = Math.max(1, Number(params.page ?? 1) || 1);

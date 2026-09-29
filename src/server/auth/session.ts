@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/db/client";
@@ -14,19 +15,29 @@ export interface OrgContext {
 
 export type OrgContextResult =
   | { ok: true; context: OrgContext }
-  | { ok: false; reason: "no_session" | "no_organization" };
+  | { ok: false; reason: "no_session" | "no_organization" | "suspended" };
 
 /**
  * Resolve o contexto de organização ativo do utilizador autenticado, sem
  * redirecionar — as rotas da API respondem 401 em vez de um redirect HTML.
- * Junta-se sempre à base de dados para obter o papel/flags atuais em vez de
- * confiar no token — mudanças de permissão feitas por um admin aplicam-se de
- * imediato.
+ *
+ * O token só diz quem é: o estado do utilizador (ativo, superadmin), o papel
+ * e as flags, e a suspensão da organização vêm sempre da base de dados, para
+ * que uma revogação se aplique no pedido seguinte e não só quando o JWT (8 h)
+ * expirar. `cache` evita repetir as consultas no mesmo pedido (layout e
+ * página chamam isto os dois).
  */
-export async function resolveOrgContext(): Promise<OrgContextResult> {
+export const resolveOrgContext = cache(async (): Promise<OrgContextResult> => {
   const session = await auth();
-  const user = session?.user;
-  if (!user) return { ok: false, reason: "no_session" };
+  const sessionUser = session?.user;
+  if (!sessionUser) return { ok: false, reason: "no_session" };
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: sessionUser.id },
+    select: { id: true, name: true, email: true, isActive: true, isSuperAdmin: true },
+  });
+  if (!dbUser || !dbUser.isActive) return { ok: false, reason: "no_session" };
+  const user = { ...dbUser, activeOrganizationId: sessionUser.activeOrganizationId };
 
   let organizationId = user.activeOrganizationId;
   let membership: Membership | null = null;
@@ -49,6 +60,15 @@ export async function resolveOrgContext(): Promise<OrgContextResult> {
 
   if (!organizationId) return { ok: false, reason: "no_organization" };
 
+  // Secção 3: "suspender organizações". O superadmin continua a entrar.
+  if (!user.isSuperAdmin) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { suspendedAt: true },
+    });
+    if (!organization || organization.suspendedAt) return { ok: false, reason: "suspended" };
+  }
+
   return {
     ok: true,
     context: {
@@ -60,11 +80,19 @@ export async function resolveOrgContext(): Promise<OrgContextResult> {
       membership,
     },
   };
-}
+});
 
 /** Para páginas e server actions: sem sessão ou organização, vai para o login. */
 export async function requireOrgContext(): Promise<OrgContext> {
   const result = await resolveOrgContext();
-  if (!result.ok) redirect(result.reason === "no_session" ? "/login" : "/login?error=no_organization");
+  if (!result.ok) {
+    redirect(
+      result.reason === "no_session"
+        ? "/login"
+        : result.reason === "suspended"
+          ? "/login?error=suspended"
+          : "/login?error=no_organization",
+    );
+  }
   return result.context;
 }

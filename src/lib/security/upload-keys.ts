@@ -25,3 +25,14 @@ export function isUploadKeyOf(organizationId: string, key: string, extension: st
   );
   return pattern.test(key);
 }
+
+/**
+ * Chave definitiva de uma media confirmada: `media/...` em vez de
+ * `uploads/...`. O URL de upload assinado continua válido uns minutos e
+ * permitia escrever por cima do objeto já confirmado (com outro conteúdo);
+ * a confirmação copia-o para uma chave que nenhum URL assinado permite
+ * escrever.
+ */
+export function confirmedKeyFor(uploadKey: string): string {
+  return uploadKey.replace(/^uploads\//, "media/");
+}

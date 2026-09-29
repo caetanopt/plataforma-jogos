@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/server/auth/page-guard";
+import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { resolveDateRange } from "@/lib/dates/range";
 import { getCampaignStats, type CampaignStatsFilters } from "@/features/analytics/campaign-stats";
@@ -35,6 +36,8 @@ export default async function AnalyticsPage({
 }) {
   const params = await searchParams;
   const context = await requirePagePermission("stats:view");
+  // As ligações dos alertas levam ao editor: só para quem o pode abrir.
+  const canEditCampaigns = can(context, "campaign:edit");
   const range = resolveDateRange(params);
 
   const type =
@@ -67,7 +70,11 @@ export default async function AnalyticsPage({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    getCampaignStats(context.organizationId, range, filters),
+    // Nomes reais no ranking só para quem pode ver leads (§3): o Visualizador
+    // e o Editor veem "Anónimo".
+    getCampaignStats(context.organizationId, range, filters, {
+      showParticipantNames: can(context, "leads:view"),
+    }),
     // Os alertas ignoram deliberadamente o intervalo de datas: ver
     // campaign-alerts.ts.
     getCampaignAlerts(context.organizationId, filters),
@@ -184,12 +191,16 @@ export default async function AnalyticsPage({
                 className="rounded-lg border border-caetano-dynamic-orange-40 bg-caetano-dynamic-orange-20 px-4 py-2 text-sm text-caetano-anthracite"
               >
                 A campanha{" "}
-                <Link
-                  href={`/apps/${campaign.id}/agenda`}
-                  className="font-bold underline underline-offset-2 hover:no-underline"
-                >
-                  {campaign.internalName}
-                </Link>{" "}
+                {canEditCampaigns ? (
+                  <Link
+                    href={`/apps/${campaign.id}/agenda`}
+                    className="font-bold underline underline-offset-2 hover:no-underline"
+                  >
+                    {campaign.internalName}
+                  </Link>
+                ) : (
+                  <span className="font-bold">{campaign.internalName}</span>
+                )}{" "}
                 {campaign.scheduleEndAt ? (
                   <>
                     termina a{" "}
@@ -209,12 +220,16 @@ export default async function AnalyticsPage({
                 className="rounded-lg border border-danger bg-danger-surface px-4 py-2 text-sm text-danger-strong"
               >
                 Stock baixo no prémio{" "}
-                <Link
-                  href={`/apps/${prize.campaignId}/jogo`}
-                  className="font-bold underline underline-offset-2 hover:no-underline"
-                >
-                  {prize.publicName}
-                </Link>{" "}
+                {canEditCampaigns ? (
+                  <Link
+                    href={`/apps/${prize.campaignId}/jogo`}
+                    className="font-bold underline underline-offset-2 hover:no-underline"
+                  >
+                    {prize.publicName}
+                  </Link>
+                ) : (
+                  <span className="font-bold">{prize.publicName}</span>
+                )}{" "}
                 ({prize.remaining === 1 ? "1 restante" : `${prize.remaining} restantes`}).
               </li>
             ))}
