@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
 
       - name: Aplicar migrações (prisma migrate deploy)
-        run: npx prisma migrate deploy
+        run: npx --no-install prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 

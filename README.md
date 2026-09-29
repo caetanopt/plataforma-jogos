@@ -68,6 +68,19 @@ npm run build          # build de produção
 npm run db:studio      # Prisma Studio
 ```
 
+A suite e2e usa uma conta própria (`E2E_ADMIN_EMAIL`, por omissão `e2e-admin@example.test`)
+e recusa correr se `DATABASE_URL` ou `REDIS_URL` não apontarem para `localhost` — escreve
+dados e repõe a password dessa conta. Para uma máquina de testes dedicada, definir
+`E2E_ALLOW_REMOTE_SERVICES=true` de propósito.
+
+## Dependências
+
+O build precisa das devDependencies (o CLI do Prisma, que gera o cliente no `postinstall`,
+está lá). O `npm audit` ainda aponta vulnerabilidades na cadeia do CLI do Prisma
+(`@prisma/config`, `mysql2`): é uma ferramenta de desenvolvimento, não vai no bundle da
+aplicação, e não há correção na versão 7 — não aplicar o `npm audit fix --force`, que
+propõe descer para o Prisma 6.
+
 ## Âmbito desta entrega
 
 Cobre as Fases 1-3 do roadmap definido em `CLAUDE.md` (secção 37): autenticação, organizações,

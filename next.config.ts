@@ -1,26 +1,11 @@
 import type { NextConfig } from "next";
 
-function storageHostname(): string | undefined {
-  const url = process.env.STORAGE_PUBLIC_URL;
-  if (!url) return undefined;
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return undefined;
-  }
-}
-
-const storageHost = storageHostname();
-
 const nextConfig: NextConfig = {
+  // O projeto não usa next/image. Com o otimizador desligado, /_next/image
+  // deixa de responder — era a origem de três vulnerabilidades do Next
+  // (incluindo execução remota de código com AVIF) e ficava ativo sem uso.
   images: {
-    remotePatterns: [
-      ...(storageHost
-        ? [{ protocol: "http" as const, hostname: storageHost }, { protocol: "https" as const, hostname: storageHost }]
-        : []),
-      { protocol: "http" as const, hostname: "localhost" },
-      { protocol: "http" as const, hostname: "minio" },
-    ],
+    unoptimized: true,
   },
   async redirects() {
     return [
