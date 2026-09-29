@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { Redis } from "ioredis";
 import { disconnectPrisma, getPrisma } from "./db.mts";
 import { loginAsAdmin, E2E_ADMIN_EMAIL } from "./helpers";
+import { rateLimitRedisKey } from "../../src/lib/security/rate-limit-key";
 
 test.describe("Segurança", () => {
   test("IDOR / isolamento multi-tenant: um admin não acede a uma campanha de outra organização", async ({
@@ -65,7 +66,7 @@ test.describe("Segurança", () => {
       await expect(page).toHaveURL(/\/login/);
     } finally {
       // Repõe o limite para não afetar outros testes que ainda precisam de iniciar sessão.
-      await redis.del(`ratelimit:login:${E2E_ADMIN_EMAIL}`);
+      await redis.del(rateLimitRedisKey(`login:${E2E_ADMIN_EMAIL}`));
       redis.disconnect();
     }
   });

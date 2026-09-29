@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePagePermission } from "@/server/auth/page-guard";
+import { firstValues } from "@/lib/forms/search-params";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { resolveDateRange } from "@/lib/dates/range";
@@ -34,9 +35,9 @@ const STATUS_LABELS: Record<string, string> = {
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<LeadsSearchParams>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
+  const params: LeadsSearchParams = firstValues(await searchParams);
   const context = await requirePagePermission("leads:view");
   const range = resolveDateRange(params);
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);

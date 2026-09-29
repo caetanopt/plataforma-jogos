@@ -16,6 +16,7 @@ export const metadata = { title: "Utilizadores" };
 const PAGE_SIZE = 25;
 
 const ERROR_MESSAGES: Record<string, string> = {
+  invite_email_failed: "Não foi possível enviar o e-mail de convite. Nada foi criado — tente novamente.",
   validation: "Verifique os dados do convite.",
   already_member: "Este utilizador já pertence à organização.",
   last_admin: "Tem de existir pelo menos um administrador na organização.",

@@ -24,6 +24,14 @@ jobs:
 
       - run: npm ci
 
+      # O GitHub só mascara o secret inteiro; o "prisma migrate deploy" imprime
+      # o host e o nome da base de dados de produção. Mascarar as partes.
+      - name: Mascarar host e base de dados nos logs
+        run: |
+          node -e 'const u = new URL(process.env.DATABASE_URL); for (const v of [u.hostname, u.username, u.pathname.slice(1)]) if (v) console.log("::add-mask::" + v)'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Aplicar migrações (prisma migrate deploy)
         run: npx --no-install prisma migrate deploy
         env:

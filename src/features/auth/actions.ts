@@ -10,7 +10,7 @@ import {
   requestPasswordResetSchema,
   resetPasswordSchema,
 } from "@/lib/validation/auth";
-import { sendMail } from "@/server/mail/mailer";
+import { MailDeliveryError, sendMail } from "@/server/mail/mailer";
 import { passwordResetEmail } from "@/features/auth/email-templates";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { getRequestIp } from "@/lib/security/request-ip";
@@ -45,7 +45,14 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
           data: { userId: user.id, token, expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
         });
         const { subject, html, text } = passwordResetEmail(token);
-        await sendMail({ to: user.email, subject, html, text });
+        try {
+          await sendMail({ to: user.email, subject, html, text });
+        } catch (error) {
+          // A resposta tem de ser a mesma com ou sem conta (enumeração), por
+          // isso a falha só fica registada — sem o destinatário.
+          if (!(error instanceof MailDeliveryError)) throw error;
+          console.error(`[auth] ${error.message}`);
+        }
       }
     }
   }
@@ -54,7 +61,19 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
   redirect("/forgot-password?sent=1");
 }
 
-export async function resetPasswordAction(formData: FormData): Promise<void> {
+export interface ResetPasswordState {
+  error: "validation" | null;
+}
+
+/**
+ * Com useActionState: um erro de validação volta ao formulário como estado,
+ * em vez de um redirect para /reset-password/<token>?error=... que punha o
+ * token no URL (e nos logs de pedidos).
+ */
+export async function resetPasswordAction(
+  _previous: ResetPasswordState,
+  formData: FormData,
+): Promise<ResetPasswordState> {
   const token = String(formData.get("token") ?? "");
 
   // Limite por token: útil sobretudo contra reenvios acidentais do mesmo pedido.
@@ -75,7 +94,7 @@ export async function resetPasswordAction(formData: FormData): Promise<void> {
   });
 
   if (!parsed.success) {
-    redirect(`/reset-password/${token}?error=validation`);
+    return { error: "validation" };
   }
 
   const record = await prisma.passwordResetToken.findUnique({

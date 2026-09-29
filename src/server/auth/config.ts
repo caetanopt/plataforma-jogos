@@ -10,6 +10,13 @@ export const authConfig: NextAuthConfig = {
   pages: { signIn: "/login" },
   session: { strategy: "jwt", maxAge: 60 * 60 * 8 },
   trustHost: true,
+  // Só o nome do erro: com o logger por omissão, ligar `debug` para
+  // diagnosticar o login em produção punha as credenciais nos logs.
+  logger: {
+    error: (error) => console.error(`[auth] ${error.name}`),
+    warn: (code) => console.warn(`[auth] ${code}`),
+    debug: () => {},
+  },
   providers: [
     Credentials({
       credentials: { email: {}, password: {} },

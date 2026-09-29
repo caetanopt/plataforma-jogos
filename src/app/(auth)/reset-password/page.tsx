@@ -3,17 +3,16 @@ import { ResetPasswordForm } from "@/components/auth/reset-password-form";
 export const metadata = { title: "Definir password" };
 
 /**
- * Formato antigo dos links (/reset-password/<token>), mantido para os
- * convites já enviados (válidos até 7 dias). Os links novos usam o
- * fragmento — ver ../page.tsx.
+ * Os links de recuperação e de convite trazem o token no fragmento
+ * (/reset-password#t=...), que o browser não envia ao servidor — fica fora
+ * dos logs de pedidos. O formulário lê-o no browser.
  */
-export default async function LegacyResetPasswordPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export default function ResetPasswordPage() {
   return (
     <div>
       <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Definir password</h1>
       <p className="mb-6 text-sm text-caetano-anthracite-80">Escolha uma nova password para a sua conta.</p>
-      <ResetPasswordForm legacyToken={token} />
+      <ResetPasswordForm />
     </div>
   );
 }

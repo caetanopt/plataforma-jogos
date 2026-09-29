@@ -22,7 +22,9 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
  * E2E_ALLOW_REMOTE_SERVICES=true de propósito.
  */
 function assertLocalService(name: string, url: string | undefined): void {
-  if (process.env.E2E_ALLOW_REMOTE_SERVICES === "true") return;
+  // Em CI nunca: os traces e o relatório do Playwright (publicados como
+  // artefacto) guardam o que é preenchido e os cookies de sessão.
+  if (process.env.E2E_ALLOW_REMOTE_SERVICES === "true" && !process.env.CI) return;
   let host: string | null = null;
   try {
     host = url ? new URL(url).hostname : null;

@@ -1,7 +1,16 @@
 const appUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
+/**
+ * O token vai no fragmento (#t=...), que o browser nunca envia ao servidor.
+ * No caminho do URL, ficava nos logs de pedidos do Vercel, em log drains,
+ * proxies e CDN — e um token de convite é válido 7 dias.
+ */
+function tokenLink(token: string): string {
+  return `${appUrl()}/reset-password#t=${encodeURIComponent(token)}`;
+}
+
 export function passwordResetEmail(resetToken: string) {
-  const link = `${appUrl()}/reset-password/${resetToken}`;
+  const link = tokenLink(resetToken);
   return {
     subject: "Recuperação de password — Plataforma de Jogos Caetano",
     text: `Recebemos um pedido de recuperação de password. Aceda a ${link} para definir uma nova password. Se não foi você, ignore este e-mail.`,
@@ -10,7 +19,7 @@ export function passwordResetEmail(resetToken: string) {
 }
 
 export function inviteUserEmail(setupToken: string, organizationName: string) {
-  const link = `${appUrl()}/reset-password/${setupToken}`;
+  const link = tokenLink(setupToken);
   return {
     subject: `Convite para a Plataforma de Jogos — ${organizationName}`,
     text: `Foi convidado para a organização ${organizationName}. Aceda a ${link} para definir a sua password e ativar a conta.`,

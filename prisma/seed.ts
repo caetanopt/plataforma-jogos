@@ -162,7 +162,14 @@ async function main() {
 
 main()
   .catch((error) => {
-    console.error(error);
+    // Em CI o output fica num log: um erro do Prisma pode trazer o host da base
+    // de dados e os valores da consulta. Localmente, o erro completo ajuda.
+    if (canRevealSecrets(process.env, process.stdout.isTTY)) {
+      console.error(error);
+    } else {
+      const { name, code } = (error ?? {}) as { name?: string; code?: string };
+      console.error(`Seed falhou: ${name ?? "Error"}${code ? ` (${code})` : ""}`);
+    }
     process.exitCode = 1;
   })
   .finally(async () => {

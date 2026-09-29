@@ -9,7 +9,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { hashPassword } from "@/lib/security/password";
-import { sendMail } from "@/server/mail/mailer";
+import { MailDeliveryError, sendMail } from "@/server/mail/mailer";
 import { inviteUserEmail } from "@/features/auth/email-templates";
 import { inviteUserSchema, updateMembershipSchema } from "@/lib/validation/users";
 import { getField } from "@/lib/forms/form-data";
@@ -87,7 +87,22 @@ export async function inviteUserAction(formData: FormData): Promise<void> {
   if (isNewUser) {
     const organization = await prisma.organization.findUniqueOrThrow({ where: { id: context.organizationId } });
     const { subject, html, text } = inviteUserEmail(token, organization.name);
-    await sendMail({ to: user.email, subject, html, text });
+    try {
+      await sendMail({ to: user.email, subject, html, text });
+    } catch (error) {
+      if (!(error instanceof MailDeliveryError)) throw error;
+      // Sem e-mail não há convite: desfaz-se o que foi criado, para o admin
+      // poder convidar outra vez. Antes ficava uma membership sem convite, e o
+      // convite seguinte parava em "já é membro". O registo não leva o
+      // destinatário.
+      console.error(`[users] ${error.message}`);
+      await prisma.$transaction([
+        prisma.passwordResetToken.deleteMany({ where: { userId: user.id, token } }),
+        prisma.membership.delete({ where: { id: membership.id } }),
+        prisma.user.delete({ where: { id: user.id } }),
+      ]);
+      redirect("/users?error=invite_email_failed");
+    }
   }
 
   await logAudit({

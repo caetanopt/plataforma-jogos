@@ -7,44 +7,54 @@ interface SendMailInput {
   text: string;
 }
 
+/**
+ * Falha de envio sem os dados da mensagem. O erro do nodemailer traz o
+ * destinatário (`rejected`, `rejectedErrors[].recipient`, a resposta do
+ * servidor) e o Next imprime-o inteiro nos logs. Fica só o código.
+ */
+export class MailDeliveryError extends Error {
+  constructor(cause: unknown) {
+    const { code, responseCode } = (cause ?? {}) as { code?: string; responseCode?: number };
+    super(`Falha no envio de e-mail (${code ?? "desconhecido"}${responseCode ? ` ${responseCode}` : ""})`);
+    this.name = "MailDeliveryError";
+  }
+}
+
+/** Tolerante a maiúsculas e espaços: "SMTP" ou " smtp" no Vercel contam. */
+function usesSmtp(): boolean {
+  return process.env.MAIL_TRANSPORT?.trim().toLowerCase() === "smtp";
+}
+
 let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
 
 function getTransporter() {
   if (transporter) return transporter;
-
-  if (process.env.MAIL_TRANSPORT === "smtp") {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT ?? 587),
-      auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
-        : undefined,
-    });
-  } else {
-    transporter = nodemailer.createTransport({ jsonTransport: true });
-  }
+  transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined,
+  });
   return transporter;
 }
 
 export async function sendMail(input: SendMailInput): Promise<void> {
   const from = process.env.MAIL_FROM ?? "Plataforma de Jogos <no-reply@caetano.pt>";
 
-  if (process.env.MAIL_TRANSPORT !== "smtp") {
+  if (!usesSmtp()) {
     if (process.env.NODE_ENV === "production") {
-      // Em produção, nunca escrever o corpo do e-mail nos logs — pode conter
-      // um token de reset de password ou de convite. Isto é sobretudo um
-      // aviso de configuração em falta (MAIL_TRANSPORT/SMTP_* não definidos):
-      // o e-mail não está a ser entregue a ninguém.
-      console.error(
-        `[mail] MAIL_TRANSPORT não está definido como "smtp" em produção — e-mail para ${input.to} (assunto: "${input.subject}") NÃO foi enviado.`,
-      );
+      // Aviso de configuração, sem nada da mensagem: o destinatário é um dado
+      // pessoal e o corpo leva o token de reposição ou de convite.
+      console.error('[mail] MAIL_TRANSPORT não é "smtp" em produção — o e-mail NÃO foi enviado.');
       return;
     }
-    console.log(
-      `[mail:console] Para: ${input.to} | Assunto: ${input.subject}\n${input.text}`,
-    );
+    // Só em desenvolvimento: o link com o token aparece no terminal local.
+    console.log(`[mail:console] Para: ${input.to} | Assunto: ${input.subject}\n${input.text}`);
     return;
   }
 
-  await getTransporter().sendMail({ from, to: input.to, subject: input.subject, html: input.html, text: input.text });
+  try {
+    await getTransporter().sendMail({ from, to: input.to, subject: input.subject, html: input.html, text: input.text });
+  } catch (error) {
+    throw new MailDeliveryError(error);
+  }
 }
