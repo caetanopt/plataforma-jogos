@@ -6,12 +6,14 @@ import {
   updateBrandKitAction,
   updateOrganizationLogoAction,
 } from "@/features/brand/actions";
+import { BRAND_THEME_LIMITS } from "@/lib/validation/brand";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
+import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { ThemeFieldset } from "@/components/backoffice/editor/theme-fieldset";
 import { MediaUploadField } from "@/components/backoffice/editor/media-upload-field";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 export const metadata = { title: "Identidade visual" };
@@ -21,7 +23,7 @@ export default async function BrandKitsPage() {
 
   const organization = await prisma.organization.findUnique({
     where: { id: context.organizationId },
-    select: { name: true, logoMediaId: true, updatedAt: true },
+    select: { name: true, logoMediaId: true },
   });
   const organizationLogo = organization?.logoMediaId
     ? await prisma.mediaAsset.findFirst({
@@ -59,9 +61,10 @@ export default async function BrandKitsPage() {
           associada, por isso só pode ser apresentado a partir do ficheiro oficial da marca —
           sem ele, mostramos apenas o nome do produto.
         </p>
+        {/* Grava quando o upload termina ou ao remover; o estado da gravação
+            aparece por baixo do campo. */}
         <AutoSaveForm action={updateOrganizationLogoAction} className="mt-4 space-y-4">
           <MediaUploadField
-            key={`org-logo-${organization?.updatedAt.toISOString() ?? ""}`}
             name="logoMediaId"
             label="Logótipo"
             defaultMediaId={organization?.logoMediaId ?? null}
@@ -74,46 +77,63 @@ export default async function BrandKitsPage() {
       </section>
 
       <h2 className="mt-8 text-sm font-bold text-caetano-anthracite">Brand kits</h2>
+      {kits.length === 0 && (
+        <p className="mt-3 text-sm text-caetano-anthracite-80">
+          Ainda não há brand kits. Crie o primeiro abaixo ou guarde o tema de uma campanha na etapa
+          Marca e design.
+        </p>
+      )}
       <div className="mt-3 space-y-6">
-        {kits.map((kit) => (
-          <details key={kit.id} className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
-            <summary className="cursor-pointer font-medium text-caetano-anthracite list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">{kit.name}</summary>
-            <AutoSaveForm action={updateBrandKitAction} className="mt-4 max-w-xl space-y-4">
-              <input type="hidden" name="kitId" value={kit.id} />
-              <div>
-                <Label htmlFor={`name-${kit.id}`}>Nome</Label>
-                <Input id={`name-${kit.id}`} name="name" defaultValue={kit.name} required />
-              </div>
-              <ThemeFieldset
-                theme={kit}
-                media={{
-                  logo: kit.logoMediaId ? (mediaById.get(kit.logoMediaId) ?? null) : null,
-                  favicon: kit.faviconMediaId ? (mediaById.get(kit.faviconMediaId) ?? null) : null,
-                  background: kit.backgroundImageMediaId
-                    ? (mediaById.get(kit.backgroundImageMediaId) ?? null)
-                    : null,
-                }}
-              />
-            </AutoSaveForm>
-            <form action={deleteBrandKitAction} className="mt-4">
-              <input type="hidden" name="kitId" value={kit.id} />
-              <ConfirmSubmitButton confirmMessage={`Eliminar o brand kit "${kit.name}"?`} size="sm">
-                Eliminar brand kit
-              </ConfirmSubmitButton>
-            </form>
-          </details>
-        ))}
+        {kits.map((kit) => {
+          // Um formulário por kit na mesma página: os ids levam o id do kit.
+          const idPrefix = `kit-${kit.id}-`;
+          return (
+            <details key={kit.id} className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+              <summary className="cursor-pointer font-medium text-caetano-anthracite list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">{kit.name}</summary>
+              <AutoSaveForm action={updateBrandKitAction} className="mt-4 max-w-xl space-y-4">
+                <input type="hidden" name="kitId" value={kit.id} />
+                <div>
+                  <Label htmlFor={`${idPrefix}name`}>Nome</Label>
+                  <Input
+                    id={`${idPrefix}name`}
+                    name="name"
+                    maxLength={BRAND_THEME_LIMITS.name}
+                    defaultValue={kit.name}
+                    required
+                  />
+                </div>
+                <ThemeFieldset
+                  idPrefix={idPrefix}
+                  theme={kit}
+                  media={{
+                    logo: kit.logoMediaId ? (mediaById.get(kit.logoMediaId) ?? null) : null,
+                    favicon: kit.faviconMediaId ? (mediaById.get(kit.faviconMediaId) ?? null) : null,
+                    background: kit.backgroundImageMediaId
+                      ? (mediaById.get(kit.backgroundImageMediaId) ?? null)
+                      : null,
+                  }}
+                />
+              </AutoSaveForm>
+              <ActionForm action={deleteBrandKitAction} className="mt-4" messageClassName="mt-1">
+                <input type="hidden" name="kitId" value={kit.id} />
+                <ConfirmSubmitButton confirmMessage={`Eliminar o brand kit "${kit.name}"?`} size="sm">
+                  Eliminar brand kit
+                </ConfirmSubmitButton>
+              </ActionForm>
+            </details>
+          );
+        })}
       </div>
 
       <div className="mt-8 max-w-md rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <h2 className="mb-3 text-sm font-bold text-caetano-anthracite">Novo brand kit</h2>
-        <form action={createBrandKitAction} className="flex items-end gap-2">
-          <div className="flex-1">
-            <Label htmlFor="name">Nome</Label>
-            <Input id="name" name="name" required />
+        <ActionForm action={createBrandKitAction} className="flex flex-wrap items-end gap-2" messageClassName="w-full">
+          <div className="min-w-0 flex-1">
+            <Label htmlFor="newBrandKitName">Nome</Label>
+            <Input id="newBrandKitName" name="name" maxLength={BRAND_THEME_LIMITS.name} required />
           </div>
-          <Button type="submit">Criar</Button>
-        </form>
+          <SubmitButton>Criar</SubmitButton>
+        </ActionForm>
       </div>
     </div>
   );

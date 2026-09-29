@@ -17,6 +17,10 @@ function buildWhere(
   range: DateRange,
   filters: LeadsFilters,
 ): Prisma.ParticipationWhereInput {
+  // Os telefones estão gravados só com dígitos (normalizePhone): "912 345
+  // 678" na pesquisa tem de encontrar "912345678".
+  const looksLikePhone = /^[\d\s+().-]+$/.test(filters.search ?? "");
+  const searchDigits = looksLikePhone ? (filters.search ?? "").replace(/[^0-9]/g, "") : "";
   return {
     campaign: { organizationId },
     ...(filters.campaignId ? { campaignId: filters.campaignId } : {}),
@@ -28,6 +32,7 @@ function buildWhere(
           OR: [
             { email: { contains: filters.search, mode: "insensitive" } },
             { phone: { contains: filters.search, mode: "insensitive" } },
+            ...(searchDigits.length >= 3 ? [{ phone: { contains: searchDigits } }] : []),
             { firstName: { contains: filters.search, mode: "insensitive" } },
             { lastName: { contains: filters.search, mode: "insensitive" } },
           ],

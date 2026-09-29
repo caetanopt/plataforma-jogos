@@ -56,12 +56,19 @@ test.describe("Roda da Sorte", () => {
     expect(prize?.awardedQuantity).toBe(1);
     expect(prize?.totalQuantity).toBe(1);
 
-    // Repetir o pedido (mesmo visitante/cookie): deve ser bloqueado, não atribuir um segundo prémio.
-    await visitorPage.goto(`/play/${slug}`);
+    // Recarregar o mesmo separador retoma a participação: mostra o prémio já
+    // ganho, sem sortear de novo.
+    await visitorPage.reload();
     await visitorPage.waitForLoadState("networkidle");
-    await visitorPage.getByRole("button", { name: /Jogar/i }).click();
-    await visitorPage.waitForTimeout(1000);
-    await expect(visitorPage.getByText(/participou/)).toBeVisible();
+    await expect(visitorPage.getByText(`Prémio ${suffix}`)).toBeVisible({ timeout: 10_000 });
+
+    // Outro separador com o mesmo cookie é uma tentativa nova: o limite recusa-a
+    // e não atribui um segundo prémio.
+    const secondTab = await visitorContext.newPage();
+    await secondTab.goto(`/play/${slug}`);
+    await secondTab.waitForLoadState("networkidle");
+    await secondTab.getByRole("button", { name: /Jogar/i }).click();
+    await expect(secondTab.getByText(/participou/)).toBeVisible({ timeout: 10_000 });
 
     const prizeAfterRetry = await prisma.prize.findFirst({ where: { id: prize!.id } });
     expect(prizeAfterRetry?.awardedQuantity).toBe(1);

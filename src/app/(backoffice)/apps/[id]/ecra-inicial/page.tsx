@@ -4,10 +4,11 @@ import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateStartScreenAction } from "@/features/campaigns/steps/start-screen-actions";
 import { prisma } from "@/server/db/client";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
 import { MediaUploadField } from "@/components/backoffice/editor/media-upload-field";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { CheckboxField } from "@/components/ui/checkbox-field";
+import { START_SCREEN_LIMITS } from "@/lib/validation/campaign";
 
 export default async function StartScreenStepPage({
   params,
@@ -39,12 +40,12 @@ export default async function StartScreenStepPage({
 
         <div>
           <Label htmlFor="startTitle">Título</Label>
-          <Input id="startTitle" name="startTitle" defaultValue={campaign.startTitle ?? ""} />
+          <Input id="startTitle" name="startTitle" maxLength={START_SCREEN_LIMITS.startTitle} defaultValue={campaign.startTitle ?? ""} />
         </div>
 
         <div>
           <Label htmlFor="startSubtitle">Subtítulo</Label>
-          <Input id="startSubtitle" name="startSubtitle" defaultValue={campaign.startSubtitle ?? ""} />
+          <Input id="startSubtitle" name="startSubtitle" maxLength={START_SCREEN_LIMITS.startSubtitle} defaultValue={campaign.startSubtitle ?? ""} />
         </div>
 
         <div>
@@ -52,6 +53,7 @@ export default async function StartScreenStepPage({
           <textarea
             id="startIntroText"
             name="startIntroText"
+            maxLength={START_SCREEN_LIMITS.startIntroText}
             defaultValue={campaign.startIntroText ?? ""}
             rows={3}
             className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
@@ -81,6 +83,7 @@ export default async function StartScreenStepPage({
           <Input
             id="startButtonLabel"
             name="startButtonLabel"
+            maxLength={START_SCREEN_LIMITS.startButtonLabel}
             placeholder="Jogar agora"
             defaultValue={campaign.startButtonLabel ?? ""}
           />
@@ -88,24 +91,19 @@ export default async function StartScreenStepPage({
 
         <div>
           <Label htmlFor="startPrizeInfo">Informação sobre prémio</Label>
-          <Input id="startPrizeInfo" name="startPrizeInfo" defaultValue={campaign.startPrizeInfo ?? ""} />
+          <Input id="startPrizeInfo" name="startPrizeInfo" maxLength={START_SCREEN_LIMITS.startPrizeInfo} defaultValue={campaign.startPrizeInfo ?? ""} />
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-          <input
-            type="checkbox"
-            name="countdownEnabled"
-            defaultChecked={campaign.countdownEnabled}
-            className="h-4 w-4 rounded border-caetano-medium-gray"
-          />
+        <CheckboxField name="countdownEnabled" defaultChecked={campaign.countdownEnabled}>
           Mostrar contagem decrescente até à data de término (definida na etapa Agenda)
-        </label>
+        </CheckboxField>
 
         <div>
           <Label htmlFor="regulationText">Regulamento</Label>
           <textarea
             id="regulationText"
             name="regulationText"
+            maxLength={START_SCREEN_LIMITS.regulationText}
             defaultValue={campaign.regulationText ?? ""}
             rows={4}
             className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
@@ -117,13 +115,12 @@ export default async function StartScreenStepPage({
           <textarea
             id="legalText"
             name="legalText"
+            maxLength={START_SCREEN_LIMITS.legalText}
             defaultValue={campaign.legalText ?? ""}
             rows={2}
             className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
           />
         </div>
-
-        <SaveStatus />
       </AutoSaveForm>
     </div>
   );

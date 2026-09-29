@@ -4,11 +4,12 @@ import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateFinalScreenAction } from "@/features/campaigns/steps/final-screen-actions";
 import { prisma } from "@/server/db/client";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
 import { MediaUploadField } from "@/components/backoffice/editor/media-upload-field";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { CheckboxField } from "@/components/ui/checkbox-field";
+import { FINAL_SCREEN_LIMITS } from "@/lib/validation/campaign";
 
 export default async function FinalScreenStepPage({
   params,
@@ -48,7 +49,12 @@ export default async function FinalScreenStepPage({
 
         <div>
           <Label htmlFor="finalTitle">Título</Label>
-          <Input id="finalTitle" name="finalTitle" defaultValue={campaign.finalTitle ?? ""} />
+          <Input
+            id="finalTitle"
+            name="finalTitle"
+            maxLength={FINAL_SCREEN_LIMITS.finalTitle}
+            defaultValue={campaign.finalTitle ?? ""}
+          />
         </div>
 
         <div>
@@ -56,6 +62,7 @@ export default async function FinalScreenStepPage({
           <textarea
             id="finalMessage"
             name="finalMessage"
+            maxLength={FINAL_SCREEN_LIMITS.finalMessage}
             defaultValue={campaign.finalMessage ?? ""}
             rows={3}
             className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
@@ -71,44 +78,43 @@ export default async function FinalScreenStepPage({
           helpText="JPG, PNG, WebP, GIF ou MP4 — até 20 MB (100 MB para vídeo)."
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="finalCtaLabel">Texto do botão CTA (opcional)</Label>
-            <Input id="finalCtaLabel" name="finalCtaLabel" defaultValue={campaign.finalCtaLabel ?? ""} />
+            <Label htmlFor="finalCtaLabel">Texto do botão de ação (opcional)</Label>
+            <Input
+              id="finalCtaLabel"
+              name="finalCtaLabel"
+              maxLength={FINAL_SCREEN_LIMITS.finalCtaLabel}
+              defaultValue={campaign.finalCtaLabel ?? ""}
+            />
           </div>
           <div>
-            <Label htmlFor="finalCtaUrl">Link do CTA (opcional)</Label>
-            <Input id="finalCtaUrl" name="finalCtaUrl" defaultValue={campaign.finalCtaUrl ?? ""} />
+            <Label htmlFor="finalCtaUrl">Link do botão de ação (opcional)</Label>
+            <Input
+              id="finalCtaUrl"
+              name="finalCtaUrl"
+              type="url"
+              inputMode="url"
+              maxLength={FINAL_SCREEN_LIMITS.finalCtaUrl}
+              placeholder="https://"
+              defaultValue={campaign.finalCtaUrl ?? ""}
+            />
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input
-              type="checkbox"
-              name="finalAllowReplay"
-              defaultChecked={campaign.finalAllowReplay}
-              className="h-4 w-4 rounded border-caetano-medium-gray"
-            />
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
+          <CheckboxField name="finalAllowReplay" defaultChecked={campaign.finalAllowReplay}>
             Permitir jogar novamente
-          </label>
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input
-              type="checkbox"
-              name="finalAllowShare"
-              defaultChecked={campaign.finalAllowShare}
-              className="h-4 w-4 rounded border-caetano-medium-gray"
-            />
+          </CheckboxField>
+          <CheckboxField name="finalAllowShare" defaultChecked={campaign.finalAllowShare}>
             Permitir partilhar o resultado
-          </label>
+          </CheckboxField>
         </div>
 
         <p className="text-xs text-caetano-anthracite-80">
           O regulamento e o texto legal definidos no ecrã inicial ficam disponíveis por link em
           todos os ecrãs públicos, incluindo este.
         </p>
-
-        <SaveStatus />
       </AutoSaveForm>
     </div>
   );

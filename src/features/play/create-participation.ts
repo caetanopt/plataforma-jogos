@@ -1,6 +1,7 @@
 import type {
   CampaignType,
   DedupStrategy,
+  LeadFormPosition,
   ParticipationLimitType,
   Participation,
 } from "@/generated/prisma/client";
@@ -26,11 +27,15 @@ export interface CreateParticipationInput {
   deviceType: string | null;
   browser: string | null;
   os: string | null;
+  /** Posição efetiva do formulário, fixada na participação. */
+  leadFormPosition: LeadFormPosition;
 }
 
 export type CreateParticipationResult =
   | { kind: "existing"; participation: Participation }
   | { kind: "blocked" }
+  /** A chave já identifica uma participação de outra campanha ou modo. */
+  | { kind: "conflict" }
   | { kind: "created"; participation: Participation };
 
 /**
@@ -50,6 +55,12 @@ export async function createParticipationIfAllowed(
       where: { idempotencyKey: input.idempotencyKey },
     });
     if (existing) {
+      // Repetir o início (falha de rede, página recarregada) devolve a mesma
+      // participação — mas só desta campanha e deste modo. Uma chave de outra
+      // campanha não pode abrir aqui a participação de lá.
+      if (existing.campaignId !== input.campaignId || existing.isTest !== input.isTest) {
+        return { kind: "conflict" as const };
+      }
       return { kind: "existing" as const, participation: existing };
     }
 
@@ -105,6 +116,7 @@ export async function createParticipationIfAllowed(
         deviceType: input.deviceType,
         browser: input.browser,
         os: input.os,
+        leadFormPosition: input.leadFormPosition,
       },
     });
 

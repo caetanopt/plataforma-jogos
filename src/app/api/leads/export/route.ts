@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     excludeTest: params.excludeTest !== "false",
   });
 
-  const csv = leadsToCsv(participations.map(toLeadRow));
+  const csv = leadsToCsv(participations.map((participation) => toLeadRow(participation)));
 
   await logAudit({
     organizationId: context.organizationId,

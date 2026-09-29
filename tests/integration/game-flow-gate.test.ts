@@ -424,7 +424,7 @@ describe("identidade de cada lead (dispositivo partilhado)", () => {
 
     const range = { preset: "all" as const, from: new Date(0), to: new Date(Date.now() + 60_000) };
     const leads = await listLeads(f.organizationId, range, { campaignId: f.campaignId });
-    const rows = leads.items.map(toLeadRow);
+    const rows = leads.items.map((item) => toLeadRow(item));
     const byId = new Map(rows.map((r) => [r.id, r]));
 
     expect(byId.get(ana.participationId)).toMatchObject({ name: "Ana", email: "ana@example.com" });

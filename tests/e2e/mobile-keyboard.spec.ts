@@ -7,6 +7,7 @@ import {
   uniqueSuffix,
   E2E_ADMIN_EMAIL,
   E2E_ADMIN_PASSWORD,
+  resetAdminLoginLimit,
 } from "./helpers";
 
 test.describe("Mobile e navegação por teclado", () => {
@@ -46,6 +47,7 @@ test.describe("Mobile e navegação por teclado", () => {
   });
 
   test("login e submissão do formulário são possíveis apenas com teclado", async ({ page }) => {
+    await resetAdminLoginLimit();
     await page.goto("/login");
     await page.locator('input[name="email"]').focus();
     await page.keyboard.type(E2E_ADMIN_EMAIL);

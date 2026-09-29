@@ -1,70 +1,136 @@
 "use client";
 
-import { useLayoutEffect, useRef, type FormEvent, type ReactNode } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { IDLE, type FormAction } from "@/lib/forms/action-result";
+import {
+  FormActionContext,
+  useFieldErrorAria,
+  useFormActionState,
+  type FormActionContextValue,
+} from "@/components/forms/form-action-context";
+import { SaveStatus } from "@/components/backoffice/editor/save-status";
 
 const AUTOSAVE_DELAY_MS = 900;
 
+/**
+ * Formulário do editor que grava sozinho: checkboxes e selects de imediato,
+ * texto depois de uma pausa, media quando o upload termina.
+ *
+ * O `<form>` não tem `action=`: com ele, o React repunha o formulário no fim
+ * de cada gravação (reset dos inputs não controlados), e num erro o texto
+ * escrito voltava ao valor antigo por baixo de "Alterações guardadas". O
+ * envio corre pelo `useActionState` dentro de uma transição, que não faz
+ * reset. Sem `requestSubmit` também não há validação HTML a roubar o foco
+ * enquanto se escreve noutro campo: a validação é do servidor, campo a campo,
+ * e os erros voltam em `SaveStatus`.
+ */
 export function AutoSaveForm({
   action,
   children,
   className,
 }: {
-  action: (formData: FormData) => void | Promise<void>;
+  action: FormAction;
   children: ReactNode;
   className?: string;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { result, dispatch, isPending, uploading, setUploading, idPrefix } = useFormActionState(action);
+  const busyRef = useRef(false);
 
-  const scheduleSubmit = () => {
+  const submitNow = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const form = formRef.current;
+    if (!form) return;
+    // O FormData é lido agora: cada gravação leva o estado do formulário no
+    // momento em que foi pedida, e o useActionState corre-as por ordem.
+    const formData = new FormData(form);
+    startTransition(() => dispatch(formData));
+  }, [dispatch]);
+
+  const scheduleSubmit = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      formRef.current?.requestSubmit();
+      submitNow();
     }, AUTOSAVE_DELAY_MS);
-  };
+  }, [submitNow]);
 
-  // Sem isto, sair da etapa (navegação lateral) menos de 900ms depois de uma
-  // edição de texto cancelava silenciosamente o autosave pendente: o
-  // temporizador nunca era limpo, e quando disparava mais tarde o formulário
-  // já estava desmontado (`formRef.current` a null), pelo que a última
-  // alteração nunca chegava a ser guardada. Usa `useLayoutEffect` (não
-  // `useEffect`) porque a sua limpeza corre antes de o React desligar a ref
-  // do `<form>` — se corresse depois, `formRef.current` já seria null aqui
-  // também.
-  //
-  // Chama `action` diretamente com o FormData atual em vez de
-  // `formRef.current.requestSubmit()`: a desmontagem acontece a meio de uma
-  // navegação client-side para outra rota, e submeter o `<form>` nesse
-  // instante faz o Next.js falhar a resolver a Server Action ("Failed to
-  // find Server Action") porque a submissão fica associada à navegação em
-  // curso. Chamar a função da action diretamente não depende do routing.
+  // Sair da etapa (navegação lateral) menos de 900 ms depois de uma edição
+  // não pode perder a edição. `useLayoutEffect` porque a sua limpeza corre
+  // antes de o React desligar a ref do `<form>`. Chama a ação diretamente:
+  // submeter o `<form>` a meio de uma navegação faz o Next falhar a resolver
+  // a Server Action. Com a gravação parcial, só um campo inválido fica por
+  // gravar.
   useLayoutEffect(() => {
     const form = formRef.current;
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        if (form) {
-          void action(new FormData(form));
-        }
+        if (form) void action(IDLE, new FormData(form));
       }
     };
   }, [action]);
 
-  const handleChange = (event: FormEvent<HTMLFormElement>) => {
-    const target = event.target as HTMLElement;
-    // Checkboxes/selects guardam de imediato; texto livre aguarda uma pausa.
-    if (target instanceof HTMLSelectElement || (target as HTMLInputElement).type === "checkbox") {
-      formRef.current?.requestSubmit();
-      return;
+  // Fechar o separador com uma gravação por fazer: grava já e pede ao
+  // browser que confirme a saída.
+  useEffect(() => {
+    busyRef.current = isPending || uploading;
+  }, [isPending, uploading]);
+
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      if (timerRef.current) submitNow();
+      else if (!busyRef.current) return;
+      event.preventDefault();
     }
-    scheduleSubmit();
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [submitNow]);
+
+  useFieldErrorAria(formRef, result, idPrefix);
+
+  const handleChange = (event: FormEvent<HTMLFormElement>) => {
+    const target = event.target;
+    // A escolha do ficheiro não é a alteração: o id só existe quando o
+    // upload termina, e é o MediaUploadField que avisa (notifyChange).
+    if (target instanceof HTMLInputElement && target.type === "file") return;
+    const immediate =
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio"));
+    if (immediate) submitNow();
+    else scheduleSubmit();
   };
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submitNow();
+  };
+
+  const contextValue = useMemo<FormActionContextValue>(
+    () => ({ result, isPending, uploading, idPrefix, setUploading, notifyChange: submitNow }),
+    [result, isPending, uploading, idPrefix, setUploading, submitNow],
+  );
+
   return (
-    <form ref={formRef} action={action} className={className} onChange={handleChange}>
-      {children}
-    </form>
+    <FormActionContext.Provider value={contextValue}>
+      <form ref={formRef} className={className} onChange={handleChange} onSubmit={handleSubmit} noValidate>
+        {children}
+        <SaveStatus />
+      </form>
+    </FormActionContext.Provider>
   );
 }

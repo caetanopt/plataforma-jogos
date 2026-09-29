@@ -1,9 +1,27 @@
 import type { Page } from "@playwright/test";
+import { Redis } from "ioredis";
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./global-setup.mts";
+import { rateLimitRedisKey } from "../../src/lib/security/rate-limit-key";
 
 export { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD };
 
+/**
+ * O limite de login (10 por 15 minutos e por e-mail) também conta os logins
+ * bem sucedidos, e a suite entra com a mesma conta em quase todos os testes:
+ * a partir do décimo, os seguintes eram recusados. Cada login da suite começa
+ * com o contador desta conta a zero (o teste de rate limit tem o seu próprio).
+ */
+export async function resetAdminLoginLimit(): Promise<void> {
+  const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: 1 });
+  try {
+    await redis.del(rateLimitRedisKey(`login:${E2E_ADMIN_EMAIL}`));
+  } finally {
+    redis.disconnect();
+  }
+}
+
 export async function loginAsAdmin(page: Page): Promise<void> {
+  await resetAdminLoginLimit();
   await page.goto("/login");
   await page.fill('input[name="email"]', E2E_ADMIN_EMAIL);
   await page.fill('input[name="password"]', E2E_ADMIN_PASSWORD);
@@ -56,7 +74,8 @@ export async function addQuizQuestionWithAnswers(
     .first();
 
   await li.locator('input[name="text"]').fill(correctAnswer);
-  await li.locator('input[name="isCorrect"]').check();
+  // O CheckboxField acrescenta uma sentinela escondida com o mesmo nome.
+  await li.locator('input[type="checkbox"][name="isCorrect"]').check();
   await li.getByRole("button", { name: "Adicionar resposta" }).click();
   await li.getByText(correctAnswer, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
 

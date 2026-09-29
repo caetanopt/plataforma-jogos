@@ -62,8 +62,8 @@ export default async function PublicPlayPage({
   const campaign = await prisma.campaign.findUnique({
     where: { slug },
     include: {
-      screens: true,
-      leadForm: { include: { fields: { orderBy: { order: "asc" } }, consentDefinitions: { orderBy: { order: "asc" } } } },
+      // Um ecrã desligado no editor guarda o conteúdo, mas não se mostra.
+      screens: { where: { enabled: true } },
       memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } },
       wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
       quizConfig: {
@@ -122,27 +122,6 @@ export default async function PublicPlayPage({
       prizeInfo: campaign.startPrizeInfo,
     },
     regulationText: campaign.regulationText,
-    leadForm: campaign.leadForm
-      ? {
-          position: campaign.leadForm.position,
-          honeypotEnabled: campaign.leadForm.honeypotEnabled,
-          fields: campaign.leadForm.fields.map((f) => ({
-            id: f.id,
-            internalKey: f.internalKey,
-            type: f.type,
-            label: f.label,
-            placeholder: f.placeholder,
-            helpText: f.helpText,
-            required: f.required,
-            options: (f.options as string[] | null) ?? null,
-          })),
-          consents: campaign.leadForm.consentDefinitions.map((c) => ({
-            id: c.id,
-            text: c.text,
-            required: c.required,
-          })),
-        }
-      : null,
     intermediateBefore: screenBefore
       ? {
           title: screenBefore.title,

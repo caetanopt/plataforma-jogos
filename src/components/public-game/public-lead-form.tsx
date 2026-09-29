@@ -2,23 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { isPlausiblePhone } from "@/features/play/identity";
+import type { PublicConsentDefinition, PublicLeadField } from "@/features/play/types";
 
-export interface PublicLeadField {
-  id: string;
-  internalKey: string;
-  type: string;
-  label: string;
-  placeholder: string | null;
-  helpText: string | null;
-  required: boolean;
-  options: string[] | null;
-}
-
-export interface PublicConsentDefinition {
-  id: string;
-  text: string;
-  required: boolean;
-}
+export type { PublicConsentDefinition, PublicLeadField };
 
 interface PublicLeadFormProps {
   fields: PublicLeadField[];
@@ -51,6 +38,7 @@ function fieldInputType(type: string): string {
 const ERROR_MESSAGES: Record<string, string> = {
   invalid: "Verifique os campos obrigatórios e tente novamente.",
   duplicate: "Já detetámos uma participação anterior com estes dados.",
+  phone: "Indique um número de telefone válido.",
   prize_unavailable: "Os seus dados foram guardados, mas não foi possível mostrar o prémio. Tente novamente.",
 };
 
@@ -67,6 +55,8 @@ export function PublicLeadForm({
   const [honeypot, setHoneypot] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Campo de telefone recusado: o erro fica ligado a ele (§27).
+  const [invalidFieldId, setInvalidFieldId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   // O formulário substitui o ecrã anterior (ou aparece a meio do jogo) e o
@@ -79,11 +69,24 @@ export function PublicLeadForm({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (submitting) return;
+    // A mesma regra do servidor: 6 a 15 dígitos, com ou sem indicativo.
+    const badPhone = fields.find(
+      (field) => field.type === "PHONE" && values[field.internalKey]?.trim() && !isPlausiblePhone(values[field.internalKey]),
+    );
+    if (badPhone) {
+      setInvalidFieldId(badPhone.id);
+      setError(ERROR_MESSAGES.phone);
+      document.getElementById(badPhone.id)?.focus();
+      return;
+    }
+    setInvalidFieldId(null);
     setSubmitting(true);
     setError(null);
     try {
       const result = await onSubmit(values, consentValues, honeypot);
       if (!result.ok) {
+        const phoneField = result.reason === "phone" ? fields.find((field) => field.type === "PHONE") : undefined;
+        setInvalidFieldId(phoneField?.id ?? null);
         setError(ERROR_MESSAGES[result.reason ?? "invalid"] ?? ERROR_MESSAGES.invalid);
         setSubmitting(false);
       }
@@ -176,7 +179,14 @@ export function PublicLeadForm({
               type={fieldInputType(field.type)}
               required={field.required}
               aria-required={field.required || undefined}
-              aria-describedby={field.helpText ? `${field.id}-help` : undefined}
+              aria-invalid={invalidFieldId === field.id || undefined}
+              aria-describedby={
+                [field.helpText ? `${field.id}-help` : null, invalidFieldId === field.id ? "lead-form-error" : null]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
+              inputMode={field.type === "PHONE" ? "tel" : undefined}
+              autoComplete={field.type === "PHONE" ? "tel" : field.type === "EMAIL" ? "email" : undefined}
               placeholder={field.placeholder ?? undefined}
               className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
               value={values[field.internalKey] ?? ""}
@@ -207,7 +217,11 @@ export function PublicLeadForm({
         </label>
       ))}
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && (
+        <p id="lead-form-error" role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
 
       <button
         type="submit"

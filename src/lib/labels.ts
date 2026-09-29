@@ -7,6 +7,7 @@ import type {
   LeadFormPosition,
   MembershipRole,
   ParticipationLimitType,
+  PrizeCodeStatus,
 } from "@/generated/prisma/client";
 
 export const CAMPAIGN_TYPE_LABELS: Record<CampaignType, string> = {
@@ -111,4 +112,13 @@ export const PARTICIPATION_LIMIT_TYPE_LABELS: Record<ParticipationLimitType, str
   ONE_PER_DAY: "Uma participação por dia",
   ONE_PER_HOUR: "Uma participação por hora",
   CUSTOM_MAX: "Máximo personalizado",
+};
+
+export const PRIZE_CODE_STATUS_LABELS: Record<PrizeCodeStatus, string> = {
+  AVAILABLE: "Disponível",
+  RESERVED: "Reservado",
+  ASSIGNED: "Atribuído",
+  USED: "Utilizado",
+  EXPIRED: "Expirado",
+  CANCELLED: "Cancelado",
 };

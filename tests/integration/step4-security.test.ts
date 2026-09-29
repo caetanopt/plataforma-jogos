@@ -67,6 +67,7 @@ const exportRoute = await import("@/app/api/leads/export/route");
 const presignRoute = await import("@/app/api/uploads/presign/route");
 const confirmRoute = await import("@/app/api/uploads/confirm/route");
 const logoutRoute = await import("@/app/api/logout/route");
+const { IDLE } = await import("@/lib/forms/action-result");
 const { updateScheduleAction } = await import("@/features/campaigns/steps/schedule-actions");
 const { updateStartScreenAction } = await import("@/features/campaigns/steps/start-screen-actions");
 const { recordAnalyticsEventAction } = await import("@/features/play/actions");
@@ -330,10 +331,15 @@ describe("agenda de uma campanha publicada", () => {
     const campaign = await createCampaign(org, "PUBLISHED", { scheduleEndAt: endAt });
     state.current = org.contexts.EDITOR;
 
-    await updateScheduleAction(
+    // Pedido forjado (na página os campos das datas vão desativados): a data
+    // fica e a resposta diz porquê, em vez de "Alterações guardadas".
+    const result = await updateScheduleAction(
+      IDLE,
       form({ campaignId: campaign.id, scheduleEndAt: newEnd, scheduleAfterMessage: "Obrigado!" }),
     );
 
+    expect(result.status).toBe("error");
+    expect(result.status === "error" && Object.keys(result.fieldErrors)).toEqual(["scheduleEndAt"]);
     const saved = await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
     expect(saved.scheduleEndAt?.toISOString()).toBe(endAt.toISOString());
     expect(saved.scheduleAfterMessage).toBe("Obrigado!");
@@ -343,7 +349,9 @@ describe("agenda de uma campanha publicada", () => {
     const campaign = await createCampaign(org, "PUBLISHED", { scheduleEndAt: new Date("2030-06-01T10:00:00Z") });
     state.current = org.contexts.EDITOR_PUBLISHER;
 
-    await updateScheduleAction(form({ campaignId: campaign.id, scheduleEndAt: newEnd }));
+    expect((await updateScheduleAction(IDLE, form({ campaignId: campaign.id, scheduleEndAt: newEnd }))).status).toBe(
+      "success",
+    );
 
     const saved = await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
     expect(saved.scheduleEndAt?.getUTCFullYear()).toBe(2031);
@@ -361,10 +369,18 @@ describe("media só da própria organização", () => {
     const own = await createMedia(org);
     state.current = org.contexts.EDITOR;
 
-    await updateStartScreenAction(form({ campaignId: campaign.id, startTitle: "Olá", startMediaId: foreign.id }));
+    const refused = await updateStartScreenAction(
+      IDLE,
+      form({ campaignId: campaign.id, startTitle: "Olá", startMediaId: foreign.id }),
+    );
+    expect(refused.status).toBe("error");
     expect((await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } })).startMediaId).toBeNull();
 
-    await updateStartScreenAction(form({ campaignId: campaign.id, startTitle: "Olá", startMediaId: own.id }));
+    const accepted = await updateStartScreenAction(
+      IDLE,
+      form({ campaignId: campaign.id, startTitle: "Olá", startMediaId: own.id }),
+    );
+    expect(accepted.status).toBe("success");
     expect((await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } })).startMediaId).toBe(own.id);
   });
 });

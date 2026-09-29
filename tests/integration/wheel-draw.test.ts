@@ -167,7 +167,7 @@ describe("drawAndAwardPrize — concorrência e stock", () => {
       const second = await drawAndAwardPrize(participation.id);
       expect(second.alreadyResolved).toBe(true);
       expect(second.segmentId).toBe(first.segmentId);
-      expect(second.prize?.code).toBe(first.prize?.code);
+      expect(second.code).toBe(first.code);
 
       const prize = await prisma.prize.findUniqueOrThrow({ where: { id: fixture.prizeId } });
       expect(prize.awardedQuantity).toBe(1);
@@ -215,7 +215,7 @@ describe("drawAndAwardPrize — concorrência e stock", () => {
       const participation = await fixture.createParticipation();
       const result = await drawAndAwardPrize(participation.id);
 
-      expect(result.prize?.code).toBe(validCode.code);
+      expect(result.code).toBe(validCode.code);
 
       const expiredAfter = await prisma.prizeCode.findUniqueOrThrow({ where: { id: expiredCode.id } });
       expect(expiredAfter.status).toBe("EXPIRED");

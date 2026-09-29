@@ -7,7 +7,10 @@ export interface ParticipationLimitCheckInput {
   customMax: number | null;
   dedupStrategies: DedupStrategy[];
   cookieId?: string | null;
-  /** Já normalizado (ver `normalizeEmail`), tal como está gravado na participação. */
+  /**
+   * Já normalizados (`normalizeEmail`, `normalizePhone`), tal como estão
+   * gravados na participação.
+   */
   email?: string | null;
   phone?: string | null;
   ip?: string | null;

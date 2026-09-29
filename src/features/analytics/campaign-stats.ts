@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/client";
+import { activeReservationsByPrize, remainingStock } from "@/features/prizes/stock";
 import { Prisma, type CampaignType } from "@/generated/prisma/client";
 import type { DateRange } from "@/lib/dates/range";
 
@@ -200,31 +201,60 @@ async function getWheelStats(campaignIds: string[], range: DateRange) {
   const winners = participations.filter((p) => (p.resultSummary as { outcome?: string } | null)?.outcome === "WIN").length;
   const spins = participations.length;
 
+  // "Vencedores" é o resultado do sorteio e não muda; "atribuídos" são os
+  // prémios que chegaram a alguém (lead aceite). A diferença são reservas em
+  // curso ou libertadas: a distribuição por prémio só conta as atribuídas.
   const awards = await prisma.prizeAward.findMany({
     where: { participation: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } } },
-    include: { prize: true },
+    select: { status: true, releaseReason: true, prize: { select: { publicName: true } } },
   });
   const distributionMap = new Map<string, number>();
+  let confirmed = 0;
+  let unclaimed = 0;
+  let refused = 0;
   for (const award of awards) {
-    distributionMap.set(award.prize.publicName, (distributionMap.get(award.prize.publicName) ?? 0) + 1);
+    if (award.status === "CONFIRMED") {
+      confirmed += 1;
+      distributionMap.set(award.prize.publicName, (distributionMap.get(award.prize.publicName) ?? 0) + 1);
+    } else if (award.status === "RELEASED") {
+      if (award.releaseReason === "EXPIRED") unclaimed += 1;
+      else refused += 1;
+    }
   }
 
   const prizes = await prisma.prize.findMany({
     where: { campaignId: { in: campaignIds } },
-    select: { publicName: true, totalQuantity: true, awardedQuantity: true },
+    select: { id: true, publicName: true, totalQuantity: true, awardedQuantity: true },
   });
+  // Retrato do momento, independente do período (como os alertas).
+  const reservedByPrize = await activeReservationsByPrize(prizes.map((p) => p.id));
+  const reservedNow = [...reservedByPrize.values()].reduce((sum, count) => sum + count, 0);
 
   return {
     spins,
     winners,
     nonWinners: spins - winners,
     winRate: spins > 0 ? winners / spins : 0,
+    prizesAwarded: confirmed,
+    /** Reservas à espera da lead, agora. */
+    prizesReserved: reservedNow,
+    /** Reservas cujo formulário não chegou a tempo, no período. */
+    prizesUnclaimed: unclaimed,
+    /** Leads recusadas (duplicado, bot) que tinham um prémio reservado, no período. */
+    prizesRefused: refused,
+    /** Prémios atribuídos sobre prémios saídos no período. */
+    claimRate: awards.length > 0 ? confirmed / awards.length : 0,
     prizeDistribution: [...distributionMap.entries()].map(([prizeName, count]) => ({ prizeName, count })),
-    stock: prizes.map((p) => ({
-      prizeName: p.publicName,
-      remaining: p.totalQuantity != null ? p.totalQuantity - p.awardedQuantity : null,
-      total: p.totalQuantity,
-    })),
+    stock: prizes.map((p) => {
+      const reserved = reservedByPrize.get(p.id) ?? 0;
+      return {
+        prizeName: p.publicName,
+        total: p.totalQuantity,
+        awarded: p.awardedQuantity,
+        reserved,
+        remaining: remainingStock(p, reserved),
+      };
+    }),
   };
 }
 

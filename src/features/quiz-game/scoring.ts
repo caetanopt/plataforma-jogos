@@ -92,6 +92,9 @@ export function matchResultProfile(
   percentage: number,
   profiles: ResultProfileRange[],
 ): string | null {
-  const match = profiles.find((p) => percentage >= p.minPercentage && percentage <= p.maxPercentage);
+  // Os intervalos são de inteiros (0–49, 50–100): uma percentagem com
+  // décimas (49,5%) caía entre dois e ficava sem perfil. Conta a parte inteira.
+  const whole = Math.floor(percentage);
+  const match = profiles.find((p) => whole >= p.minPercentage && whole <= p.maxPercentage);
   return match?.id ?? null;
 }

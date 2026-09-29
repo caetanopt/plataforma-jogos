@@ -4,10 +4,12 @@ import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateProjectInfoAction } from "@/features/campaigns/steps/project-info-actions";
 import { prisma } from "@/server/db/client";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
+import { WorkspaceFolderFields } from "@/components/backoffice/workspace-folder-fields";
+import { SyncedSelect } from "@/components/forms/synced-fields";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/labels";
+import { PROJECT_INFO_LIMITS } from "@/lib/validation/campaign";
 
 const LOCALES = [
   { value: "pt-PT", label: "Português (Portugal)" },
@@ -16,6 +18,8 @@ const LOCALES = [
 ];
 
 const TIMEZONES = ["Europe/Lisbon", "Atlantic/Azores", "UTC"];
+
+const SELECT_CLASS = "h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm";
 
 export default async function ProjectInfoStepPage({
   params,
@@ -31,10 +35,32 @@ export default async function ProjectInfoStepPage({
   const workspaces = await prisma.workspace.findMany({
     where: { organizationId: context.organizationId },
     orderBy: { name: "asc" },
-    include: { folders: { where: { archivedAt: null }, orderBy: { name: "asc" } } },
+    select: {
+      id: true,
+      name: true,
+      folders: { where: { archivedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } },
+    },
   });
 
+  // Uma pasta arquivada entretanto continua na lista enquanto a aplicação lá
+  // estiver: sem a opção, o select mostrava "Sem pasta" e a gravação
+  // seguinte tirava a aplicação da pasta sem ninguém o ter pedido.
+  const currentFolder = campaign.folder;
+  if (currentFolder?.archivedAt) {
+    workspaces
+      .find((workspace) => workspace.id === currentFolder.workspaceId)
+      ?.folders.push({ id: currentFolder.id, name: `${currentFolder.name} (arquivada)` });
+  }
+
+  // Pela mesma razão, um idioma ou fuso fora das listas (definido noutro
+  // sítio) aparece como opção em vez de ser trocado pelo primeiro.
+  const locales = LOCALES.some((locale) => locale.value === campaign.locale)
+    ? LOCALES
+    : [...LOCALES, { value: campaign.locale, label: campaign.locale }];
+  const timezones = TIMEZONES.includes(campaign.timezone) ? TIMEZONES : [...TIMEZONES, campaign.timezone];
+
   const hasParticipations = campaign._count.participations > 0;
+  const slugLocked = Boolean(campaign.publishedAt);
 
   return (
     <div className="max-w-2xl">
@@ -50,12 +76,23 @@ export default async function ProjectInfoStepPage({
 
         <div>
           <Label htmlFor="internalName">Nome interno</Label>
-          <Input id="internalName" name="internalName" defaultValue={campaign.internalName} required />
+          <Input
+            id="internalName"
+            name="internalName"
+            maxLength={PROJECT_INFO_LIMITS.internalName}
+            defaultValue={campaign.internalName}
+            required
+          />
         </div>
 
         <div>
           <Label htmlFor="publicTitle">Título público</Label>
-          <Input id="publicTitle" name="publicTitle" defaultValue={campaign.publicTitle ?? ""} />
+          <Input
+            id="publicTitle"
+            name="publicTitle"
+            maxLength={PROJECT_INFO_LIMITS.publicTitle}
+            defaultValue={campaign.publicTitle ?? ""}
+          />
         </div>
 
         <div>
@@ -63,51 +100,21 @@ export default async function ProjectInfoStepPage({
           <Input
             id="internalReference"
             name="internalReference"
+            maxLength={PROJECT_INFO_LIMITS.internalReference}
             defaultValue={campaign.internalReference ?? ""}
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="workspaceId">Espaço de trabalho</Label>
-            <select
-              key={`workspaceId-${campaign.updatedAt.toISOString()}`}
-              id="workspaceId"
-              name="workspaceId"
-              defaultValue={campaign.workspaceId}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
-            >
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="folderId">Pasta</Label>
-            <select
-              key={`folderId-${campaign.updatedAt.toISOString()}`}
-              id="folderId"
-              name="folderId"
-              defaultValue={campaign.folderId ?? ""}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
-            >
-              <option value="">Sem pasta</option>
-              {workspaces
-                .find((w) => w.id === campaign.workspaceId)
-                ?.folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
+        <WorkspaceFolderFields
+          variant="editor"
+          workspaces={workspaces}
+          defaultWorkspaceId={campaign.workspaceId}
+          defaultFolderId={campaign.folderId}
+        />
 
         <div>
           <Label htmlFor="tags">Etiquetas (separadas por vírgula)</Label>
-          <Input id="tags" name="tags" defaultValue={campaign.tags.join(", ")} />
+          <Input id="tags" name="tags" maxLength={PROJECT_INFO_LIMITS.tags} defaultValue={campaign.tags.join(", ")} />
         </div>
 
         <div>
@@ -115,64 +122,63 @@ export default async function ProjectInfoStepPage({
           <textarea
             id="description"
             name="description"
+            maxLength={PROJECT_INFO_LIMITS.description}
             defaultValue={campaign.description ?? ""}
             rows={3}
             className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="locale">Idioma</Label>
-            <select
-              key={`locale-${campaign.updatedAt.toISOString()}`}
-              id="locale"
-              name="locale"
-              defaultValue={campaign.locale}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
-            >
-              {LOCALES.map((locale) => (
+            <SyncedSelect id="locale" name="locale" defaultValue={campaign.locale} className={SELECT_CLASS}>
+              {locales.map((locale) => (
                 <option key={locale.value} value={locale.value}>
                   {locale.label}
                 </option>
               ))}
-            </select>
+            </SyncedSelect>
           </div>
           <div>
             <Label htmlFor="timezone">Fuso horário</Label>
-            <select
-              key={`timezone-${campaign.updatedAt.toISOString()}`}
+            <SyncedSelect
               id="timezone"
               name="timezone"
               defaultValue={campaign.timezone}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
+              aria-describedby="timezone-help"
+              className={SELECT_CLASS}
             >
-              {TIMEZONES.map((tz) => (
+              {timezones.map((tz) => (
                 <option key={tz} value={tz}>
                   {tz}
                 </option>
               ))}
-            </select>
+            </SyncedSelect>
+            <p id="timezone-help" className="mt-1 text-xs text-caetano-anthracite-80">
+              As horas da agenda são lidas neste fuso.
+            </p>
           </div>
         </div>
 
         <div>
-          <Label htmlFor="slug">Slug público</Label>
+          <Label htmlFor="slug">Endereço público (slug)</Label>
+          {/* Desativado depois de publicar: não vai no envio e o servidor mantém-no. */}
           <Input
             id="slug"
             name="slug"
+            maxLength={PROJECT_INFO_LIMITS.slug}
             defaultValue={campaign.slug}
-            disabled={Boolean(campaign.publishedAt)}
+            disabled={slugLocked}
             aria-describedby="slug-help"
           />
           <p id="slug-help" className="mt-1 text-xs text-caetano-anthracite-80">
             URL pública: /play/{campaign.slug}
-            {campaign.publishedAt &&
-              " — já não pode ser alterado depois de publicado (partia o link e o QR code já partilhados)."}
+            {slugLocked
+              ? " — já não pode ser alterado depois de publicado (partia o link e o QR code já partilhados)."
+              : " — letras minúsculas, números e hífenes."}
           </p>
         </div>
-
-        <SaveStatus />
       </AutoSaveForm>
     </div>
   );

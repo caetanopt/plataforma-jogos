@@ -7,114 +7,108 @@ import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
-import { brandThemeSchema } from "@/lib/validation/campaign";
+import { runAction } from "@/server/actions/run-action";
+import { createBrandKitSchema, organizationLogoShape, parseThemeForm } from "@/lib/validation/brand";
+import { emptyToNull, getField, readOptional } from "@/lib/forms/form-data";
+import { parsePartial } from "@/lib/forms/parse-partial";
+import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
 
-export async function createBrandKitAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "brand:manage");
+const MEDIA_UNAVAILABLE_MESSAGE = "A imagem escolhida não está disponível. Carregue-a de novo.";
 
-  const name = String(formData.get("name") ?? "").trim();
-  if (!name) return;
+export async function createBrandKitAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("createBrandKit", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "brand:manage");
 
-  const kit = await prisma.campaignTheme.create({
-    data: { organizationId: context.organizationId, name, isBrandKit: true },
+    const parsed = createBrandKitSchema.safeParse({ name: getField(formData, "name") });
+    if (!parsed.success) {
+      return fail("O brand kit não foi criado.", zodFieldErrors(parsed.error));
+    }
+
+    const kit = await prisma.campaignTheme.create({
+      data: { organizationId: context.organizationId, name: parsed.data.name, isBrandKit: true },
+    });
+
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "CREATE",
+      entityType: "CampaignTheme",
+      entityId: kit.id,
+      result: "SUCCESS",
+      metadata: { brandKit: true },
+    });
+
+    revalidatePath("/brand");
+    return ok("Brand kit criado.");
   });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "CREATE",
-    entityType: "CampaignTheme",
-    entityId: kit.id,
-    result: "SUCCESS",
-    metadata: { brandKit: true },
-  });
-
-  revalidatePath("/brand");
 }
 
-export async function updateBrandKitAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "brand:manage");
+export async function updateBrandKitAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("updateBrandKit", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "brand:manage");
 
-  const kitId = String(formData.get("kitId") ?? "");
-  const kit = await prisma.campaignTheme.findFirst({
-    where: { id: kitId, organizationId: context.organizationId, isBrandKit: true },
+    const kitId = readOptional(formData, "kitId") ?? "";
+    const kit = await prisma.campaignTheme.findFirst({
+      where: { id: kitId, organizationId: context.organizationId, isBrandKit: true },
+      select: { id: true },
+    });
+    if (!kit) notFound();
+
+    // Campo a campo: apagar o nome para escrever outro já não deita fora as
+    // cores; o nome continua obrigatório e volta com o erro.
+    const { update, fieldErrors, mediaIds, savedSomething } = parseThemeForm(formData, { includeName: true });
+    // Só media da própria organização (ver mediaBelongsToOrganization).
+    if (!(await mediaBelongsToOrganization(context.organizationId, mediaIds))) {
+      return fail(MEDIA_UNAVAILABLE_MESSAGE);
+    }
+
+    if (savedSomething) {
+      await prisma.campaignTheme.update({ where: { id: kit.id }, data: update });
+
+      await logAudit({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        action: "UPDATE",
+        entityType: "CampaignTheme",
+        entityId: kit.id,
+        result: "SUCCESS",
+      });
+
+      revalidatePath("/brand");
+    }
+
+    return partialResult(fieldErrors, savedSomething);
   });
-  if (!kit) notFound();
-
-  const parsed = brandThemeSchema.safeParse({
-    name: formData.get("name"),
-    logoMediaId: formData.get("logoMediaId"),
-    faviconMediaId: formData.get("faviconMediaId"),
-    backgroundImageMediaId: formData.get("backgroundImageMediaId"),
-    primaryColor: formData.get("primaryColor"),
-    secondaryColor: formData.get("secondaryColor"),
-    backgroundColor: formData.get("backgroundColor"),
-    textColor: formData.get("textColor"),
-    buttonColor: formData.get("buttonColor"),
-    buttonTextColor: formData.get("buttonTextColor"),
-    fontFamily: formData.get("fontFamily"),
-    borderRadiusPx: formData.get("borderRadiusPx"),
-    shadowEnabled: formData.get("shadowEnabled") ?? "",
-  });
-  if (!parsed.success) return;
-  // Só media da própria organização (ver mediaBelongsToOrganization).
-  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.logoMediaId, parsed.data.faviconMediaId, parsed.data.backgroundImageMediaId]))) return;
-
-  await prisma.campaignTheme.update({
-    where: { id: kitId },
-    data: {
-      name: parsed.data.name,
-      logoMediaId: parsed.data.logoMediaId || null,
-      faviconMediaId: parsed.data.faviconMediaId || null,
-      backgroundImageMediaId: parsed.data.backgroundImageMediaId || null,
-      primaryColor: parsed.data.primaryColor,
-      secondaryColor: parsed.data.secondaryColor,
-      backgroundColor: parsed.data.backgroundColor,
-      textColor: parsed.data.textColor,
-      buttonColor: parsed.data.buttonColor,
-      buttonTextColor: parsed.data.buttonTextColor,
-      fontFamily: parsed.data.fontFamily,
-      borderRadiusPx: parsed.data.borderRadiusPx,
-      shadowEnabled: parsed.data.shadowEnabled === "on",
-    },
-  });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "UPDATE",
-    entityType: "CampaignTheme",
-    entityId: kitId,
-    result: "SUCCESS",
-  });
-
-  revalidatePath("/brand");
 }
 
-export async function deleteBrandKitAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "brand:manage");
+export async function deleteBrandKitAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("deleteBrandKit", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "brand:manage");
 
-  const kitId = String(formData.get("kitId") ?? "");
-  const kit = await prisma.campaignTheme.findFirst({
-    where: { id: kitId, organizationId: context.organizationId, isBrandKit: true },
+    const kitId = getField(formData, "kitId");
+    const kit = await prisma.campaignTheme.findFirst({
+      where: { id: kitId, organizationId: context.organizationId, isBrandKit: true },
+      select: { id: true },
+    });
+    if (!kit) notFound();
+
+    await prisma.campaignTheme.delete({ where: { id: kit.id } });
+
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "DELETE",
+      entityType: "CampaignTheme",
+      entityId: kit.id,
+      result: "SUCCESS",
+    });
+
+    revalidatePath("/brand");
+    return ok();
   });
-  if (!kit) notFound();
-
-  await prisma.campaignTheme.delete({ where: { id: kitId } });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "DELETE",
-    entityType: "CampaignTheme",
-    entityId: kitId,
-    result: "SUCCESS",
-  });
-
-  revalidatePath("/brand");
 }
 
 /**
@@ -122,38 +116,42 @@ export async function deleteBrandKitAction(formData: FormData): Promise<void> {
  * backoffice. O wordmark é um desenho autoral sem fonte associada (Brand
  * Book 03) — só pode ser apresentado a partir do ficheiro oficial, nunca
  * composto tipograficamente.
+ *
+ * Grava quando o upload termina (ou no "Remover"): o formulário só tem este
+ * campo.
  */
-export async function updateOrganizationLogoAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "brand:manage");
+export async function updateOrganizationLogoAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("updateOrganizationLogo", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "brand:manage");
 
-  const rawMediaId = String(formData.get("logoMediaId") ?? "").trim();
-
-  // Só aceita media da própria organização (isolamento multi-tenant).
-  let logoMediaId: string | null = null;
-  if (rawMediaId) {
-    const asset = await prisma.mediaAsset.findFirst({
-      where: { id: rawMediaId, organizationId: context.organizationId },
-      select: { id: true },
+    const { data, fieldErrors } = parsePartial(organizationLogoShape, {
+      logoMediaId: readOptional(formData, "logoMediaId"),
     });
-    if (!asset) return;
-    logoMediaId = asset.id;
-  }
+    const logoMediaId = emptyToNull(data.logoMediaId);
+    if (logoMediaId === undefined) return partialResult(fieldErrors, false);
 
-  await prisma.organization.update({
-    where: { id: context.organizationId },
-    data: { logoMediaId },
+    // Só aceita media da própria organização (isolamento multi-tenant).
+    if (!(await mediaBelongsToOrganization(context.organizationId, [logoMediaId]))) {
+      return fail(MEDIA_UNAVAILABLE_MESSAGE);
+    }
+
+    await prisma.organization.update({
+      where: { id: context.organizationId },
+      data: { logoMediaId },
+    });
+
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "UPDATE",
+      entityType: "Organization",
+      entityId: context.organizationId,
+      result: "SUCCESS",
+      metadata: { field: "logoMediaId", cleared: logoMediaId === null },
+    });
+
+    revalidatePath("/", "layout");
+    return partialResult(fieldErrors, true);
   });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "UPDATE",
-    entityType: "Organization",
-    entityId: context.organizationId,
-    result: "SUCCESS",
-    metadata: { field: "logoMediaId", cleared: logoMediaId === null },
-  });
-
-  revalidatePath("/", "layout");
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import type { ProjectedWheelOutcome } from "@/features/play/reveal";
 
 export interface WheelPlayerSegment {
   id: string;
@@ -9,19 +10,12 @@ export interface WheelPlayerSegment {
   colorHex: string;
 }
 
-export interface WheelSpinResult {
-  segmentId: string;
-  segmentName: string;
-  outcome: "WIN" | "NO_WIN";
-  message: string | null;
-  /** Sem o id interno do prémio: o browser só recebe o que mostra. */
-  prize: { publicName: string; instructions: string | null; code: string | null } | null;
-  /**
-   * Ganhou, mas o prémio só é revelado depois do formulário (posição "Antes
-   * de revelar o prémio"). O servidor não envia qual é até lá.
-   */
-  prizePending: boolean;
-}
+/**
+ * Resultado de uma rotação, tal como o servidor o projeta: sem o id interno
+ * do prémio, e com o prémio ou o código retidos até ao formulário quando a
+ * posição o pede (ver `projectWheelOutcome`).
+ */
+export type WheelSpinResult = ProjectedWheelOutcome;
 
 interface WheelGamePlayerProps {
   segments: WheelPlayerSegment[];
@@ -153,7 +147,14 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
             {result.prize?.code && <p className="mt-1 font-mono text-sm">{result.prize.code}</p>}
             {result.prizePending && (
               <p className="mt-1 text-caetano-anthracite-80">
-                Preencha os seus dados a seguir para receber o prémio.
+                {result.prize
+                  ? "Preencha os seus dados a seguir para receber o código."
+                  : "Preencha os seus dados a seguir para receber o prémio."}
+              </p>
+            )}
+            {result.prizeUnavailable && (
+              <p className="mt-1 text-caetano-anthracite-80">
+                O prémio já não pode ser atribuído a esta participação.
               </p>
             )}
             {result.message && <p className="mt-2 text-sm text-caetano-anthracite-80">{result.message}</p>}

@@ -125,6 +125,11 @@ describe("matchResultProfile", () => {
     expect(matchResultProfile(100, profiles)).toBe("high");
   });
 
+  it("uma percentagem com décimas entre dois intervalos cai no de baixo", () => {
+    expect(matchResultProfile(49.5, profiles)).toBe("low");
+    expect(matchResultProfile(79.99, profiles)).toBe("mid");
+  });
+
   it("returns null when no profile matches", () => {
     expect(matchResultProfile(30, [{ id: "high", minPercentage: 80, maxPercentage: 100 }])).toBeNull();
   });

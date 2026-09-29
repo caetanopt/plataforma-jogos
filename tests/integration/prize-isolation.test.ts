@@ -29,6 +29,7 @@ vi.mock("@/lib/security/rate-limit", () => ({
   checkRateLimit: async () => ({ allowed: true, remaining: 10 }),
 }));
 
+const { IDLE } = await import("@/lib/forms/action-result");
 const { addWheelSegmentAction, updateWheelSegmentAction } = await import("@/features/wheel-game/actions");
 const { removePrizeAction } = await import("@/features/prizes/actions");
 const { spinWheelAction } = await import("@/features/play/actions");
@@ -162,7 +163,7 @@ describe("segmentos da roda só aceitam prémios da própria campanha", () => {
   it("recusa criar um segmento ligado ao prémio de outra organização", async () => {
     const form = segmentForm({ campaignId: attacker.campaignId, prizeId: victim.prizeId });
 
-    await expect(addWheelSegmentAction(form)).rejects.toMatchObject(NOT_FOUND);
+    await expect(addWheelSegmentAction(IDLE, form)).rejects.toMatchObject(NOT_FOUND);
 
     const linked = await prisma.wheelSegment.count({
       where: { wheelConfigId: attacker.wheelConfigId, prizeId: victim.prizeId },
@@ -177,7 +178,7 @@ describe("segmentos da roda só aceitam prémios da própria campanha", () => {
       prizeId: victim.prizeId,
     });
 
-    await expect(updateWheelSegmentAction(form)).rejects.toMatchObject(NOT_FOUND);
+    await expect(updateWheelSegmentAction(IDLE, form)).rejects.toMatchObject(NOT_FOUND);
 
     const segment = await prisma.wheelSegment.findUniqueOrThrow({ where: { id: attacker.segmentId } });
     expect(segment.prizeId).toBe(attacker.prizeId);
@@ -199,7 +200,7 @@ describe("segmentos da roda só aceitam prémios da própria campanha", () => {
     });
     try {
       const form = segmentForm({ campaignId: attacker.campaignId, prizeId: otherPrize.id });
-      await expect(addWheelSegmentAction(form)).rejects.toMatchObject(NOT_FOUND);
+      await expect(addWheelSegmentAction(IDLE, form)).rejects.toMatchObject(NOT_FOUND);
     } finally {
       await prisma.prize.delete({ where: { id: otherPrize.id } });
       await prisma.campaign.delete({ where: { id: other.id } });
@@ -209,7 +210,7 @@ describe("segmentos da roda só aceitam prémios da própria campanha", () => {
   it("continua a aceitar o prémio da própria campanha", async () => {
     const form = segmentForm({ campaignId: attacker.campaignId, prizeId: attacker.prizeId, name: "Novo" });
 
-    await addWheelSegmentAction(form);
+    expect(await addWheelSegmentAction(IDLE, form)).toMatchObject({ status: "success" });
 
     const created = await prisma.wheelSegment.findFirstOrThrow({
       where: { wheelConfigId: attacker.wheelConfigId, name: "Novo" },
@@ -225,7 +226,7 @@ describe("segmentos da roda só aceitam prémios da própria campanha", () => {
       name: "Perdeu",
     });
 
-    await addWheelSegmentAction(form);
+    expect(await addWheelSegmentAction(IDLE, form)).toMatchObject({ status: "success" });
 
     const created = await prisma.wheelSegment.findFirstOrThrow({
       where: { wheelConfigId: attacker.wheelConfigId, name: "Perdeu" },
@@ -311,7 +312,7 @@ describe("remover um prémio só afeta a própria campanha", () => {
     form.set("campaignId", attacker.campaignId);
     form.set("prizeId", victim.prizeId);
 
-    await expect(removePrizeAction(form)).rejects.toMatchObject(NOT_FOUND);
+    await expect(removePrizeAction(IDLE, form)).rejects.toMatchObject(NOT_FOUND);
 
     const victimSegment = await prisma.wheelSegment.findUniqueOrThrow({ where: { id: victim.segmentId } });
     expect(victimSegment.prizeId).toBe(victim.prizeId);
@@ -323,7 +324,7 @@ describe("remover um prémio só afeta a própria campanha", () => {
     form.set("campaignId", attacker.campaignId);
     form.set("prizeId", attacker.prizeId);
 
-    await removePrizeAction(form);
+    expect(await removePrizeAction(IDLE, form)).toMatchObject({ status: "success" });
 
     expect(await prisma.prize.count({ where: { id: attacker.prizeId } })).toBe(0);
     const segment = await prisma.wheelSegment.findUniqueOrThrow({ where: { id: attacker.segmentId } });
@@ -337,7 +338,11 @@ describe("remover um prémio só afeta a própria campanha", () => {
     const form = new FormData();
     form.set("campaignId", attacker.campaignId);
     form.set("prizeId", attacker.prizeId);
-    await removePrizeAction(form);
+    // A recusa chega ao formulário, em vez de um `return` que parecia sucesso.
+    expect(await removePrizeAction(IDLE, form)).toMatchObject({
+      status: "error",
+      message: "Já atribuído, não pode ser eliminado.",
+    });
 
     expect(await prisma.prize.count({ where: { id: attacker.prizeId } })).toBe(1);
     const segment = await prisma.wheelSegment.findUniqueOrThrow({ where: { id: attacker.segmentId } });

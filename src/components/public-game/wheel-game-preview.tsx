@@ -26,6 +26,7 @@ function simulateSpin(segments: PreviewSegment[]): WheelSpinResult {
     message: chosen.message,
     prize: chosen.prizeName ? { publicName: chosen.prizeName, instructions: null, code: "PREVIEW" } : null,
     prizePending: false,
+    prizeUnavailable: false,
   };
 }
 

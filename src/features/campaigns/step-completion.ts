@@ -10,8 +10,11 @@ export function getIncompleteSteps(campaign: CampaignForEditor): Set<string> {
 
   if (!campaign.startTitle) incomplete.add("ecra-inicial");
 
+  // Uma posição escolhida sem campos nem consentimentos vale "Sem
+  // formulário" no jogo (effectiveLeadFormPosition): a etapa fica por acabar.
   const formPosition = campaign.leadForm?.position ?? "NONE";
-  if (formPosition !== "NONE" && (campaign.leadForm?.fields.length ?? 0) === 0) {
+  const formContent = (campaign.leadForm?.fields.length ?? 0) + (campaign.leadForm?.consentDefinitions.length ?? 0);
+  if (formPosition !== "NONE" && formContent === 0) {
     incomplete.add("formulario");
   }
 

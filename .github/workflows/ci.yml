@@ -24,6 +24,17 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Os testes de concorrência da roda passam pelo lock por campanha
+      # (src/server/cache/lock.ts); sem Redis correm sem ele.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     env:
       DATABASE_URL: postgresql://plataforma:plataforma@localhost:5432/plataforma_jogos

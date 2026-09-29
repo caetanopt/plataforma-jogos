@@ -216,10 +216,17 @@ export default async function PublishStepPage({
             <textarea
               readOnly
               rows={3}
+              aria-label="Código de incorporação"
               value={embedSnippet}
               className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 font-mono text-xs"
             />
             <CopyButton value={embedSnippet} label="Copiar código de incorporação" />
+            <p className="text-xs text-caetano-anthracite-80">
+              Num site com outro domínio, o limite por cookie conta cada site que incorpora separadamente (o
+              browser isola o cookie por site). Para limitar a uma participação por pessoa, ative também o
+              controlo de duplicados por e-mail ou telefone. Se o site aplicar <code>sandbox</code> ao iframe,
+              tem de permitir <code>allow-scripts allow-same-origin allow-forms</code>.
+            </p>
           </section>
 
           <section className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">

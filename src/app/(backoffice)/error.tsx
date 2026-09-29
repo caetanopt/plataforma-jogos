@@ -31,7 +31,7 @@ export default function BackofficeError({
     <div className="p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Algo correu mal</h1>
       <p className="mt-1 text-caetano-anthracite-80">
-        Não foi possível carregar esta página. Os seus dados não foram alterados.
+        Não foi possível carregar esta página. A operação não foi concluída.
       </p>
 
       <div className="mt-6 max-w-xl space-y-4">

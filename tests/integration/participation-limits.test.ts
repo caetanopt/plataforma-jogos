@@ -81,6 +81,7 @@ describe("createParticipationIfAllowed — concorrência nos limites de particip
             deviceType: null,
             browser: null,
             os: null,
+            leadFormPosition: "NONE",
           }),
         ),
       );
@@ -121,6 +122,7 @@ describe("createParticipationIfAllowed — concorrência nos limites de particip
             deviceType: null,
             browser: null,
             os: null,
+            leadFormPosition: "NONE",
           }),
         ),
       );
@@ -157,6 +159,7 @@ describe("createParticipationIfAllowed — concorrência nos limites de particip
             deviceType: null,
             browser: null,
             os: null,
+            leadFormPosition: "NONE",
           }),
         ),
       );
@@ -193,6 +196,7 @@ describe("createParticipationIfAllowed — concorrência nos limites de particip
         deviceType: null,
         browser: null,
         os: null,
+        leadFormPosition: "NONE",
       });
       expect(first.kind).toBe("created");
 
@@ -213,9 +217,10 @@ describe("createParticipationIfAllowed — concorrência nos limites de particip
         deviceType: null,
         browser: null,
         os: null,
+        leadFormPosition: "NONE",
       });
       expect(second.kind).toBe("existing");
-      if (first.kind !== "blocked" && second.kind !== "blocked") {
+      if (first.kind === "created" && second.kind === "existing") {
         expect(second.participation.id).toBe(first.participation.id);
       }
 

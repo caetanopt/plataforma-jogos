@@ -1,4 +1,5 @@
 import type { CampaignForEditor } from "@/features/campaigns/queries";
+import { effectiveLeadFormPosition } from "@/features/play/reveal";
 
 export interface PublishReadiness {
   ready: boolean;
@@ -34,10 +35,34 @@ export function getPublishReadiness(campaign: CampaignForEditor): PublishReadine
     if (questionsWithoutCorrectAnswer.length > 0) {
       issues.push("Todas as perguntas do Quiz precisam de ter pelo menos uma resposta correta.");
     }
+    // O jogo só deixa escolher uma resposta nestes tipos: com duas certas, a
+    // pergunta não pode ser acertada.
+    const singleAnswerWithSeveralCorrect = questions.filter(
+      (q) => q.type !== "MULTIPLE_CHOICE" && q.answers.filter((a) => a.isCorrect).length > 1,
+    );
+    if (singleAnswerWithSeveralCorrect.length > 0) {
+      issues.push("As perguntas de resposta única só podem ter uma resposta correta.");
+    }
   }
 
   if (!campaign.leadForm) {
     issues.push("A campanha precisa de ter um formulário de leads configurado.");
+  }
+
+  // A idade mínima só se verifica com a data de nascimento no formulário;
+  // sem ela o jogo público recusa todas as participações (falha fechado).
+  const position = effectiveLeadFormPosition(
+    campaign.leadForm
+      ? {
+          position: campaign.leadForm.position,
+          fieldCount: campaign.leadForm.fields.length,
+          consentCount: campaign.leadForm.consentDefinitions.length,
+        }
+      : null,
+  );
+  const hasBirthDate = campaign.leadForm?.fields.some((field) => field.type === "BIRTH_DATE") ?? false;
+  if (campaign.minAge != null && (position === "NONE" || !hasBirthDate)) {
+    issues.push("A idade mínima exige um campo de data de nascimento no formulário de leads.");
   }
 
   return { ready: issues.length === 0, issues };

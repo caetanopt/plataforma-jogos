@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/client";
+import { activeReservationsByPrize, remainingStock } from "@/features/prizes/stock";
 import { Prisma, type CampaignType } from "@/generated/prisma/client";
 
 /**
@@ -39,6 +40,8 @@ export interface StockAlert {
   campaignId: string;
   publicName: string;
   remaining: number;
+  /** Unidades presas em reservas à espera da lead (fora do restante). */
+  reserved: number;
 }
 
 export interface CampaignAlerts {
@@ -99,14 +102,21 @@ export async function getCampaignAlerts(
     },
   });
 
+  // Uma reserva não está disponível para quem roda agora: o restante
+  // desconta-a, senão o alerta chegava tarde.
+  const reservedByPrize = await activeReservationsByPrize(prizesWithStock.map((prize) => prize.id));
   const stockAlerts = prizesWithStock
-    .map((prize) => ({
-      id: prize.id,
-      campaignId: prize.campaignId,
-      publicName: prize.publicName,
-      // O restante é calculado aqui, uma vez, em vez de repetido no JSX.
-      remaining: Math.max(0, (prize.totalQuantity ?? 0) - prize.awardedQuantity),
-    }))
+    .map((prize) => {
+      const reserved = reservedByPrize.get(prize.id) ?? 0;
+      return {
+        id: prize.id,
+        campaignId: prize.campaignId,
+        publicName: prize.publicName,
+        // O restante é calculado aqui, uma vez, em vez de repetido no JSX.
+        remaining: remainingStock(prize, reserved) ?? 0,
+        reserved,
+      };
+    })
     .filter((prize) => prize.remaining <= STOCK_ALERT_THRESHOLD)
     .sort((a, b) => a.remaining - b.remaining);
 

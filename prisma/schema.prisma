@@ -72,9 +72,9 @@ model PasswordResetToken {
 }
 
 model Organization {
-  id   String @id @default(cuid())
-  name String
-  slug String @unique
+  id                  String    @id @default(cuid())
+  name                String
+  slug                String    @unique
   /// Ficheiro oficial do logótipo da organização, mostrado no backoffice.
   /// O wordmark "caetano" é um desenho autoral sem fonte associada (Brand
   /// Book 03), por isso nunca é reproduzido tipograficamente — sem este
@@ -356,6 +356,9 @@ model CampaignScreen {
   id                  String     @id @default(cuid())
   campaignId          String
   kind                ScreenKind
+  // Desligar o ecrã só o esconde: o conteúdo fica para quando voltar a ser
+  // ligado (antes, desligar apagava título, texto, media e CTA).
+  enabled             Boolean    @default(true)
   title               String?
   text                String?
   mediaId             String?
@@ -544,6 +547,10 @@ model Participation {
   phone             String?
   firstName         String?
   lastName          String?
+  /// Posição do formulário fixada no início da participação: mudar a
+  /// posição na campanha só afeta participações novas. Null nas anteriores
+  /// a esta coluna, que seguem a posição atual.
+  leadFormPosition  LeadFormPosition?
   startedAt         DateTime            @default(now())
   completedAt       DateTime?
   createdAt         DateTime            @default(now())
@@ -750,15 +757,41 @@ model PrizeCode {
   @@unique([prizeId, code])
 }
 
+// Estado do prémio saído na roda. Com o formulário depois do jogo, o prémio
+// fica reservado até a lead ser aceite: só então conta como atribuído. Uma
+// lead recusada (duplicado, bot) ou abandonada devolve a unidade e o código.
+enum PrizeAwardStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
+}
+
+enum PrizeReleaseReason {
+  /// O formulário não foi submetido a tempo.
+  EXPIRED
+  /// A lead foi recusada pelo controlo de duplicados.
+  DUPLICATE
+  /// O honeypot apanhou um bot.
+  BOT
+}
+
 // Registo atómico do prémio atribuído a uma participação — gravado na mesma
 // transação que decrementa o stock do segmento/prémio (secção 13, fluxo técnico).
 model PrizeAward {
-  id              String   @id @default(cuid())
-  participationId String   @unique
-  prizeId         String
-  wheelSegmentId  String?
-  prizeCodeId     String?  @unique
-  awardedAt       DateTime @default(now())
+  id                   String              @id @default(cuid())
+  participationId      String              @unique
+  prizeId              String
+  wheelSegmentId       String?
+  /// Libertado um prémio, o código deixa de estar ligado (volta a estar
+  /// disponível para outra pessoa).
+  prizeCodeId          String?             @unique
+  /// Momento do sorteio (conta para o limite diário, reservado ou atribuído).
+  awardedAt            DateTime            @default(now())
+  status               PrizeAwardStatus    @default(CONFIRMED)
+  reservationExpiresAt DateTime?
+  confirmedAt          DateTime?
+  releasedAt           DateTime?
+  releaseReason        PrizeReleaseReason?
 
   participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
   prize         Prize         @relation(fields: [prizeId], references: [id])
@@ -766,6 +799,9 @@ model PrizeAward {
   prizeCode     PrizeCode?    @relation(fields: [prizeCodeId], references: [id])
 
   @@index([prizeId])
+  // Reservas por expirar e limite diário (atribuídos e reservados de hoje).
+  @@index([prizeId, status, reservationExpiresAt])
+  @@index([prizeId, status, awardedAt])
 }
 
 // ============================================================================

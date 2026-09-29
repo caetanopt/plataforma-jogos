@@ -4,6 +4,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2 } from "lucide-react";
 import { buttonVariants, type ButtonSize, type ButtonVariant } from "@/components/ui/button";
+import { useFormAction } from "@/components/forms/form-action-context";
 
 interface SubmitButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type"> {
   variant?: ButtonVariant;
@@ -24,6 +25,10 @@ interface SubmitButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>
  * Resolve dois problemas reais: o utilizador deixa de poder submeter duas
  * vezes (duplicando campanhas, pastas ou leads) e deixa de ficar sem resposta
  * durante ações lentas.
+ *
+ * Dentro de um `ActionForm` o envio não passa pelo `action=` do `<form>`, e o
+ * `useFormStatus` não o vê: o estado vem do contexto do formulário, que
+ * também desativa o botão durante um upload.
  */
 export function SubmitButton({
   variant = "primary",
@@ -34,12 +39,14 @@ export function SubmitButton({
   disabled,
   ...props
 }: SubmitButtonProps) {
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  const form = useFormAction();
+  const pending = status.pending || Boolean(form?.isPending);
 
   return (
     <button
       type="submit"
-      disabled={disabled || pending}
+      disabled={disabled || pending || Boolean(form?.uploading)}
       aria-busy={pending || undefined}
       className={buttonVariants({ variant, size, className })}
       {...props}

@@ -3,11 +3,14 @@ import { requirePagePermission } from "@/server/auth/page-guard";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateParticipationRulesAction } from "@/features/campaigns/steps/participation-actions";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
+import { ParticipationLimitFields } from "@/components/backoffice/editor/participation-limit-fields";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { PARTICIPATION_LIMIT_TYPE_LABELS } from "@/lib/labels";
+import { PARTICIPATION_LIMITS } from "@/lib/validation/campaign";
+
+const LIMIT_TYPE_OPTIONS = Object.entries(PARTICIPATION_LIMIT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
 export default async function ParticipationRulesStepPage({
   params,
@@ -41,45 +44,31 @@ export default async function ParticipationRulesStepPage({
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 
-        <div>
-          <Label htmlFor="participationLimitType">Limite de participação</Label>
-          <select
-            key={`participationLimitType-${campaign.updatedAt.toISOString()}`}
-            id="participationLimitType"
-            name="participationLimitType"
-            defaultValue={campaign.participationLimitType}
-            className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
-          >
-            {Object.entries(PARTICIPATION_LIMIT_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <Label htmlFor="participationCustomMax">Máximo personalizado</Label>
-          <Input
-            id="participationCustomMax"
-            name="participationCustomMax"
-            type="number"
-            min={1}
-            defaultValue={campaign.participationCustomMax ?? ""}
-            disabled={campaign.participationLimitType !== "CUSTOM_MAX"}
-            aria-describedby="participationCustomMax-help"
-          />
-          <p id="participationCustomMax-help" className="mt-1 text-xs text-caetano-anthracite-80">
-            Só aplicável quando o limite acima é &quot;Máximo personalizado&quot;.
-          </p>
-        </div>
+        <ParticipationLimitFields
+          options={LIMIT_TYPE_OPTIONS}
+          defaultType={campaign.participationLimitType}
+          defaultCustomMax={campaign.participationCustomMax}
+          customMaxMin={PARTICIPATION_LIMITS.customMaxMin}
+          customMaxMax={PARTICIPATION_LIMITS.customMaxMax}
+        />
 
         <div>
           <Label htmlFor="minAge">Idade mínima (opcional)</Label>
-          <Input id="minAge" name="minAge" type="number" min={0} max={120} defaultValue={campaign.minAge ?? ""} />
+          <Input
+            id="minAge"
+            name="minAge"
+            type="number"
+            inputMode="numeric"
+            min={PARTICIPATION_LIMITS.minAgeMin}
+            max={PARTICIPATION_LIMITS.minAgeMax}
+            step={1}
+            defaultValue={campaign.minAge ?? ""}
+            aria-describedby="minAge-help"
+          />
+          <p id="minAge-help" className="mt-1 text-xs text-caetano-anthracite-80">
+            Vazio: sem idade mínima.
+          </p>
         </div>
-
-        <SaveStatus />
       </AutoSaveForm>
     </div>
   );

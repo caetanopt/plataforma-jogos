@@ -35,6 +35,13 @@ export const startParticipationSchema = z.strictObject({
   source: z.string().max(2000).optional(),
 });
 
+/** Retomar a participação depois de recarregar a página. */
+export const resumeParticipationSchema = z.strictObject({
+  campaignId: id,
+  ref: participationRefSchema,
+  testRequested: z.boolean(),
+});
+
 export const submitLeadFormSchema = z.strictObject({
   ref: participationRefSchema,
   values: z.record(z.string().max(100), z.string().max(5000)),

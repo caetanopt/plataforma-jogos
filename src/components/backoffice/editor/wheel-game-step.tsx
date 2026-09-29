@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
+import { activeReservationsByPrize } from "@/features/prizes/stock";
 import {
   addPrizeAction,
   addPrizeCodeAction,
@@ -10,16 +11,29 @@ import {
   updatePrizeAction,
 } from "@/features/prizes/actions";
 import {
+  addWheelSegmentAction,
   moveWheelSegmentAction,
   removeWheelSegmentAction,
   updateWheelSegmentAction,
 } from "@/features/wheel-game/actions";
 import { WheelSegmentForm } from "@/components/backoffice/editor/wheel-segment-form";
-import { MediaUploadField } from "@/components/backoffice/editor/media-upload-field";
+import { PrizeForm } from "@/components/backoffice/editor/prize-form";
+import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { Badge } from "@/components/ui/badge";
+import { PRIZE_CODE_STATUS_LABELS } from "@/lib/labels";
+import { PRIZE_CODE_LIMITS } from "@/lib/validation/wheel-game";
+import { utcToZonedDateTimeLocal } from "@/lib/dates/timezone";
+import { cn } from "@/lib/utils";
+
+const SUMMARY_CLASS =
+  "cursor-pointer list-none select-none rounded text-sm text-caetano-deep-blue transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan";
+
+const MOVE_BUTTON_CLASS =
+  "flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30";
 
 export async function WheelGameStep({ campaignId }: { campaignId: string }) {
   // Mostra códigos de vouchers, pesos e respostas certas: a permissão é
@@ -29,17 +43,44 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
     where: { id: campaignId, organizationId: context.organizationId, type: "WHEEL" },
     include: {
       wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
-      prizes: { include: { codes: true, _count: { select: { awards: true } } } },
+      // Ordem estável: sem ela, um prémio editado podia mudar de lugar.
+      prizes: {
+        orderBy: { id: "asc" },
+        include: { codes: { orderBy: { createdAt: "asc" } }, _count: { select: { awards: true } } },
+      },
     },
   });
   if (!campaign?.wheelConfig) notFound();
 
   const wheelConfig = campaign.wheelConfig;
+  const timeZone = campaign.timezone;
   const prizeById = new Map(campaign.prizes.map((p) => [p.id, p]));
+  const prizeOptions = campaign.prizes.map((p) => ({ id: p.id, publicName: p.publicName, isActive: p.isActive }));
+
+  // As imagens gravadas, para os formulários de edição as mostrarem (só da
+  // própria organização).
+  const mediaIds = [
+    ...wheelConfig.segments.map((s) => s.imageMediaId),
+    ...campaign.prizes.map((p) => p.imageMediaId),
+  ].filter((id): id is string => Boolean(id));
+  const media =
+    mediaIds.length > 0
+      ? await prisma.mediaAsset.findMany({
+          where: { id: { in: mediaIds }, organizationId: context.organizationId },
+          select: { id: true, url: true, kind: true },
+        })
+      : [];
+  const mediaById = new Map(media.map((m) => [m.id, m]));
+  // Reservas à espera da lead: já saíram na roda, ainda não contam como atribuídas.
+  const reservedByPrize = await activeReservationsByPrize(campaign.prizes.map((p) => p.id));
+
+  // Datas dos inputs em hora local da campanha, não na do servidor.
+  const toLocalInput = (date: Date | null) => (date ? utcToZonedDateTimeLocal(date, timeZone) : "");
+  const formatDateTime = new Intl.DateTimeFormat("pt-PT", { timeZone, dateStyle: "short", timeStyle: "short" });
 
   return (
     <div className="max-w-3xl space-y-8">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-caetano-anthracite">Configuração da Roda da Sorte</h2>
           <p className="mt-1 text-sm text-caetano-anthracite-80">
@@ -66,102 +107,145 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         )}
 
         <ul className="space-y-3">
-          {campaign.prizes.map((prize) => (
-            <li key={prize.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-caetano-anthracite">{prize.publicName}</p>
-                  <p className="text-xs text-caetano-anthracite-80">
-                    {prize.awardedQuantity}/{prize.totalQuantity ?? "∞"} atribuídos ·{" "}
-                    {prize.codes.filter((c) => c.status === "AVAILABLE").length} códigos disponíveis
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <details>
-                    <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
-                    <form action={updatePrizeAction} className="mt-2 w-72 space-y-2">
-                      <input type="hidden" name="campaignId" value={campaignId} />
-                      <input type="hidden" name="prizeId" value={prize.id} />
-                      <Input name="internalName" defaultValue={prize.internalName} placeholder="Nome interno" required />
-                      <Input name="publicName" defaultValue={prize.publicName} placeholder="Nome público" required />
-                      <Input name="totalQuantity" type="number" min={0} defaultValue={prize.totalQuantity ?? ""} placeholder="Quantidade total" />
-                      <Input name="dailyLimit" type="number" min={0} defaultValue={prize.dailyLimit ?? ""} placeholder="Limite diário" />
-                      <textarea name="instructions" defaultValue={prize.instructions ?? ""} placeholder="Instruções" rows={2} className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm" />
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" name="isActive" defaultChecked={prize.isActive} className="h-4 w-4 rounded border-caetano-medium-gray" />
-                        Ativo
-                      </label>
-                      <Button type="submit" size="sm" variant="outline">Guardar</Button>
-                    </form>
-                  </details>
+          {campaign.prizes.map((prize) => {
+            const image = prize.imageMediaId ? mediaById.get(prize.imageMediaId) : undefined;
+            return (
+              <li key={prize.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 font-medium text-caetano-anthracite">
+                      {prize.publicName}
+                      {!prize.isActive && <Badge>Inativo</Badge>}
+                    </p>
+                    <p className="text-xs text-caetano-anthracite-80">
+                      {prize.awardedQuantity} atribuídos
+                      {(reservedByPrize.get(prize.id) ?? 0) > 0 && ` · ${reservedByPrize.get(prize.id)} reservados`}
+                      {" "}/ {prize.totalQuantity ?? "∞"} ·{" "}
+                      {prize.codes.filter((c) => c.status === "AVAILABLE").length} códigos disponíveis
+                    </p>
+                  </div>
                   {/* Um prémio já atribuído guarda o registo de quem o ganhou e não pode ser eliminado. */}
                   {prize._count.awards > 0 ? (
                     <span className="max-w-40 text-right text-xs text-caetano-anthracite-80">
                       Já atribuído, não pode ser eliminado.
                     </span>
                   ) : (
-                    <form action={removePrizeAction}>
+                    <ActionForm action={removePrizeAction} messageClassName="mt-1 max-w-56">
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="prizeId" value={prize.id} />
-                      <ConfirmSubmitButton confirmMessage={`Eliminar o prémio "${prize.publicName}"?`} size="sm">
+                      <ConfirmSubmitButton
+                        confirmMessage={`Eliminar o prémio "${prize.publicName}"? Os segmentos ligados a ele ficam sem prémio.`}
+                        size="sm"
+                      >
                         Eliminar
                       </ConfirmSubmitButton>
-                    </form>
+                    </ActionForm>
                   )}
                 </div>
-              </div>
 
-              <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-caetano-anthracite-80 list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">
-                  Códigos ({prize.codes.length})
-                </summary>
-                <ul className="mt-2 space-y-1">
-                  {prize.codes.map((code) => (
-                    <li key={code.id} className="flex items-center justify-between text-xs">
-                      <span>
-                        {code.code} · {code.status}
-                      </span>
-                      {code.status === "AVAILABLE" && (
-                        <form action={removePrizeCodeAction}>
-                          <input type="hidden" name="campaignId" value={campaignId} />
-                          <input type="hidden" name="codeId" value={code.id} />
-                          <button type="submit" className="text-danger hover:underline">
-                            Remover
-                          </button>
-                        </form>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <form action={addPrizeCodeAction} className="mt-2 flex gap-2">
-                  <input type="hidden" name="campaignId" value={campaignId} />
-                  <input type="hidden" name="prizeId" value={prize.id} />
-                  <Input name="code" placeholder="Novo código" className="h-8" required />
-                  <Button type="submit" size="sm" variant="outline">
-                    Adicionar
-                  </Button>
-                </form>
-              </details>
-            </li>
-          ))}
+                <details className="mt-2">
+                  <summary className={SUMMARY_CLASS}>Editar prémio</summary>
+                  <div className="mt-2">
+                    <PrizeForm
+                      action={updatePrizeAction}
+                      campaignId={campaignId}
+                      timeZone={timeZone}
+                      prize={{
+                        id: prize.id,
+                        internalName: prize.internalName,
+                        publicName: prize.publicName,
+                        description: prize.description,
+                        imageMediaId: prize.imageMediaId,
+                        imageUrl: image?.url ?? null,
+                        imageKind: image?.kind ?? null,
+                        totalQuantity: prize.totalQuantity,
+                        // O total não pode descer abaixo do que já saiu (atribuído ou reservado).
+                        awardedQuantity: prize.awardedQuantity + (reservedByPrize.get(prize.id) ?? 0),
+                        dailyLimit: prize.dailyLimit,
+                        instructions: prize.instructions,
+                        terms: prize.terms,
+                        isActive: prize.isActive,
+                        startAt: toLocalInput(prize.startAt),
+                        endAt: toLocalInput(prize.endAt),
+                      }}
+                    />
+                  </div>
+                </details>
+
+                <details className="mt-2">
+                  <summary className={cn(SUMMARY_CLASS, "text-xs text-caetano-anthracite-80")}>
+                    Códigos ({prize.codes.length})
+                  </summary>
+                  {prize.codes.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {prize.codes.map((code) => (
+                        <li key={code.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="min-w-0 break-all">
+                            <span className="font-mono">{code.code}</span> · {PRIZE_CODE_STATUS_LABELS[code.status]}
+                            {code.expiresAt && ` · válido até ${formatDateTime.format(code.expiresAt)}`}
+                          </span>
+                          {/* Só um código disponível se remove: reservado ou atribuído já tem dono. */}
+                          {code.status === "AVAILABLE" && (
+                            <ActionForm action={removePrizeCodeAction} messageClassName="mt-1 max-w-56">
+                              <input type="hidden" name="campaignId" value={campaignId} />
+                              <input type="hidden" name="codeId" value={code.id} />
+                              <SubmitButton
+                                variant="ghost"
+                                size="sm"
+                                className="text-danger"
+                                aria-label={`Remover o código ${code.code}`}
+                              >
+                                Remover
+                              </SubmitButton>
+                            </ActionForm>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <ActionForm action={addPrizeCodeAction} className="mt-2 space-y-2">
+                    <input type="hidden" name="campaignId" value={campaignId} />
+                    <input type="hidden" name="prizeId" value={prize.id} />
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor={`prize-${prize.id}-code`}>Novo código</Label>
+                        <Input
+                          id={`prize-${prize.id}-code`}
+                          name="code"
+                          maxLength={PRIZE_CODE_LIMITS.code}
+                          autoComplete="off"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`prize-${prize.id}-expiresAt`}>Validade (opcional)</Label>
+                        <Input
+                          id={`prize-${prize.id}-expiresAt`}
+                          name="expiresAt"
+                          type="datetime-local"
+                          aria-describedby={`prize-${prize.id}-expiresAt-help`}
+                        />
+                      </div>
+                    </div>
+                    <p id={`prize-${prize.id}-expiresAt-help`} className="text-xs text-caetano-anthracite-80">
+                      Hora no fuso horário da campanha ({timeZone}). Depois da validade, o código deixa de ser
+                      atribuído.
+                    </p>
+                    <SubmitButton variant="outline" size="sm">
+                      Adicionar código
+                    </SubmitButton>
+                  </ActionForm>
+                </details>
+              </li>
+            );
+          })}
         </ul>
 
         <details className="mt-4">
-          <summary className="cursor-pointer text-sm text-caetano-deep-blue list-none select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Adicionar prémio</summary>
-          <form action={addPrizeAction} className="mt-2 max-w-md space-y-2">
-            <input type="hidden" name="campaignId" value={campaignId} />
-            <Input name="internalName" placeholder="Nome interno" required />
-            <Input name="publicName" placeholder="Nome público" required />
-            <Input name="totalQuantity" type="number" min={0} placeholder="Quantidade total (opcional)" />
-            <MediaUploadField name="imageMediaId" label="Imagem (opcional)" />
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="isActive" defaultChecked className="h-4 w-4 rounded border-caetano-medium-gray" />
-              Ativo
-            </label>
-            <Button type="submit" variant="outline" size="sm">
-              Adicionar prémio
-            </Button>
-          </form>
+          <summary className={SUMMARY_CLASS}>Adicionar prémio</summary>
+          <div className="mt-2 max-w-xl">
+            <PrizeForm action={addPrizeAction} campaignId={campaignId} timeZone={timeZone} />
+          </div>
         </details>
       </section>
 
@@ -177,95 +261,110 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         )}
 
         <ul className="space-y-2">
-          {wheelConfig.segments.map((segment, index) => (
-            <li key={segment.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-5 w-5 rounded-full border border-caetano-medium-gray-40"
-                    style={{ backgroundColor: segment.colorHex }}
-                  />
-                  <span className="font-medium text-caetano-anthracite">{segment.name}</span>
-                  <Badge tone={segment.outcome === "WIN" ? "success" : "neutral"}>
-                    {segment.outcome === "WIN" ? "Vencedor" : "Não vencedor"}
-                  </Badge>
-                  {segment.prizeId && prizeById.get(segment.prizeId) && (
-                    <span className="text-xs text-caetano-anthracite-80">
-                      → {prizeById.get(segment.prizeId)?.publicName}
-                    </span>
-                  )}
-                  {segment.totalQuantity != null && (
-                    <span className="text-xs text-caetano-anthracite-80">
-                      ({segment.remainingQuantity}/{segment.totalQuantity} restantes)
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <form action={moveWheelSegmentAction}>
-                    <input type="hidden" name="campaignId" value={campaignId} />
-                    <input type="hidden" name="segmentId" value={segment.id} />
-                    <input type="hidden" name="direction" value="up" />
-                    <button type="submit" disabled={index === 0} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30" aria-label="Mover para cima">
-                      ↑
-                    </button>
-                  </form>
-                  <form action={moveWheelSegmentAction}>
-                    <input type="hidden" name="campaignId" value={campaignId} />
-                    <input type="hidden" name="segmentId" value={segment.id} />
-                    <input type="hidden" name="direction" value="down" />
-                    <button type="submit" disabled={index === wheelConfig.segments.length - 1} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30" aria-label="Mover para baixo">
-                      ↓
-                    </button>
-                  </form>
-                  <details className="relative">
-                    <summary className="cursor-pointer list-none text-sm text-caetano-deep-blue select-none rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan">Editar</summary>
-                    <form
-                      action={updateWheelSegmentAction}
-                      className="absolute right-0 z-10 mt-1 w-80 space-y-2 rounded-lg border border-caetano-medium-gray-40 bg-white p-3 shadow-lg"
-                    >
+          {wheelConfig.segments.map((segment, index) => {
+            const image = segment.imageMediaId ? mediaById.get(segment.imageMediaId) : undefined;
+            const linkedPrize = segment.prizeId ? prizeById.get(segment.prizeId) : undefined;
+            return (
+              <li key={segment.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="h-5 w-5 shrink-0 rounded-full border border-caetano-medium-gray-40"
+                      style={{ backgroundColor: segment.colorHex }}
+                    />
+                    <span className="font-medium text-caetano-anthracite">{segment.name}</span>
+                    <Badge tone={segment.outcome === "WIN" ? "success" : "neutral"}>
+                      {segment.outcome === "WIN" ? "Vencedor" : "Não vencedor"}
+                    </Badge>
+                    {!segment.isActive && <Badge>Inativo</Badge>}
+                    {linkedPrize && (
+                      <span className="text-xs text-caetano-anthracite-80">→ {linkedPrize.publicName}</span>
+                    )}
+                    {segment.totalQuantity != null && (
+                      <span className="text-xs text-caetano-anthracite-80">
+                        ({segment.remainingQuantity}/{segment.totalQuantity} restantes)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <ActionForm action={moveWheelSegmentAction} messageClassName="mt-1 max-w-48">
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="segmentId" value={segment.id} />
-                      <Input name="name" defaultValue={segment.name} required />
-                      <input type="color" name="colorHex" defaultValue={segment.colorHex} className="h-10 w-full cursor-pointer rounded-lg border border-caetano-medium-gray" />
-                      <select name="outcome" defaultValue={segment.outcome} className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm">
-                        <option value="WIN">Vencedor</option>
-                        <option value="NO_WIN">Não vencedor</option>
-                      </select>
-                      <select name="prizeId" defaultValue={segment.prizeId ?? ""} className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm">
-                        <option value="">Sem prémio</option>
-                        {campaign.prizes.map((prize) => (
-                          <option key={prize.id} value={prize.id}>
-                            {prize.publicName}
-                          </option>
-                        ))}
-                      </select>
-                      <Input name="weight" type="number" min={1} defaultValue={segment.weight} required />
-                      <Input name="totalQuantity" type="number" min={0} defaultValue={segment.totalQuantity ?? ""} placeholder="Stock (opcional)" />
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" name="isActive" defaultChecked={segment.isActive} className="h-4 w-4 rounded border-caetano-medium-gray" />
-                        Ativo
-                      </label>
-                      <Button type="submit" size="sm" variant="outline">Guardar</Button>
-                    </form>
-                  </details>
-                  <form action={removeWheelSegmentAction}>
-                    <input type="hidden" name="campaignId" value={campaignId} />
-                    <input type="hidden" name="segmentId" value={segment.id} />
-                    <ConfirmSubmitButton confirmMessage="Remover este segmento?" size="sm">
-                      Remover
-                    </ConfirmSubmitButton>
-                  </form>
+                      <input type="hidden" name="direction" value="up" />
+                      <button
+                        type="submit"
+                        disabled={index === 0}
+                        className={MOVE_BUTTON_CLASS}
+                        aria-label={`Mover "${segment.name}" para cima`}
+                      >
+                        ↑
+                      </button>
+                    </ActionForm>
+                    <ActionForm action={moveWheelSegmentAction} messageClassName="mt-1 max-w-48">
+                      <input type="hidden" name="campaignId" value={campaignId} />
+                      <input type="hidden" name="segmentId" value={segment.id} />
+                      <input type="hidden" name="direction" value="down" />
+                      <button
+                        type="submit"
+                        disabled={index === wheelConfig.segments.length - 1}
+                        className={MOVE_BUTTON_CLASS}
+                        aria-label={`Mover "${segment.name}" para baixo`}
+                      >
+                        ↓
+                      </button>
+                    </ActionForm>
+                    <ActionForm action={removeWheelSegmentAction} messageClassName="mt-1 max-w-48">
+                      <input type="hidden" name="campaignId" value={campaignId} />
+                      <input type="hidden" name="segmentId" value={segment.id} />
+                      <ConfirmSubmitButton confirmMessage={`Remover o segmento "${segment.name}"?`} size="sm">
+                        Remover
+                      </ConfirmSubmitButton>
+                    </ActionForm>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+
+                <details className="mt-2">
+                  <summary className={SUMMARY_CLASS}>Editar segmento</summary>
+                  <div className="mt-2">
+                    <WheelSegmentForm
+                      action={updateWheelSegmentAction}
+                      campaignId={campaignId}
+                      prizes={prizeOptions}
+                      timeZone={timeZone}
+                      segment={{
+                        id: segment.id,
+                        name: segment.name,
+                        colorHex: segment.colorHex,
+                        imageMediaId: segment.imageMediaId,
+                        imageUrl: image?.url ?? null,
+                        imageKind: image?.kind ?? null,
+                        outcome: segment.outcome,
+                        prizeId: segment.prizeId,
+                        weight: segment.weight,
+                        totalQuantity: segment.totalQuantity,
+                        remainingQuantity: segment.remainingQuantity,
+                        periodStart: toLocalInput(segment.periodStart),
+                        periodEnd: toLocalInput(segment.periodEnd),
+                        message: segment.message,
+                        code: segment.code,
+                        isActive: segment.isActive,
+                      }}
+                    />
+                  </div>
+                </details>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="mt-4">
+          <h4 className="mb-2 text-sm font-bold text-caetano-anthracite">Novo segmento</h4>
           <WheelSegmentForm
-            key={`add-segment-${wheelConfig.segments.length}`}
+            action={addWheelSegmentAction}
             campaignId={campaignId}
-            prizes={campaign.prizes.map((p) => ({ id: p.id, publicName: p.publicName }))}
+            prizes={prizeOptions}
+            timeZone={timeZone}
           />
         </div>
       </section>

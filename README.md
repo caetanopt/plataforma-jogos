@@ -96,6 +96,61 @@ em massa de códigos/vouchers, anonimização e retenção agendada, allowlist d
 CAPTCHA, interface multilingue e suite Playwright completa (ficam incluídos apenas os smoke
 tests essenciais de cada jogo).
 
+## Comportamentos a conhecer
+
+### Gravação no editor
+
+As etapas com gravação automática validam campo a campo: um campo inválido volta com a mensagem
+(no estado da gravação, ligado ao input) e os restantes gravam-se. As ações devolvem
+`ActionResult` (`src/lib/forms/action-result.ts`) e correm dentro de `runAction`
+(`src/server/actions/run-action.ts`). Nas ações de edição, um campo que o formulário não envia
+mantém o valor gravado (`readOptional`); as checkboxes levam uma sentinela (`CheckboxField`)
+para "desmarcada" se distinguir de "ausente".
+
+### Prémios da Roda da Sorte
+
+- Um prémio inativo, fora do período (`startAt`/`endAt`) ou no limite diário sai do sorteio: o
+  peso do segmento reparte-se pelos restantes. O limite diário conta desde a meia-noite no fuso
+  da campanha.
+- Com o formulário **depois do jogo** ou **antes de revelar o prémio**, o prémio sorteado fica
+  **reservado** durante 30 minutos e só passa a atribuído quando a lead é aceite. Uma lead
+  recusada (duplicada, bot) ou um formulário abandonado devolve a unidade e o código ao stock.
+  Na posição "Depois do jogo", o código e as instruções só aparecem depois do formulário.
+- Estatísticas, alertas e o editor descontam as reservas em curso do stock restante. As leads e
+  a exportação só mostram o prémio e o código quando atribuídos; o CSV tem uma coluna nova no
+  fim, "Estado do prémio".
+
+### Participação no jogo público
+
+- A participação fica no separador (sessionStorage): recarregar a página retoma-a em vez de
+  criar outra. Uma participação terminada há mais de 2 horas já não é retomada ("Jogar
+  novamente" começa sempre uma nova).
+- A memória e o quiz usam também o relógio do servidor (desde que o jogo abre), com uma margem
+  de 10 s: recarregar a meio não repõe o tempo.
+- A posição do formulário fica fixada no início de cada participação; mudar a posição só afeta
+  as participações novas. Um formulário sem campos nem consentimentos conta como "Sem
+  formulário".
+- Os telefones gravam-se normalizados (só dígitos, com `+` para o indicativo); a resposta
+  original fica em `leadFormResponse`.
+- O cookie de visitante chama-se `pj_vid`. Em HTTPS é `SameSite=None; Secure; Partitioned`
+  para funcionar dentro de um iframe noutro domínio; em HTTP numa rede local (por exemplo, a
+  testar num telemóvel) fica `Lax`.
+
+### Antes de fazer deploy destas alterações
+
+Uma campanha publicada com idade mínima e sem campo de data de nascimento no formulário passa a
+recusar participações (antes ignorava a idade). Para as encontrar:
+
+```sql
+SELECT c.id, c."internalName", c.status
+FROM "Campaign" c
+LEFT JOIN "LeadForm" lf ON lf."campaignId" = c.id
+WHERE c."minAge" IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM "LeadFormField" f WHERE f."leadFormId" = lf.id AND f.type = 'BIRTH_DATE'
+  );
+```
+
 ## Estrutura
 
 ```text

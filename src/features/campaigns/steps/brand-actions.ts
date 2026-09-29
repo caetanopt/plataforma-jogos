@@ -7,8 +7,12 @@ import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
-import { brandThemeSchema } from "@/lib/validation/campaign";
-import { getField } from "@/lib/forms/form-data";
+import { runAction } from "@/server/actions/run-action";
+import { parseThemeForm, saveAsBrandKitSchema } from "@/lib/validation/brand";
+import { getField, readOptional } from "@/lib/forms/form-data";
+import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
+
+const MEDIA_UNAVAILABLE_MESSAGE = "A imagem escolhida não está disponível. Carregue-a de novo.";
 
 async function getCampaignWithTheme(organizationId: string, campaignId: string) {
   return prisma.campaign.findFirst({
@@ -17,154 +21,147 @@ async function getCampaignWithTheme(organizationId: string, campaignId: string) 
   });
 }
 
-export async function updateCampaignThemeAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "campaign:edit");
+export async function updateCampaignThemeAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("updateCampaignTheme", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "campaign:edit");
 
-  const campaignId = String(formData.get("campaignId") ?? "");
-  const campaign = await getCampaignWithTheme(context.organizationId, campaignId);
-  if (!campaign || !campaign.theme) notFound();
+    const campaignId = readOptional(formData, "campaignId") ?? "";
+    const campaign = await getCampaignWithTheme(context.organizationId, campaignId);
+    if (!campaign || !campaign.theme) notFound();
 
-  const parsed = brandThemeSchema.safeParse({
-    name: getField(formData, "name"),
-    logoMediaId: getField(formData, "logoMediaId"),
-    faviconMediaId: getField(formData, "faviconMediaId"),
-    backgroundImageMediaId: getField(formData, "backgroundImageMediaId"),
-    primaryColor: getField(formData, "primaryColor"),
-    secondaryColor: getField(formData, "secondaryColor"),
-    backgroundColor: getField(formData, "backgroundColor"),
-    textColor: getField(formData, "textColor"),
-    buttonColor: getField(formData, "buttonColor"),
-    buttonTextColor: getField(formData, "buttonTextColor"),
-    fontFamily: getField(formData, "fontFamily"),
-    borderRadiusPx: getField(formData, "borderRadiusPx"),
-    shadowEnabled: getField(formData, "shadowEnabled"),
+    // Campo a campo: uma cor inválida já não deita fora o resto do tema. O
+    // nome do tema da campanha não se edita nesta etapa.
+    const { update, fieldErrors, mediaIds, savedSomething } = parseThemeForm(formData, { includeName: false });
+    // Só media da própria organização (ver mediaBelongsToOrganization).
+    if (!(await mediaBelongsToOrganization(context.organizationId, mediaIds))) {
+      return fail(MEDIA_UNAVAILABLE_MESSAGE);
+    }
+
+    if (savedSomething) {
+      await prisma.campaignTheme.update({ where: { id: campaign.theme.id }, data: update });
+
+      await logAudit({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        action: "UPDATE",
+        entityType: "CampaignTheme",
+        entityId: campaign.theme.id,
+        result: "SUCCESS",
+      });
+
+      revalidatePath(`/apps/${campaign.id}/marca`);
+    }
+
+    return partialResult(fieldErrors, savedSomething);
   });
-  if (!parsed.success) return;
-  // Só media da própria organização (ver mediaBelongsToOrganization).
-  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.logoMediaId, parsed.data.faviconMediaId, parsed.data.backgroundImageMediaId]))) return;
-
-  await prisma.campaignTheme.update({
-    where: { id: campaign.theme.id },
-    data: {
-      name: parsed.data.name,
-      logoMediaId: parsed.data.logoMediaId || null,
-      faviconMediaId: parsed.data.faviconMediaId || null,
-      backgroundImageMediaId: parsed.data.backgroundImageMediaId || null,
-      primaryColor: parsed.data.primaryColor,
-      secondaryColor: parsed.data.secondaryColor,
-      backgroundColor: parsed.data.backgroundColor,
-      textColor: parsed.data.textColor,
-      buttonColor: parsed.data.buttonColor,
-      buttonTextColor: parsed.data.buttonTextColor,
-      fontFamily: parsed.data.fontFamily,
-      borderRadiusPx: parsed.data.borderRadiusPx,
-      shadowEnabled: parsed.data.shadowEnabled === "on",
-    },
-  });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "UPDATE",
-    entityType: "CampaignTheme",
-    entityId: campaign.theme.id,
-    result: "SUCCESS",
-  });
-
-  revalidatePath(`/apps/${campaignId}/marca`);
 }
 
-export async function saveAsBrandKitAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "brand:manage");
+/**
+ * Copia o tema gravado da campanha para um brand kit novo. Lê da base de
+ * dados: uma alteração ao tema ainda à espera da gravação automática (menos
+ * de um segundo) não entra no kit.
+ */
+export async function saveAsBrandKitAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("saveAsBrandKit", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "brand:manage");
 
-  const campaignId = String(formData.get("campaignId") ?? "");
-  const kitName = String(formData.get("kitName") ?? "").trim();
-  const campaign = await getCampaignWithTheme(context.organizationId, campaignId);
-  if (!campaign || !campaign.theme || !kitName) return;
+    const campaignId = getField(formData, "campaignId");
+    const campaign = await getCampaignWithTheme(context.organizationId, campaignId);
+    if (!campaign || !campaign.theme) notFound();
 
-  const kit = await prisma.campaignTheme.create({
-    data: {
+    const parsed = saveAsBrandKitSchema.safeParse({ kitName: getField(formData, "kitName") });
+    if (!parsed.success) {
+      return fail("O brand kit não foi guardado.", zodFieldErrors(parsed.error));
+    }
+
+    const kit = await prisma.campaignTheme.create({
+      data: {
+        organizationId: context.organizationId,
+        name: parsed.data.kitName,
+        isBrandKit: true,
+        logoMediaId: campaign.theme.logoMediaId,
+        faviconMediaId: campaign.theme.faviconMediaId,
+        backgroundImageMediaId: campaign.theme.backgroundImageMediaId,
+        primaryColor: campaign.theme.primaryColor,
+        secondaryColor: campaign.theme.secondaryColor,
+        backgroundColor: campaign.theme.backgroundColor,
+        textColor: campaign.theme.textColor,
+        buttonColor: campaign.theme.buttonColor,
+        buttonTextColor: campaign.theme.buttonTextColor,
+        fontFamily: campaign.theme.fontFamily,
+        borderRadiusPx: campaign.theme.borderRadiusPx,
+        shadowEnabled: campaign.theme.shadowEnabled,
+        headerConfig: campaign.theme.headerConfig ?? undefined,
+        footerConfig: campaign.theme.footerConfig ?? undefined,
+        legalLinks: campaign.theme.legalLinks ?? undefined,
+      },
+    });
+
+    await logAudit({
       organizationId: context.organizationId,
-      name: kitName,
-      isBrandKit: true,
-      logoMediaId: campaign.theme.logoMediaId,
-      faviconMediaId: campaign.theme.faviconMediaId,
-      backgroundImageMediaId: campaign.theme.backgroundImageMediaId,
-      primaryColor: campaign.theme.primaryColor,
-      secondaryColor: campaign.theme.secondaryColor,
-      backgroundColor: campaign.theme.backgroundColor,
-      textColor: campaign.theme.textColor,
-      buttonColor: campaign.theme.buttonColor,
-      buttonTextColor: campaign.theme.buttonTextColor,
-      fontFamily: campaign.theme.fontFamily,
-      borderRadiusPx: campaign.theme.borderRadiusPx,
-      shadowEnabled: campaign.theme.shadowEnabled,
-      headerConfig: campaign.theme.headerConfig ?? undefined,
-      footerConfig: campaign.theme.footerConfig ?? undefined,
-      legalLinks: campaign.theme.legalLinks ?? undefined,
-    },
-  });
+      userId: context.userId,
+      action: "CREATE",
+      entityType: "CampaignTheme",
+      entityId: kit.id,
+      result: "SUCCESS",
+      metadata: { brandKit: true },
+    });
 
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "CREATE",
-    entityType: "CampaignTheme",
-    entityId: kit.id,
-    result: "SUCCESS",
-    metadata: { brandKit: true },
+    revalidatePath(`/apps/${campaign.id}/marca`);
+    revalidatePath("/brand");
+    return ok("Brand kit guardado.");
   });
-
-  revalidatePath(`/apps/${campaignId}/marca`);
-  revalidatePath("/brand");
 }
 
-export async function applyBrandKitAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "campaign:edit");
+export async function applyBrandKitAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("applyBrandKit", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "campaign:edit");
 
-  const campaignId = String(formData.get("campaignId") ?? "");
-  const brandKitId = String(formData.get("brandKitId") ?? "");
+    const campaignId = getField(formData, "campaignId");
+    const brandKitId = getField(formData, "brandKitId");
 
-  const campaign = await getCampaignWithTheme(context.organizationId, campaignId);
-  const brandKit = await prisma.campaignTheme.findFirst({
-    where: { id: brandKitId, organizationId: context.organizationId, isBrandKit: true },
+    const campaign = await getCampaignWithTheme(context.organizationId, campaignId);
+    const brandKit = await prisma.campaignTheme.findFirst({
+      where: { id: brandKitId, organizationId: context.organizationId, isBrandKit: true },
+    });
+    if (!campaign || !campaign.theme || !brandKit) notFound();
+
+    await prisma.campaignTheme.update({
+      where: { id: campaign.theme.id },
+      data: {
+        sourceBrandKitId: brandKit.id,
+        logoMediaId: brandKit.logoMediaId,
+        faviconMediaId: brandKit.faviconMediaId,
+        backgroundImageMediaId: brandKit.backgroundImageMediaId,
+        primaryColor: brandKit.primaryColor,
+        secondaryColor: brandKit.secondaryColor,
+        backgroundColor: brandKit.backgroundColor,
+        textColor: brandKit.textColor,
+        buttonColor: brandKit.buttonColor,
+        buttonTextColor: brandKit.buttonTextColor,
+        fontFamily: brandKit.fontFamily,
+        borderRadiusPx: brandKit.borderRadiusPx,
+        shadowEnabled: brandKit.shadowEnabled,
+        headerConfig: brandKit.headerConfig ?? undefined,
+        footerConfig: brandKit.footerConfig ?? undefined,
+        legalLinks: brandKit.legalLinks ?? undefined,
+      },
+    });
+
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "UPDATE",
+      entityType: "CampaignTheme",
+      entityId: campaign.theme.id,
+      result: "SUCCESS",
+      metadata: { appliedBrandKitId: brandKit.id },
+    });
+
+    revalidatePath(`/apps/${campaign.id}/marca`);
+    return ok("Brand kit aplicado.");
   });
-  if (!campaign || !campaign.theme || !brandKit) notFound();
-
-  await prisma.campaignTheme.update({
-    where: { id: campaign.theme.id },
-    data: {
-      sourceBrandKitId: brandKit.id,
-      logoMediaId: brandKit.logoMediaId,
-      faviconMediaId: brandKit.faviconMediaId,
-      backgroundImageMediaId: brandKit.backgroundImageMediaId,
-      primaryColor: brandKit.primaryColor,
-      secondaryColor: brandKit.secondaryColor,
-      backgroundColor: brandKit.backgroundColor,
-      textColor: brandKit.textColor,
-      buttonColor: brandKit.buttonColor,
-      buttonTextColor: brandKit.buttonTextColor,
-      fontFamily: brandKit.fontFamily,
-      borderRadiusPx: brandKit.borderRadiusPx,
-      shadowEnabled: brandKit.shadowEnabled,
-      headerConfig: brandKit.headerConfig ?? undefined,
-      footerConfig: brandKit.footerConfig ?? undefined,
-      legalLinks: brandKit.legalLinks ?? undefined,
-    },
-  });
-
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "UPDATE",
-    entityType: "CampaignTheme",
-    entityId: campaign.theme.id,
-    result: "SUCCESS",
-    metadata: { appliedBrandKitId: brandKit.id },
-  });
-
-  revalidatePath(`/apps/${campaignId}/marca`);
 }

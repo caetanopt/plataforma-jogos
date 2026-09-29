@@ -6,92 +6,146 @@ import { prisma } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
-import { projectInfoSchema } from "@/lib/validation/campaign";
+import { databaseErrorKind, runAction } from "@/server/actions/run-action";
+import { PROJECT_INFO_MESSAGES, projectInfoShape } from "@/lib/validation/campaign";
 import { slugify } from "@/lib/random/slug";
-import { getField } from "@/lib/forms/form-data";
+import { emptyToNull, readOptional } from "@/lib/forms/form-data";
+import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
+import { partialResult, type ActionResult } from "@/lib/forms/action-result";
 
-export async function updateProjectInfoAction(formData: FormData): Promise<void> {
-  const context = await requireOrgContext();
-  assertCan(context, "campaign:edit");
+export async function updateProjectInfoAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  return runAction("updateProjectInfo", async () => {
+    const context = await requireOrgContext();
+    assertCan(context, "campaign:edit");
 
-  const campaignId = String(formData.get("campaignId") ?? "");
-  const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, organizationId: context.organizationId },
-  });
-  if (!campaign) notFound();
-
-  const parsed = projectInfoSchema.safeParse({
-    internalName: getField(formData, "internalName"),
-    publicTitle: getField(formData, "publicTitle"),
-    internalReference: getField(formData, "internalReference"),
-    workspaceId: getField(formData, "workspaceId"),
-    folderId: getField(formData, "folderId"),
-    tags: getField(formData, "tags"),
-    description: getField(formData, "description"),
-    locale: getField(formData, "locale") || "pt-PT",
-    timezone: getField(formData, "timezone") || "Europe/Lisbon",
-  });
-  if (!parsed.success) return;
-
-  const workspace = await prisma.workspace.findFirst({
-    where: { id: parsed.data.workspaceId, organizationId: context.organizationId },
-  });
-  if (!workspace) return;
-
-  // Se a pasta submetida não pertencer ao espaço de trabalho (ex.: o
-  // utilizador mudou de espaço de trabalho na mesma autosave, sem o select
-  // de pasta — que ainda mostra as pastas do espaço antigo — ter sido
-  // atualizado a tempo), cai para "sem pasta" em vez de descartar
-  // silenciosamente o resto do formulário (nome, descrição, etc.).
-  let folderId = parsed.data.folderId || null;
-  if (folderId) {
-    const folder = await prisma.folder.findFirst({
-      where: { id: folderId, workspaceId: parsed.data.workspaceId },
+    const campaignId = readOptional(formData, "campaignId") ?? "";
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, organizationId: context.organizationId },
+      select: { id: true, slug: true, publishedAt: true, workspaceId: true, folderId: true },
     });
-    if (!folder) folderId = null;
-  }
+    if (!campaign) notFound();
 
-  // Uma vez publicada, mudar o slug parte o link/QR code já partilhados
-  // (a imagem do QR fica gravada com a URL antiga, agora um 404 livre para
-  // outra campanha reclamar) — bloquear a mudança em vez de deixar a
-  // publicação existente ficar dessincronizada do slug atual.
-  let slug = campaign.publishedAt ? campaign.slug : slugify(String(formData.get("slug") ?? "")) || campaign.slug;
-  if (slug !== campaign.slug) {
-    const existing = await prisma.campaign.findUnique({ where: { slug } });
-    if (existing) slug = campaign.slug;
-  }
+    const parse = parsePartial(projectInfoShape, {
+      internalName: readOptional(formData, "internalName"),
+      publicTitle: readOptional(formData, "publicTitle"),
+      internalReference: readOptional(formData, "internalReference"),
+      workspaceId: readOptional(formData, "workspaceId"),
+      folderId: readOptional(formData, "folderId"),
+      tags: readOptional(formData, "tags"),
+      description: readOptional(formData, "description"),
+      locale: readOptional(formData, "locale"),
+      timezone: readOptional(formData, "timezone"),
+      slug: readOptional(formData, "slug"),
+    });
+    const { data, fieldErrors } = parse;
 
-  const tags = (parsed.data.tags ?? "")
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+    // Espaço de trabalho: só um da própria organização (isolamento multi-tenant).
+    if (data.workspaceId !== undefined && data.workspaceId !== campaign.workspaceId) {
+      const workspace = await prisma.workspace.findFirst({
+        where: { id: data.workspaceId, organizationId: context.organizationId },
+        select: { id: true },
+      });
+      if (!workspace) rejectField(parse, "workspaceId", PROJECT_INFO_MESSAGES.workspaceNotFound);
+    }
+    const workspaceId = data.workspaceId ?? campaign.workspaceId;
 
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: {
-      internalName: parsed.data.internalName,
-      publicTitle: parsed.data.publicTitle || null,
-      internalReference: parsed.data.internalReference || null,
-      workspaceId: parsed.data.workspaceId,
+    // A pasta tem de ser do espaço de trabalho que fica gravado — a enviada
+    // ou, ao mudar só de espaço, a que já estava. Se não for, a aplicação
+    // fica sem pasta (e diz-se porquê) em vez de se perder o resto do
+    // formulário ou de ficar numa pasta de outro espaço.
+    let folderId = emptyToNull(data.folderId);
+    const folderToCheck = folderId !== undefined ? folderId : workspaceId !== campaign.workspaceId ? campaign.folderId : null;
+    if (folderToCheck) {
+      const folder = await prisma.folder.findFirst({
+        where: { id: folderToCheck, workspaceId },
+        select: { id: true },
+      });
+      if (!folder) {
+        folderId = null;
+        fieldErrors.folderId = PROJECT_INFO_MESSAGES.folderOutsideWorkspace;
+      }
+    }
+
+    // O valor gravado volta em cada gravação automática: igual ao atual não
+    // passa pelo `slugify`, que o cortava aos 60 caracteres.
+    let slug: string | undefined;
+    if (data.slug !== undefined && data.slug !== campaign.slug) {
+      const candidate = slugify(data.slug);
+      if (campaign.publishedAt) {
+        // Uma vez publicada, mudar o slug parte o link e o QR code já
+        // partilhados (a imagem do QR fica com a URL antiga, agora um 404
+        // livre para outra campanha reclamar). A página desativa o campo.
+        if (candidate !== campaign.slug) rejectField(parse, "slug", PROJECT_INFO_MESSAGES.slugLocked);
+      } else if (!candidate) {
+        rejectField(parse, "slug", PROJECT_INFO_MESSAGES.slugEmpty);
+      } else if (candidate !== campaign.slug) {
+        const taken = await prisma.campaign.findUnique({ where: { slug: candidate }, select: { id: true } });
+        if (taken) rejectField(parse, "slug", PROJECT_INFO_MESSAGES.slugTaken);
+        else slug = candidate;
+      }
+    }
+
+    const tags =
+      data.tags === undefined
+        ? undefined
+        : data.tags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean);
+
+    const update = {
+      internalName: data.internalName,
+      publicTitle: emptyToNull(data.publicTitle),
+      internalReference: emptyToNull(data.internalReference),
+      workspaceId: data.workspaceId,
       folderId,
       tags,
-      description: parsed.data.description || null,
-      locale: parsed.data.locale,
-      timezone: parsed.data.timezone,
+      description: emptyToNull(data.description),
+      locale: data.locale,
+      timezone: data.timezone,
       slug,
-    },
-  });
+    };
+    const hasValues = () => Object.values(update).some((value) => value !== undefined);
+    let savedSomething = hasValues();
 
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "UPDATE",
-    entityType: "Campaign",
-    entityId: campaignId,
-    result: "SUCCESS",
-    metadata: { step: "informacoes" },
-  });
+    if (savedSomething) {
+      try {
+        await prisma.campaign.update({ where: { id: campaign.id }, data: update });
+      } catch (error) {
+        // Outra campanha ficou com o endereço entre a verificação e a
+        // gravação: grava-se o resto e o endereço volta com o erro.
+        if (update.slug === undefined || databaseErrorKind(error) !== "unique") throw error;
+        fieldErrors.slug = PROJECT_INFO_MESSAGES.slugTaken;
+        update.slug = undefined;
+        savedSomething = hasValues();
+        if (savedSomething) await prisma.campaign.update({ where: { id: campaign.id }, data: update });
+      }
+    }
 
-  revalidatePath(`/apps/${campaignId}/informacoes`);
-  revalidatePath(`/apps/${campaignId}`);
+    if (savedSomething) {
+      await logAudit({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        action: "UPDATE",
+        entityType: "Campaign",
+        entityId: campaign.id,
+        result: "SUCCESS",
+        metadata: {
+          step: "informacoes",
+          // Mudam o link público e quem vê a campanha: antes/depois (§26).
+          ...(update.slug !== undefined && { slugBefore: campaign.slug, slugAfter: update.slug }),
+          ...(update.workspaceId !== undefined &&
+            update.workspaceId !== campaign.workspaceId && {
+              workspaceBefore: campaign.workspaceId,
+              workspaceAfter: update.workspaceId,
+            }),
+        },
+      });
+
+      revalidatePath(`/apps/${campaign.id}/informacoes`);
+      revalidatePath(`/apps/${campaign.id}`);
+    }
+
+    return partialResult(fieldErrors, savedSomething);
+  });
 }

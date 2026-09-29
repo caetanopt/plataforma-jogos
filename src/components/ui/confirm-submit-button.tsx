@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type Rea
 import { useFormStatus } from "react-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { buttonVariants, type ButtonVariant, type ButtonSize } from "@/components/ui/button";
+import { useFormAction } from "@/components/forms/form-action-context";
 
 interface ConfirmSubmitButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   confirmMessage: string;
@@ -49,7 +50,11 @@ export function ConfirmSubmitButton({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const confirmedRef = useRef(false);
   const [open, setOpen] = useState(false);
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  // Num ActionForm o envio não passa pelo `action=` do `<form>`: o estado vem
+  // do contexto.
+  const form = useFormAction();
+  const pending = status.pending || Boolean(form?.isPending);
   // Há vários destes por página: um id fixo criava duplicados no documento.
   const titleId = useId();
 

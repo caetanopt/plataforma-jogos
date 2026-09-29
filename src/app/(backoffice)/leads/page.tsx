@@ -57,7 +57,7 @@ export default async function LeadsPage({
     }),
   ]);
 
-  const rows = leads.items.map(toLeadRow);
+  const rows = leads.items.map((item) => toLeadRow(item));
   const canExport = can(context, "leads:export");
 
   const exportQuery = new URLSearchParams({
@@ -190,6 +190,9 @@ export default async function LeadsPage({
                   <td className="px-4 py-3 text-caetano-anthracite-80">
                     {row.prize}
                     {row.code && <span className="ml-1 font-mono text-xs">({row.code})</span>}
+                    {row.prizeStatus && row.prizeStatus !== "Atribuído" && (
+                      <span className="block text-xs">{row.prizeStatus}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-caetano-anthracite-80">{row.source || row.utmSource || "—"}</td>
                 </tr>

@@ -188,6 +188,8 @@ export async function duplicateCampaignAction(formData: FormData): Promise<void>
         data: {
           campaignId: created.id,
           kind: screen.kind,
+          // Sem isto, um ecrã desligado voltava ligado na cópia (o default é true).
+          enabled: screen.enabled,
           title: screen.title,
           text: screen.text,
           mediaId: screen.mediaId,
@@ -467,20 +469,34 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
 
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId: context.organizationId },
-    include: { _count: { select: { participations: true } } },
+    select: { id: true },
   });
   if (!campaign) redirect("/apps?error=not_found");
 
-  await prisma.campaign.delete({ where: { id: campaignId } });
+  // Por ordem, numa só transação. Participation.campaignVersionId,
+  // ConsentRecord.consentDefinitionId e PrizeAward.prizeId são RESTRICT: com
+  // um único DELETE da campanha, o resultado dependia da ordem em que o
+  // Postgres dispara as cascatas (a do nome interno dos triggers, que muda
+  // quando uma FK é recriada) — com a dos prémios antes da das participações
+  // dava P2003, e o ecrã de erro depois de confirmar. As participações levam
+  // com elas os prémios atribuídos, os consentimentos e as respostas. O FOR
+  // UPDATE faz esperar as participações que comecem entretanto (a inserção
+  // precisa da campanha), em vez de uma delas travar a eliminação a meio.
+  const [, participations] = await prisma.$transaction([
+    prisma.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR UPDATE`,
+    prisma.participation.deleteMany({ where: { campaignId: campaign.id } }),
+    prisma.campaignVersion.deleteMany({ where: { campaignId: campaign.id } }),
+    prisma.campaign.delete({ where: { id: campaign.id } }),
+  ]);
 
   await logAudit({
     organizationId: context.organizationId,
     userId: context.userId,
     action: "DELETE",
     entityType: "Campaign",
-    entityId: campaignId,
+    entityId: campaign.id,
     result: "SUCCESS",
-    metadata: { participationsDeleted: campaign._count.participations },
+    metadata: { participationsDeleted: participations.count },
   });
 
   revalidatePath("/apps");

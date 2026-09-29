@@ -1,9 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
-import type { CampaignType } from "@/generated/prisma/client";
+import type { CampaignType, LeadFormPosition } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { participationRefSchema } from "@/lib/validation/play";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
-import { leadMissingBeforePlay, revealPolicy, type RevealPolicy } from "@/features/play/reveal";
+import {
+  leadMissingBeforePlay,
+  participationLeadFormPosition,
+  revealPolicy,
+  type RevealPolicy,
+} from "@/features/play/reveal";
 import type { GameBlockedReason, ParticipationRef } from "@/features/play/types";
 
 /**
@@ -31,6 +36,9 @@ export interface GameGate {
   isTest: boolean;
   sessionId: string | null;
   policy: RevealPolicy;
+  /** Posição do formulário que vale para esta participação. */
+  leadFormPosition: LeadFormPosition;
+  leadSubmitted: boolean;
 }
 
 /**
@@ -51,7 +59,8 @@ export interface GameGate {
  *    as respostas porque ela terminou a meio do jogo.
  * 3. Formulário antes do jogo: sem ele submetido, não se joga. A idade
  *    mínima, os campos obrigatórios, os consentimentos e os duplicados por
- *    e-mail/telefone são validados nessa submissão.
+ *    e-mail/telefone são validados nessa submissão. A posição é a fixada no
+ *    início da participação (ver `participationLeadFormPosition`).
  */
 export async function openGameGate(
   rawRef: unknown,
@@ -68,6 +77,7 @@ export async function openGameGate(
       isTest: true,
       sessionId: true,
       leadFormResponse: true,
+      leadFormPosition: true,
       resultSummary: true,
       campaign: {
         select: {
@@ -75,7 +85,9 @@ export async function openGameGate(
           status: true,
           scheduleStartAt: true,
           scheduleEndAt: true,
-          leadForm: { select: { position: true } },
+          leadForm: {
+            select: { position: true, _count: { select: { fields: true, consentDefinitions: true } } },
+          },
         },
       },
     },
@@ -93,7 +105,13 @@ export async function openGameGate(
     return { ok: false, reason: "not_active" };
   }
 
-  const position = participation.campaign.leadForm?.position ?? null;
+  const liveForm = participation.campaign.leadForm;
+  const position = participationLeadFormPosition(
+    participation.leadFormPosition,
+    liveForm
+      ? { position: liveForm.position, fieldCount: liveForm._count.fields, consentCount: liveForm._count.consentDefinitions }
+      : null,
+  );
   const leadSubmitted = participation.leadFormResponse !== null;
   if (leadMissingBeforePlay(position, leadSubmitted)) return { ok: false, reason: "lead_missing" };
 
@@ -105,7 +123,9 @@ export async function openGameGate(
       campaignType: participation.campaign.type,
       isTest: participation.isTest,
       sessionId: participation.sessionId,
-      policy: revealPolicy(position, leadSubmitted),
+      policy: revealPolicy(position, leadSubmitted, participation.campaign.type),
+      leadFormPosition: position,
+      leadSubmitted,
     },
   };
 }

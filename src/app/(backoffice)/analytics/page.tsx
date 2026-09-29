@@ -230,7 +230,8 @@ export default async function AnalyticsPage({
                 ) : (
                   <span className="font-bold">{prize.publicName}</span>
                 )}{" "}
-                ({prize.remaining === 1 ? "1 restante" : `${prize.remaining} restantes`}).
+                ({prize.remaining === 1 ? "1 restante" : `${prize.remaining} restantes`}
+                {prize.reserved > 0 && `, ${prize.reserved} ${prize.reserved === 1 ? "reservado" : "reservados"}`}).
               </li>
             ))}
           </ul>
@@ -325,7 +326,15 @@ export default async function AnalyticsPage({
             <StatCard label="Vencedores" value={stats.wheel.winners} />
             <StatCard label="Não vencedores" value={stats.wheel.nonWinners} />
             <StatCard label="Taxa de vitória" value={percent(stats.wheel.winRate)} />
+            <StatCard label="Prémios atribuídos" value={stats.wheel.prizesAwarded} />
+            <StatCard label="Reservados agora" value={stats.wheel.prizesReserved} />
+            <StatCard label="Não reclamados" value={stats.wheel.prizesUnclaimed} />
+            <StatCard label="Recusados (duplicado ou bot)" value={stats.wheel.prizesRefused} />
           </div>
+          <p className="mt-2 text-xs text-caetano-anthracite-80">
+            Com o formulário depois do jogo, o prémio sorteado fica reservado até a lead ser aceite. Taxa de
+            reclamação: {percent(stats.wheel.claimRate)}.
+          </p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase text-caetano-anthracite-80">Distribuição de prémios</h3>
@@ -345,7 +354,9 @@ export default async function AnalyticsPage({
                   <li key={p.prizeName} className="flex justify-between">
                     <span>{p.prizeName}</span>
                     <span className="text-caetano-anthracite-80">
-                      {p.total != null ? `${p.remaining}/${p.total}` : "Ilimitado"}
+                      {p.total != null
+                        ? `${p.remaining}/${p.total}${p.reserved > 0 ? ` · ${p.reserved} reservado${p.reserved === 1 ? "" : "s"}` : ""}`
+                        : "Ilimitado"}
                     </span>
                   </li>
                 ))}

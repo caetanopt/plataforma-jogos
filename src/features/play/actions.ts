@@ -4,19 +4,29 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { checkParticipationAllowed } from "@/features/play/limits";
-import { extractLeadIdentity } from "@/features/play/identity";
+import { extractLeadIdentity, isPlausiblePhone } from "@/features/play/identity";
 import { openGameGate, parseParticipationRef, tokenMatches } from "@/features/play/participation-access";
-import { projectWheelOutcome } from "@/features/play/reveal";
-import type { GameActionResponse, ParticipationRef } from "@/features/play/types";
+import {
+  effectiveLeadFormPosition,
+  participationLeadFormPosition,
+  projectWheelOutcome,
+  type LeadFormShape,
+} from "@/features/play/reveal";
+import { toPublicLeadForm } from "@/features/play/lead-form-definition";
+import { effectiveGameSeconds } from "@/features/play/game-clock";
+import type { GameActionResponse, ParticipationRef, PublicLeadFormDefinition } from "@/features/play/types";
 import { runSerializable } from "@/lib/db/transaction-retry";
 import {
   analyticsEventSchema,
   memorySubmitSchema,
+  participationRefSchema,
   quizSubmissionsSchema,
   quizTimeSecondsSchema,
+  resumeParticipationSchema,
   startParticipationSchema,
   submitLeadFormSchema,
 } from "@/lib/validation/play";
+import { releaseParticipationReservation, settleReservation } from "@/features/prizes/reservation";
 import { createParticipationIfAllowed } from "@/features/play/create-participation";
 import { getOrCreateVisitorCookieId } from "@/features/play/cookie";
 import { getRequestIp } from "@/lib/security/request-ip";
@@ -62,6 +72,25 @@ async function recordEvent(
   });
 }
 
+type LeadFormForShape = {
+  position: LeadFormShape["position"];
+  fields: readonly unknown[];
+  consentDefinitions: readonly unknown[];
+} | null;
+
+function shapeOf(form: LeadFormForShape): LeadFormShape | null {
+  return form
+    ? { position: form.position, fieldCount: form.fields.length, consentCount: form.consentDefinitions.length }
+    : null;
+}
+
+const leadFormContent = {
+  include: {
+    fields: { orderBy: { order: "asc" } },
+    consentDefinitions: { orderBy: { order: "asc" } },
+  },
+} as const;
+
 export async function recordAnalyticsEventAction(
   campaignId: string,
   type: "CAMPAIGN_VIEWED" | "START_CLICKED" | "CTA_CLICKED",
@@ -106,7 +135,7 @@ export interface StartParticipationInput {
 }
 
 export type StartParticipationResult =
-  | { ok: true; participationId: string; isTest: boolean }
+  | { ok: true; participationId: string; isTest: boolean; leadForm: PublicLeadFormDefinition | null }
   | { ok: false; reason: "not_active" | "limit_reached" | "rate_limited" | "not_found" };
 
 export async function startParticipationAction(
@@ -130,13 +159,27 @@ export async function startParticipationAction(
       participationLimitType: true,
       participationCustomMax: true,
       dedupStrategies: true,
+      minAge: true,
       quizConfig: { select: { maxAttempts: true } },
+      leadForm: leadFormContent,
     },
   });
   if (!campaign) return { ok: false, reason: "not_found" };
 
   const effectiveState = getEffectivePublicState(campaign);
   if (effectiveState !== "active") return { ok: false, reason: "not_active" };
+
+  const liveShape = shapeOf(campaign.leadForm);
+  const effectivePosition = effectiveLeadFormPosition(liveShape);
+
+  // Idade mínima sem data de nascimento no formulário não se verifica: falha
+  // fechado (§16) em vez de deixar jogar sem confirmar. A publicação já é
+  // recusada nesse caso; isto cobre campanhas publicadas antes.
+  const hasBirthDate = campaign.leadForm?.fields.some((field) => field.type === "BIRTH_DATE") ?? false;
+  if (campaign.minAge != null && (effectivePosition === "NONE" || !hasBirthDate)) {
+    await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", false, input.sessionId, { reason: "age_unverifiable" });
+    return { ok: false, reason: "not_active" };
+  }
 
   const ip = await getRequestIp();
   const cookieId = await getOrCreateVisitorCookieId();
@@ -186,7 +229,10 @@ export async function startParticipationAction(
     deviceType,
     browser,
     os,
+    leadFormPosition: effectivePosition,
   });
+
+  if (result.kind === "conflict") return { ok: false, reason: "not_found" };
 
   if (result.kind === "blocked") {
     await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", isTest, input.sessionId, {
@@ -199,11 +245,142 @@ export async function startParticipationAction(
     await recordEvent(campaign.id, "GAME_STARTED", isTest, input.sessionId);
   }
 
+  // O formulário segue a posição fixada nesta participação (num retry, a
+  // que ficou gravada no primeiro pedido), com os campos atuais.
+  const position = participationLeadFormPosition(result.participation.leadFormPosition, liveShape);
   return {
     ok: true,
     participationId: result.participation.id,
     isTest: result.participation.isTest,
+    leadForm: toPublicLeadForm(campaign.leadForm, position),
   };
+}
+
+/**
+ * Participações terminadas há mais do que isto já não são retomadas. Não é
+ * exportada: um ficheiro "use server" só pode exportar funções assíncronas.
+ */
+const RESUME_COMPLETED_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+export interface ResumeParticipationInput {
+  campaignId: string;
+  ref: ParticipationRef;
+  testRequested: boolean;
+}
+
+export type ResumeParticipationResult =
+  | {
+      ok: true;
+      participationId: string;
+      isTest: boolean;
+      leadForm: PublicLeadFormDefinition | null;
+      leadSubmitted: boolean;
+      completed: boolean;
+    }
+  | { ok: false };
+
+/**
+ * Retoma a participação do separador depois de recarregar a página (§7:
+ * navegação sem perda de dados). Antes, um F5 criava uma participação nova
+ * — ou esbarrava no limite de participação, que penalizava quem tinha
+ * participado uma só vez — e o prémio sorteado ficava inacessível.
+ *
+ * Só leitura: não grava, não emite eventos e não conta para os limites (a
+ * participação já conta). Exige o token de posse, que só o separador que a
+ * iniciou tem (sessionStorage).
+ */
+export async function resumeParticipationAction(
+  rawInput: ResumeParticipationInput,
+): Promise<ResumeParticipationResult> {
+  const parsed = resumeParticipationSchema.safeParse(rawInput);
+  if (!parsed.success) return { ok: false };
+  const input = parsed.data;
+
+  const ip = await getRequestIp();
+  // Largo: num evento, muitos visitantes partilham o IP do wi-fi.
+  const rateLimit = await checkRateLimit(`resume:${input.campaignId}:${ip ?? input.ref.participationId}`, 300, 3600);
+  if (!rateLimit.allowed) return { ok: false };
+
+  const participation = await prisma.participation.findUnique({
+    where: { id: input.ref.participationId },
+    select: {
+      id: true,
+      idempotencyKey: true,
+      campaignId: true,
+      isTest: true,
+      status: true,
+      completedAt: true,
+      resultSummary: true,
+      leadFormResponse: true,
+      leadFormPosition: true,
+      campaign: {
+        select: {
+          organizationId: true,
+          status: true,
+          scheduleStartAt: true,
+          scheduleEndAt: true,
+          leadForm: leadFormContent,
+        },
+      },
+    },
+  });
+  if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) return { ok: false };
+  if (participation.campaignId !== input.campaignId || participation.status === "BLOCKED") return { ok: false };
+
+  // O modo (teste ou real) tem de coincidir com o da página, decidido no
+  // servidor como no início.
+  const testMode = input.testRequested && (await canTestCampaign(participation.campaign.organizationId));
+  if (participation.isTest !== testMode) return { ok: false };
+
+  const completed = participation.resultSummary !== null;
+  if (!completed && getEffectivePublicState(participation.campaign) !== "active") return { ok: false };
+  // Num quiosque, a pessoa seguinte no mesmo separador não vê o resultado da
+  // anterior para sempre.
+  if (completed && participation.completedAt && Date.now() - participation.completedAt.getTime() > RESUME_COMPLETED_WINDOW_MS) {
+    return { ok: false };
+  }
+
+  const position = participationLeadFormPosition(participation.leadFormPosition, shapeOf(participation.campaign.leadForm));
+  return {
+    ok: true,
+    participationId: participation.id,
+    isTest: participation.isTest,
+    leadForm: toPublicLeadForm(participation.campaign.leadForm, position),
+    leadSubmitted: participation.leadFormResponse !== null,
+    completed,
+  };
+}
+
+/**
+ * Regista no servidor o início do jogo (memória e quiz), quando o tabuleiro
+ * ou a primeira pergunta aparecem. Idempotente: o início nunca é reescrito,
+ * por isso recarregar a página não repõe o relógio (ver game-clock.ts).
+ */
+export async function beginGameAction(rawRef: ParticipationRef): Promise<{ ok: boolean }> {
+  const parsed = participationRefSchema.safeParse(rawRef);
+  if (!parsed.success) return { ok: false };
+
+  const rateLimit = await checkRateLimit(`begin:${parsed.data.participationId}`, 20, 60);
+  if (!rateLimit.allowed) return { ok: false };
+
+  const access = await openGameGate(parsed.data);
+  if (!access.ok || access.gate.campaignType === "WHEEL") return { ok: false };
+
+  await prisma.gameSession.upsert({
+    where: { participationId: access.gate.participationId },
+    create: { participationId: access.gate.participationId },
+    update: {},
+  });
+  return { ok: true };
+}
+
+/** Início do jogo no servidor; sem GameSession, o início da participação. */
+async function gameStartedAt(participationId: string): Promise<Date | null> {
+  const participation = await prisma.participation.findUnique({
+    where: { id: participationId },
+    select: { startedAt: true, gameSession: { select: { startedAt: true } } },
+  });
+  return participation?.gameSession?.startedAt ?? participation?.startedAt ?? null;
 }
 
 export interface SubmitLeadFormInput {
@@ -214,7 +391,7 @@ export interface SubmitLeadFormInput {
 }
 
 export type SubmitLeadFormResult =
-  { ok: true } | { ok: false; reason: "duplicate" | "invalid" | "bot" };
+  { ok: true } | { ok: false; reason: "duplicate" | "invalid" | "phone" | "bot" };
 
 export async function submitLeadFormAction(
   rawInput: SubmitLeadFormInput,
@@ -246,16 +423,26 @@ export async function submitLeadFormAction(
   if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) {
     return { ok: false, reason: "invalid" };
   }
-  if (!participation.campaign.leadForm) return { ok: false, reason: "invalid" };
 
   // Já submetido: não se grava outra vez nem se duplicam os registos de
   // consentimento. O fluxo público pode repetir o envio depois de uma falha
   // de rede e tem de receber sucesso.
   if (participation.leadFormResponse !== null) return { ok: true };
 
+  // Sem formulário para esta participação (desligado, ou sem campos nem
+  // consentimentos): nada a gravar, e não é uma lead (§20, §24). Um browser
+  // com a página antiga tem de conseguir avançar.
+  const position = participationLeadFormPosition(
+    participation.leadFormPosition,
+    shapeOf(participation.campaign.leadForm),
+  );
+  if (!participation.campaign.leadForm || position === "NONE") return { ok: true };
+
   if (input.honeypot) {
     // Bot detetado — finge sucesso sem gravar nada real (secção 25). Como
-    // nada fica gravado, os portões do jogo continuam fechados para ele.
+    // nada fica gravado, os portões do jogo continuam fechados para ele, e
+    // um prémio reservado volta ao stock.
+    await runSerializable((tx) => releaseParticipationReservation(tx, participation.id, "BOT", new Date()));
     await recordEvent(
       participation.campaignId,
       "PARTICIPATION_BLOCKED",
@@ -290,8 +477,15 @@ export async function submitLeadFormAction(
       return { ok: false, reason: "invalid" };
     }
   }
+  // Um telefone que não é um número (menos de 6 ou mais de 15 dígitos) não
+  // serve para contactar nem para o controlo de duplicados.
+  for (const field of leadForm.fields) {
+    const value = input.values[field.internalKey]?.trim();
+    if (field.type === "PHONE" && value && !isPlausiblePhone(value)) return { ok: false, reason: "phone" };
+  }
   for (const consent of leadForm.consentDefinitions) {
-    if (consent.required && !input.consents[consent.id]) {
+    // O de marketing nunca é obrigatório, mesmo que tenha sido gravado assim.
+    if (consent.required && !consent.isMarketing && !input.consents[consent.id]) {
       return { ok: false, reason: "invalid" };
     }
   }
@@ -325,6 +519,7 @@ export async function submitLeadFormAction(
   // verificação. A gravação só acontece se a participação ainda não tiver
   // formulário, por isso um duplo clique não duplica os consentimentos.
   const outcome = await runSerializable(async (tx) => {
+    const now = new Date();
     if (!participation.isTest && (identity.email || identity.phone)) {
       const allowed = await checkParticipationAllowed(tx, {
         organizationId,
@@ -335,16 +530,20 @@ export async function submitLeadFormAction(
         email: identity.email,
         phone: identity.phone,
         excludeParticipationId: participation.id,
-        now: new Date(),
+        now,
       });
-      if (!allowed) return "duplicate" as const;
+      if (!allowed) {
+        // Lead recusada: o prémio reservado para ela volta ao stock.
+        await releaseParticipationReservation(tx, participation.id, "DUPLICATE", now);
+        return { status: "duplicate" as const };
+      }
     }
 
     const saved = await tx.participation.updateMany({
       where: { id: participation.id, leadFormResponse: { equals: Prisma.DbNull } },
       data: { leadFormResponse: values, ...identity },
     });
-    if (saved.count === 0) return "already_saved" as const;
+    if (saved.count === 0) return { status: "already_saved" as const };
 
     if (leadForm.consentDefinitions.length > 0) {
       await tx.consentRecord.createMany({
@@ -357,18 +556,24 @@ export async function submitLeadFormAction(
         })),
       });
     }
-    return "saved" as const;
+    // Lead aceite: o prémio reservado no sorteio passa a atribuído, na mesma
+    // transação que grava a lead (ver features/prizes/reservation.ts).
+    const prize = await settleReservation(tx, participation.id, now);
+    return { status: "saved" as const, prize };
   });
 
-  if (outcome === "duplicate") return { ok: false, reason: "duplicate" };
+  if (outcome.status === "duplicate") return { ok: false, reason: "duplicate" };
 
-  if (outcome === "saved") {
+  if (outcome.status === "saved") {
     await recordEvent(
       campaignId,
       "LEAD_FORM_SUBMITTED",
       participation.isTest,
       participation.sessionId,
     );
+    if (outcome.prize === "confirmed") {
+      await recordEvent(campaignId, "PRIZE_AWARDED", participation.isTest, participation.sessionId);
+    }
   }
 
   return { ok: true };
@@ -423,11 +628,21 @@ export async function submitMemoryResultAction(
   const config = participation.campaign.memoryConfig;
   if (!config) throw new Error("Jogo da Memória não configurado para esta campanha.");
 
+  // O tempo que conta é o maior entre o do browser e o do servidor (ver
+  // game-clock.ts); a pré-visualização das cartas não conta para o browser.
+  const now = new Date();
+  const timeSeconds = effectiveGameSeconds({
+    clientSeconds: input.timeSeconds,
+    startedAt: await gameStartedAt(gate.participationId),
+    now,
+    extraGraceSeconds: config.previewSeconds ?? 0,
+  });
+
   const result = computeMemoryScore({
     pairsTotal: config.pairs.length,
     pairsFound: input.pairsFound,
     attempts: input.attempts,
-    timeSeconds: input.timeSeconds,
+    timeSeconds,
     config: {
       pointsPerPair: config.pointsPerPair,
       penaltyPerMistake: config.penaltyPerMistake,
@@ -452,10 +667,11 @@ export async function submitMemoryResultAction(
       where: { id: gate.participationId },
       data: {
         status: "COMPLETED",
-        completedAt: new Date(),
+        completedAt: now,
         resultSummary: result as unknown as Prisma.InputJsonValue,
       },
     }),
+    prisma.gameSession.updateMany({ where: { participationId: gate.participationId }, data: { endedAt: now } }),
   ]);
 
   await recordEvent(gate.campaignId, "GAME_COMPLETED", gate.isTest, gate.sessionId);
@@ -491,18 +707,24 @@ export async function spinWheelAction(
     // pode gerar eventos duplicados.
     if (!result.alreadyResolved) {
       await recordEvent(gate.campaignId, "GAME_COMPLETED", gate.isTest, gate.sessionId);
-      if (result.prize) {
-        await recordEvent(gate.campaignId, "PRIZE_AWARDED", gate.isTest, gate.sessionId);
-      }
+    }
+    // Um prémio reservado só conta quando a lead é aceite (evento emitido
+    // aí); em teste nada é real, mas o evento fica marcado como teste.
+    if (result.confirmedNow || (!result.alreadyResolved && result.delivery === "test")) {
+      await recordEvent(gate.campaignId, "PRIZE_AWARDED", gate.isTest, gate.sessionId);
     }
     // Projeção explícita: o resultado gravado guarda o id interno do prémio,
     // e tudo o que esta ação devolve chega ao browser tal como está.
     return { status: "revealed", result: projectWheelOutcome(result, gate.policy) };
   } catch (error) {
     if (error instanceof NoEligibleSegmentsError) {
+      // Sem nada que possa sair agora (prémios esgotados ou fora do período,
+      // sem segmento de recurso): uma resposta que o ecrã sabe mostrar, em
+      // vez de um erro.
       await recordEvent(gate.campaignId, "PARTICIPATION_BLOCKED", gate.isTest, gate.sessionId, {
         reason: "no_eligible_segments",
       });
+      return { status: "blocked", reason: "no_segments" };
     }
     throw error;
   }
@@ -575,6 +797,15 @@ export async function submitQuizAction(
     });
   }
 
+  // O tempo que conta é o maior entre o do browser e o do servidor (ver
+  // game-clock.ts): recarregar a página já não repõe o tempo total.
+  const now = new Date();
+  const effectiveSeconds = effectiveGameSeconds({
+    clientSeconds: timeSeconds,
+    startedAt: await gameStartedAt(gate.participationId),
+    now,
+  });
+
   const scored = computeQuizScore(
     config.questions.map((q) => ({
       id: q.id,
@@ -582,7 +813,7 @@ export async function submitQuizAction(
       correctAnswerIds: q.answers.filter((a) => a.isCorrect).map((a) => a.id),
     })),
     submissions,
-    timeSeconds,
+    effectiveSeconds,
     {
       penaltyPerWrong: config.penaltyPerWrong,
       speedBonusEnabled: config.speedBonusEnabled,
@@ -602,17 +833,18 @@ export async function submitQuizAction(
         percentage: scored.percentage,
         passed: scored.passed,
         resultProfileId: profileId,
-        timeSeconds,
+        timeSeconds: effectiveSeconds,
       },
     }),
     prisma.participation.update({
       where: { id: gate.participationId },
       data: {
         status: "COMPLETED",
-        completedAt: new Date(),
+        completedAt: now,
         resultSummary: scored as unknown as Prisma.InputJsonValue,
       },
     }),
+    prisma.gameSession.updateMany({ where: { participationId: gate.participationId }, data: { endedAt: now } }),
   ]);
 
   await recordEvent(gate.campaignId, "GAME_COMPLETED", gate.isTest, gate.sessionId);

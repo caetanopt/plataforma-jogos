@@ -25,6 +25,33 @@ export function normalizeEmail(value: string | null | undefined): string | null 
   return trimmed ? trimmed : null;
 }
 
+/**
+ * Telefones comparam-se só pelos dígitos: "912 345 678", "912-345-678" e
+ * "912345678" são o mesmo número, e antes contavam como três pessoas no
+ * controlo de duplicados. Um "+" antes do primeiro dígito, ou o prefixo
+ * internacional "00", dão a forma "+351912345678". Não se adivinha o
+ * indicativo: "912345678" e "+351912345678" continuam diferentes.
+ *
+ * A mesma regra está em SQL na migração que normalizou os telefones já
+ * gravados — as duas têm de coincidir.
+ */
+export function normalizePhone(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = value.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  if (/[0-9+]/.exec(value)?.[0] === "+") return `+${digits}`;
+  if (digits.startsWith("00") && digits.length > 2) return `+${digits.slice(2)}`;
+  return digits;
+}
+
+/** Entre 6 e 15 dígitos (o máximo do E.164). */
+export function isPlausiblePhone(value: string | null | undefined): boolean {
+  const normalized = normalizePhone(value);
+  if (!normalized) return false;
+  const digits = normalized.replace("+", "").length;
+  return digits >= 6 && digits <= 15;
+}
+
 function clean(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -47,7 +74,7 @@ export function extractLeadIdentity(
 
   return {
     email: normalizeEmail(valueOf(["EMAIL"])),
-    phone: clean(valueOf(["PHONE"])),
+    phone: normalizePhone(valueOf(["PHONE"])),
     firstName: clean(valueOf(["FIRST_NAME", "FULL_NAME"])),
     lastName: clean(valueOf(["LAST_NAME"])),
   };

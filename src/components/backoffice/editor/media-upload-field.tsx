@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
+import { useFormAction } from "@/components/forms/form-action-context";
 import type { MediaKind } from "@/generated/prisma/client";
 
 interface MediaUploadFieldProps {
@@ -31,11 +32,39 @@ export function MediaUploadField({
   const [status, setStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const hiddenInputRef = useRef<HTMLInputElement>(null);
+  const form = useFormAction();
+  const uploadId = useId();
+  const setUploading = form?.setUploading;
 
-  function notifyParentForm(nextValue: string) {
-    if (!hiddenInputRef.current) return;
-    hiddenInputRef.current.value = nextValue;
-    hiddenInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+  // O valor gravado mudou no servidor (brand kit aplicado, outra gravação):
+  // acompanha-o, a não ser que haja um upload deste campo a meio. Antes o
+  // campo era remontado por `key` a cada gravação, e um upload em curso
+  // perdia-se.
+  const [syncedDefault, setSyncedDefault] = useState(defaultMediaId ?? "");
+  if ((defaultMediaId ?? "") !== syncedDefault && status !== "uploading") {
+    setSyncedDefault(defaultMediaId ?? "");
+    setMediaId(defaultMediaId ?? "");
+    setPreviewUrl(defaultUrl ?? "");
+    setKind(defaultKind ?? null);
+  }
+
+  useEffect(() => {
+    if (!setUploading) return;
+    setUploading(uploadId, status === "uploading");
+    return () => setUploading(uploadId, false);
+  }, [setUploading, uploadId, status]);
+
+  /**
+   * Muda o valor do campo e avisa o formulário. Um `input` sintético num
+   * `<input type="hidden">` não gera onChange no React: a gravação
+   * automática só disparava 900 ms depois de escolher o ficheiro, com o id
+   * antigo, e o "Remover" nunca gravava.
+   */
+  function commit(nextValue: string) {
+    // O valor vai para o DOM antes de avisar: a gravação lê o FormData já.
+    if (hiddenInputRef.current) hiddenInputRef.current.value = nextValue;
+    setMediaId(nextValue);
+    form?.notifyChange();
   }
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -84,11 +113,10 @@ export function MediaUploadField({
         result = await confirmRes.json();
       }
 
-      setMediaId(result.id);
       setPreviewUrl(result.url);
       setKind(result.kind);
       setStatus("idle");
-      notifyParentForm(result.id);
+      commit(result.id);
     } catch (error) {
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Erro desconhecido.");
@@ -96,16 +124,15 @@ export function MediaUploadField({
   }
 
   function handleRemove() {
-    setMediaId("");
     setPreviewUrl("");
     setKind(null);
-    notifyParentForm("");
+    commit("");
   }
 
   return (
     <div>
-      <Label>{label}</Label>
-      <input ref={hiddenInputRef} type="hidden" name={name} defaultValue={mediaId} />
+      <Label id={`${uploadId}-label`}>{label}</Label>
+      <input ref={hiddenInputRef} type="hidden" name={name} value={mediaId} />
 
       {previewUrl && (
         <div className="mb-2">
@@ -123,26 +150,44 @@ export function MediaUploadField({
       )}
 
       <div className="flex items-center gap-2">
-        <label className="cursor-pointer rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20">
-          {previewUrl ? "Substituir" : "Carregar ficheiro"}
-          <input type="file" accept={accept} className="hidden" onChange={handleFileChange} />
+        {/* O input fica visualmente escondido mas focável (com `hidden` não se
+            chegava lá pelo teclado), e o nome inclui o do campo. */}
+        <label className="cursor-pointer rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20 focus-within:ring-2 focus-within:ring-caetano-cyan">
+          <span id={`${uploadId}-action`}>{previewUrl ? "Substituir" : "Carregar ficheiro"}</span>
+          <input
+            type="file"
+            accept={accept}
+            className="sr-only"
+            aria-labelledby={`${uploadId}-label ${uploadId}-action`}
+            aria-describedby={helpText ? `${uploadId}-help` : undefined}
+            onChange={handleFileChange}
+          />
         </label>
         {previewUrl && (
           <button
             type="button"
             onClick={handleRemove}
+            aria-label={`Remover ${label}`}
             className="text-sm text-danger hover:underline"
           >
             Remover
           </button>
         )}
-        {status === "uploading" && (
-          <span className="text-xs text-caetano-anthracite-80">A carregar…</span>
-        )}
+        <span aria-live="polite" className="text-xs text-caetano-anthracite-80">
+          {status === "uploading" ? "A carregar…" : ""}
+        </span>
       </div>
 
-      {helpText && <p className="mt-1 text-xs text-caetano-anthracite-80">{helpText}</p>}
-      {status === "error" && <p className="mt-1 text-xs text-danger">{errorMessage}</p>}
+      {helpText && (
+        <p id={`${uploadId}-help`} className="mt-1 text-xs text-caetano-anthracite-80">
+          {helpText}
+        </p>
+      )}
+      {status === "error" && (
+        <p role="alert" className="mt-1 text-xs text-danger">
+          {errorMessage}
+        </p>
+      )}
     </div>
   );
 }

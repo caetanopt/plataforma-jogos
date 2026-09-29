@@ -23,6 +23,8 @@ export interface LeadRow {
   timeSeconds: string;
   prize: string;
   code: string;
+  /** Atribuído, reservado ou não atribuído (com o motivo); vazio sem prémio. */
+  prizeStatus: string;
   source: string;
   utmSource: string;
   utmMedium: string;
@@ -66,7 +68,35 @@ function summarizeResult(p: LeadParticipation): { result: string; score: string;
   return { result: "", score: "", timeSeconds: "" };
 }
 
-export function toLeadRow(p: LeadParticipation): LeadRow {
+const RELEASE_LABELS: Record<string, string> = {
+  EXPIRED: "Não atribuído (formulário fora do prazo)",
+  DUPLICATE: "Não atribuído (lead duplicada)",
+  BOT: "Não atribuído (bot)",
+};
+
+/**
+ * Prémio e código só quando o prémio foi mesmo atribuído. O código de uma
+ * reserva (ativa ou libertada) nunca aparece nem é exportado: pode vir a
+ * ser entregue a outra pessoa.
+ */
+function prizeColumns(p: LeadParticipation, now: Date): Pick<LeadRow, "prize" | "code" | "prizeStatus"> {
+  const award = p.prizeAward;
+  if (!award) return { prize: "", code: "", prizeStatus: "" };
+  if (award.status === "CONFIRMED") {
+    return { prize: award.prize.publicName, code: award.prizeCode?.code ?? "", prizeStatus: "Atribuído" };
+  }
+  if (award.status === "RESERVED") {
+    const active = award.reservationExpiresAt != null && award.reservationExpiresAt > now;
+    return {
+      prize: "",
+      code: "",
+      prizeStatus: active ? "Reservado (a aguardar a lead)" : RELEASE_LABELS.EXPIRED,
+    };
+  }
+  return { prize: "", code: "", prizeStatus: RELEASE_LABELS[award.releaseReason ?? "EXPIRED"] ?? "Não atribuído" };
+}
+
+export function toLeadRow(p: LeadParticipation, now: Date = new Date()): LeadRow {
   const { result, score, timeSeconds } = summarizeResult(p);
   return {
     id: p.id,
@@ -82,8 +112,7 @@ export function toLeadRow(p: LeadParticipation): LeadRow {
     result,
     score,
     timeSeconds,
-    prize: p.prizeAward?.prize.publicName ?? "",
-    code: p.prizeAward?.prizeCode?.code ?? "",
+    ...prizeColumns(p, now),
     source: p.source ?? "",
     utmSource: p.utmSource ?? "",
     utmMedium: p.utmMedium ?? "",
@@ -116,11 +145,26 @@ const CSV_COLUMNS: Array<[keyof LeadRow, string]> = [
   ["browser", "Browser"],
   ["os", "SO"],
   ["isTest", "Teste"],
+  // No fim, para não mudar a posição das colunas que já existiam.
+  ["prizeStatus", "Estado do prémio"],
 ];
 
+/**
+ * Um valor que comece por =, +, -, @, tab ou CR é interpretado como fórmula
+ * pelo Excel e pelo Sheets (injeção de fórmulas, §25): o nome ou a resposta
+ * de um participante podia correr uma fórmula no computador de quem abre a
+ * exportação. Um apóstrofo à frente torna-o texto. Números simples (um
+ * telefone "+351912345678") ficam como estão.
+ */
+function neutralizeFormula(str: string): string {
+  if (!/^[=+\-@\t\r]/.test(str)) return str;
+  if (/^[+-]?\d[\d\s.]*$/.test(str)) return str;
+  return `'${str}`;
+}
+
 function escapeCsvValue(value: unknown): string {
-  const str = value instanceof Date ? value.toISOString() : String(value ?? "");
-  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+  const str = neutralizeFormula(value instanceof Date ? value.toISOString() : String(value ?? ""));
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;

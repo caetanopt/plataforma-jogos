@@ -23,7 +23,42 @@ export type GameBlockedReason =
   /** A campanha deixou de aceitar participações (pausada, expirada, fora da agenda). */
   | "not_active"
   /** O formulário é pedido antes do jogo e ainda não foi submetido. */
-  | "lead_missing";
+  | "lead_missing"
+  /** Roda sem nenhum segmento elegível agora (prémios esgotados, fora do período). */
+  | "no_segments";
+
+export type PublicLeadFormPosition = "BEFORE_GAME" | "AFTER_GAME" | "BEFORE_RESULT" | "BEFORE_PRIZE";
+
+export interface PublicLeadField {
+  id: string;
+  internalKey: string;
+  type: string;
+  label: string;
+  placeholder: string | null;
+  helpText: string | null;
+  required: boolean;
+  options: string[] | null;
+}
+
+export interface PublicConsentDefinition {
+  id: string;
+  text: string;
+  required: boolean;
+}
+
+/**
+ * Formulário que o browser mostra a uma participação. Vem do servidor no
+ * início (e na retoma), com a posição fixada nessa participação — e não da
+ * página, carregada antes: se o admin mudasse a posição entretanto, o
+ * browser seguia um fluxo e o servidor exigia outro. `null` quando a
+ * participação não tem formulário.
+ */
+export interface PublicLeadFormDefinition {
+  position: PublicLeadFormPosition;
+  honeypotEnabled: boolean;
+  fields: PublicLeadField[];
+  consents: PublicConsentDefinition[];
+}
 
 /**
  * Resposta de uma ação de jogo (rodar, terminar a memória, submeter o quiz).

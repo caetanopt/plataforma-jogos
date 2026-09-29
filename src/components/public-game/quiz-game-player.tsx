@@ -177,7 +177,7 @@ export function QuizGamePlayer({
 
       {/* Respostas com imagem ficam em grelha; só texto mantém-se em lista. */}
       <div className={cn("mt-4", hasAnswerImages ? "grid grid-cols-2 gap-3 sm:grid-cols-3" : "space-y-2")}>
-        {question.answers.map((answer) => {
+        {question.answers.map((answer, answerIndex) => {
           const isSelected = selected.includes(answer.id);
           return (
             <button
@@ -198,7 +198,9 @@ export function QuizGamePlayer({
               {answer.imageUrl && (
                 <img
                   src={answer.imageUrl}
-                  alt=""
+                  // Com texto, a imagem é decorativa; sem texto é o único nome
+                  // do botão para um leitor de ecrã (§27).
+                  alt={answer.text ? "" : `Resposta ${answerIndex + 1}`}
                   className="mb-2 aspect-square w-full rounded object-cover"
                 />
               )}

@@ -7,12 +7,13 @@ import {
   saveAsBrandKitAction,
   updateCampaignThemeAction,
 } from "@/features/campaigns/steps/brand-actions";
+import { BRAND_THEME_LIMITS } from "@/lib/validation/brand";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
+import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { ThemeFieldset } from "@/components/backoffice/editor/theme-fieldset";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 export default async function BrandStepPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -53,14 +54,21 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
       </div>
 
       {brandKits.length > 0 && (
-        <form action={applyBrandKitAction} className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        // Fica com o kit escolhido depois de aplicar (sem reset).
+        <ActionForm
+          action={applyBrandKitAction}
+          resetOnSuccess={false}
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+          messageClassName="w-full"
+        >
           <input type="hidden" name="campaignId" value={campaign.id} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <Label htmlFor="brandKitId">Aplicar brand kit</Label>
             <select
               id="brandKitId"
               name="brandKitId"
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
+              defaultValue={campaign.theme.sourceBrandKitId ?? undefined}
+              className="h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm text-caetano-anthracite focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
             >
               {brandKits.map((kit) => (
                 <option key={kit.id} value={kit.id}>
@@ -69,33 +77,44 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
               ))}
             </select>
           </div>
-          <Button type="submit" variant="outline">
-            Aplicar
-          </Button>
-        </form>
+          <SubmitButton variant="outline">Aplicar</SubmitButton>
+        </ActionForm>
       )}
 
+      {/* Sem o nome do tema: não se edita aqui, e a ação mantém o gravado. */}
       <AutoSaveForm action={updateCampaignThemeAction} className="space-y-4">
         <input type="hidden" name="campaignId" value={campaign.id} />
-        <input type="hidden" name="name" value={campaign.theme.name} />
         <ThemeFieldset
           theme={campaign.theme}
           media={{ logo: logoMedia, favicon: faviconMedia, background: backgroundMedia }}
         />
-        <SaveStatus />
       </AutoSaveForm>
 
       {canManageBrand && (
-        <form action={saveAsBrandKitAction} className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+        <ActionForm
+          action={saveAsBrandKitAction}
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+          messageClassName="w-full"
+        >
           <input type="hidden" name="campaignId" value={campaign.id} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <Label htmlFor="kitName">Guardar como brand kit reutilizável</Label>
-            <Input id="kitName" name="kitName" placeholder="Nome do brand kit" required />
+            <Input
+              id="kitName"
+              name="kitName"
+              maxLength={BRAND_THEME_LIMITS.name}
+              placeholder="Nome do brand kit"
+              aria-describedby="kitName-help"
+              required
+            />
           </div>
-          <Button type="submit" variant="outline">
-            Guardar brand kit
-          </Button>
-        </form>
+          <SubmitButton variant="outline">Guardar brand kit</SubmitButton>
+          {/* A cópia sai da base de dados: uma alteração ao tema ainda à espera
+              da gravação automática não entra no kit. */}
+          <p id="kitName-help" className="w-full text-xs text-caetano-anthracite-80">
+            Guarda o tema tal como está gravado nesta campanha.
+          </p>
+        </ActionForm>
       )}
     </div>
   );

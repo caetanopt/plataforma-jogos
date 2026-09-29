@@ -3,13 +3,17 @@ import { requirePagePermission } from "@/server/auth/page-guard";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateScheduleAction } from "@/features/campaigns/steps/schedule-actions";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { utcToZonedDateTimeLocal } from "@/lib/dates/timezone";
+import { SCHEDULE_LIMITS } from "@/lib/validation/campaign";
 import { can } from "@/server/permissions";
 import { isLiveStatus } from "@/features/campaigns/live-status";
+
+// Os mesmos anos que o servidor aceita (dateTimeLocalField).
+const DATE_MIN = "2000-01-01T00:00";
+const DATE_MAX = "2100-12-31T23:59";
 
 export default async function ScheduleStepPage({
   params,
@@ -23,7 +27,8 @@ export default async function ScheduleStepPage({
   if (!campaign) notFound();
 
   // Numa campanha no ar, mudar as datas abre ou fecha a campanha: só quem pode
-  // publicar (ver updateScheduleAction, que aplica a mesma regra).
+  // publicar (ver updateScheduleAction, que aplica a mesma regra). Os campos
+  // desativados não vão no envio, e o servidor mantém as datas gravadas.
   const datesLocked = isLiveStatus(campaign.status) && !can(context, "campaign:publish");
 
   return (
@@ -53,13 +58,15 @@ export default async function ScheduleStepPage({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="scheduleStartAt">Início</Label>
             <Input
               id="scheduleStartAt"
               name="scheduleStartAt"
               type="datetime-local"
+              min={DATE_MIN}
+              max={DATE_MAX}
               disabled={datesLocked}
               aria-describedby={datesLocked ? "schedule-dates-locked" : undefined}
               defaultValue={campaign.scheduleStartAt ? utcToZonedDateTimeLocal(campaign.scheduleStartAt, campaign.timezone) : ""}
@@ -71,6 +78,8 @@ export default async function ScheduleStepPage({
               id="scheduleEndAt"
               name="scheduleEndAt"
               type="datetime-local"
+              min={DATE_MIN}
+              max={DATE_MAX}
               disabled={datesLocked}
               aria-describedby={datesLocked ? "schedule-dates-locked" : undefined}
               defaultValue={campaign.scheduleEndAt ? utcToZonedDateTimeLocal(campaign.scheduleEndAt, campaign.timezone) : ""}
@@ -83,6 +92,7 @@ export default async function ScheduleStepPage({
           <textarea
             id="scheduleBeforeMessage"
             name="scheduleBeforeMessage"
+            maxLength={SCHEDULE_LIMITS.message}
             defaultValue={campaign.scheduleBeforeMessage ?? ""}
             rows={2}
             placeholder="Esta campanha ainda não começou. Volte em breve!"
@@ -95,6 +105,7 @@ export default async function ScheduleStepPage({
           <textarea
             id="scheduleAfterMessage"
             name="scheduleAfterMessage"
+            maxLength={SCHEDULE_LIMITS.message}
             defaultValue={campaign.scheduleAfterMessage ?? ""}
             rows={2}
             placeholder="Esta campanha já terminou. Obrigado pelo interesse!"
@@ -107,12 +118,17 @@ export default async function ScheduleStepPage({
           <Input
             id="scheduleRedirectUrl"
             name="scheduleRedirectUrl"
+            type="url"
+            inputMode="url"
+            maxLength={SCHEDULE_LIMITS.redirectUrl}
             placeholder="https://…"
+            aria-describedby="scheduleRedirectUrl-help"
             defaultValue={campaign.scheduleRedirectUrl ?? ""}
           />
+          <p id="scheduleRedirectUrl-help" className="mt-1 text-xs text-caetano-anthracite-80">
+            Endereço completo, a começar por https://.
+          </p>
         </div>
-
-        <SaveStatus />
       </AutoSaveForm>
     </div>
   );

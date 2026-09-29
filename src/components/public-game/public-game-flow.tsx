@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MemoryPlayerConfig, MemoryPlayerPair } from "@/components/public-game/memory-game-player";
 import type { WheelPlayerSegment, WheelSpinResult } from "@/components/public-game/wheel-game-player";
 import type { QuizPlayerQuestion } from "@/components/public-game/quiz-game-player";
 import { PublicMemoryGame } from "@/components/public-game/public-memory-game";
 import { PublicWheelGame } from "@/components/public-game/public-wheel-game";
 import { PublicQuizGame } from "@/components/public-game/public-quiz-game";
-import { PublicLeadForm, type PublicConsentDefinition, type PublicLeadField } from "@/components/public-game/public-lead-form";
+import { PublicLeadForm } from "@/components/public-game/public-lead-form";
 import {
+  beginGameAction,
   recordAnalyticsEventAction,
+  resumeParticipationAction,
   startParticipationAction,
   submitLeadFormAction,
   submitMemoryResultAction,
   submitQuizAction,
   spinWheelAction,
 } from "@/features/play/actions";
-import type { GameActionResponse, ParticipationRef } from "@/features/play/types";
+import type { GameActionResponse, ParticipationRef, PublicLeadFormDefinition } from "@/features/play/types";
+import {
+  clearStoredParticipation,
+  readStoredParticipation,
+  writeStoredParticipation,
+} from "@/features/play/resume-storage";
 
 interface ScreenData {
   title: string | null;
@@ -25,13 +32,6 @@ interface ScreenData {
   ctaLabel: string | null;
   ctaUrl: string | null;
   continueButtonLabel: string | null;
-}
-
-interface LeadFormData {
-  position: "BEFORE_GAME" | "AFTER_GAME" | "BEFORE_RESULT" | "BEFORE_PRIZE" | "NONE";
-  honeypotEnabled: boolean;
-  fields: PublicLeadField[];
-  consents: PublicConsentDefinition[];
 }
 
 export interface PublicGameFlowProps {
@@ -48,7 +48,6 @@ export interface PublicGameFlowProps {
     prizeInfo: string | null;
   };
   regulationText: string | null;
-  leadForm: LeadFormData | null;
   intermediateBefore: ScreenData | null;
   intermediateAfter: ScreenData | null;
   final: {
@@ -80,24 +79,50 @@ type Stage =
   | "final"
   | "blocked";
 
+const STAGE_ORDER: readonly Exclude<Stage, "blocked">[] = [
+  "start",
+  "lead-before",
+  "intermediate-before",
+  "game",
+  "intermediate-after",
+  "lead-after",
+  "final",
+];
+
 /**
- * "Antes de revelar o resultado" não é uma etapa própria: o formulário
- * aparece dentro do jogo, no momento em que o servidor responde que o
- * resultado está calculado mas retido (ver `runGameAction`). "Antes de
- * revelar o prémio" usa a etapa depois do jogo — a roda mostra que ganhou e o
- * prémio só aparece no ecrã final.
+ * Etapa seguinte a `current`, saltando as que não se aplicam.
+ *
+ * O formulário vem do servidor no início (e na retoma), com a posição
+ * fixada nessa participação — não da página. "Antes de revelar o resultado"
+ * não é uma etapa própria: o formulário aparece dentro do jogo, no momento
+ * em que o servidor responde que o resultado está calculado mas retido (ver
+ * `runGameAction`). "Antes de revelar o prémio" e "Depois do jogo" usam a
+ * etapa depois do jogo; um formulário já submetido não volta a aparecer.
  */
-function buildSequence(props: PublicGameFlowProps): Stage[] {
-  const sequence: Stage[] = ["start"];
-  if (props.leadForm && props.leadForm.position === "BEFORE_GAME") sequence.push("lead-before");
-  if (props.intermediateBefore) sequence.push("intermediate-before");
-  sequence.push("game");
-  if (props.intermediateAfter) sequence.push("intermediate-after");
-  if (props.leadForm && (props.leadForm.position === "AFTER_GAME" || props.leadForm.position === "BEFORE_PRIZE")) {
-    sequence.push("lead-after");
+function nextStage(
+  current: Stage,
+  context: { leadForm: PublicLeadFormDefinition | null; leadSubmitted: boolean; before: boolean; after: boolean },
+): Stage {
+  const { leadForm, leadSubmitted } = context;
+  const included = (stage: Stage) => {
+    switch (stage) {
+      case "lead-before":
+        return leadForm?.position === "BEFORE_GAME" && !leadSubmitted;
+      case "intermediate-before":
+        return context.before;
+      case "intermediate-after":
+        return context.after;
+      case "lead-after":
+        return (leadForm?.position === "AFTER_GAME" || leadForm?.position === "BEFORE_PRIZE") && !leadSubmitted;
+      default:
+        return true;
+    }
+  };
+  const start = STAGE_ORDER.indexOf(current as Exclude<Stage, "blocked">);
+  for (let i = start + 1; i < STAGE_ORDER.length; i += 1) {
+    if (included(STAGE_ORDER[i])) return STAGE_ORDER[i];
   }
-  sequence.push("final");
-  return sequence;
+  return "final";
 }
 
 const BLOCKED_MESSAGES: Record<string, string> = {
@@ -106,6 +131,7 @@ const BLOCKED_MESSAGES: Record<string, string> = {
   not_active: "Esta campanha não está disponível neste momento.",
   not_found: "Campanha não encontrada.",
   lead_missing: "É preciso preencher o formulário antes de jogar.",
+  no_segments: "De momento não há prémios em jogo nesta roda. Tente novamente mais tarde.",
 };
 
 class GameBlockedError extends Error {
@@ -116,20 +142,36 @@ class GameBlockedError extends Error {
 }
 
 export function PublicGameFlow(props: PublicGameFlowProps) {
-  const sequence = buildSequence(props);
-  const [stageIndex, setStageIndex] = useState(0);
+  const [currentStage, setCurrentStage] = useState<Stage>("start");
   const [participationId, setParticipationId] = useState<string | null>(null);
+  const [leadForm, setLeadForm] = useState<PublicLeadFormDefinition | null>(null);
+  const [leadSubmitted, setLeadSubmitted] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [resuming, setResuming] = useState(true);
+  const [resumed, setResumed] = useState(false);
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [showRegulation, setShowRegulation] = useState(false);
   const viewedRef = useRef(false);
+  const begunRef = useRef<string | null>(null);
 
   // A chave de idempotência é também o token de posse da participação: o
   // servidor exige-a em todas as ações depois do início (ParticipationRef).
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const [sessionId] = useState(() => crypto.randomUUID());
-  const ref: ParticipationRef | null = participationId ? { participationId, token: idempotencyKey } : null;
+  // Fica no separador (sessionStorage) para a participação sobreviver a um
+  // F5 — antes vivia só em memória e recarregar criava outra participação ou
+  // esbarrava no limite.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  const ref = useMemo<ParticipationRef | null>(
+    () => (participationId ? { participationId, token: idempotencyKey } : null),
+    [participationId, idempotencyKey],
+  );
+  const flowContext = {
+    leadForm,
+    leadSubmitted,
+    before: Boolean(props.intermediateBefore),
+    after: Boolean(props.intermediateAfter),
+  };
 
   // Formulário a meio do jogo ("Antes de revelar o resultado"): o jogo fica
   // montado mas escondido, à espera, e retoma quando o formulário é aceite.
@@ -140,7 +182,80 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   // conhecido depois do formulário.
   const [wheelPrize, setWheelPrize] = useState<WheelSpinResult["prize"]>(null);
   const [prizePending, setPrizePending] = useState(false);
+  const [prizeUnavailable, setPrizeUnavailable] = useState(false);
+  // Retoma de uma roda com o resultado retido ("Antes de revelar o
+  // resultado"): o prémio só é pedido depois do formulário.
+  const [revealAfterLead, setRevealAfterLead] = useState(false);
   const gameContainerRef = useRef<HTMLDivElement>(null);
+
+  const stage = blockedReason ? "blocked" : currentStage;
+
+  function advance() {
+    setCurrentStage((current) => nextStage(current, flowContext));
+  }
+
+  function applySpin(result: WheelSpinResult) {
+    setPrizePending(result.prizePending);
+    setPrizeUnavailable(result.prizeUnavailable);
+    if (result.prize) setWheelPrize(result.prize);
+  }
+
+  // Retoma: com uma participação guardada neste separador, o servidor diz em
+  // que ponto ficou. Sem ela (ou recusada), começa-se do início.
+  useEffect(() => {
+    let cancelled = false;
+    const stored = readStoredParticipation(props.campaignId, props.isTestMode);
+    const storedRef = stored?.participationId ? { participationId: stored.participationId, token: stored.token } : null;
+
+    (async () => {
+      const result = storedRef
+        ? await resumeParticipationAction({ campaignId: props.campaignId, ref: storedRef, testRequested: props.isTestMode })
+        : await Promise.resolve(null);
+      if (cancelled || !stored) return;
+      setIdempotencyKey(stored.token);
+      setSessionId(stored.sessionId);
+      // Sem id, a página recarregou a meio do início: o próximo "Jogar" usa a
+      // mesma chave e o servidor devolve a participação já criada.
+      if (!storedRef || !result) return;
+      if (!result.ok) {
+        // Terminada há muito, noutra campanha ou já indisponível: tentativa nova.
+        clearStoredParticipation(props.campaignId, props.isTestMode);
+        setIdempotencyKey(crypto.randomUUID());
+        setSessionId(crypto.randomUUID());
+        return;
+      }
+      setParticipationId(result.participationId);
+      setLeadForm(result.leadForm);
+      setLeadSubmitted(result.leadSubmitted);
+      const position = result.leadForm?.position ?? null;
+
+      if (!result.completed) {
+        setCurrentStage(position === "BEFORE_GAME" && !result.leadSubmitted ? "lead-before" : "game");
+      } else {
+        const leadStillNeeded = position !== null && position !== "BEFORE_GAME" && !result.leadSubmitted;
+        if (props.campaignType === "WHEEL") {
+          // Idempotente: devolve o resultado gravado, nunca sorteia de novo.
+          const spin = await spinWheelAction(storedRef);
+          if (cancelled) return;
+          if (spin.status === "revealed") applySpin(spin.result);
+          else if (spin.status === "lead_required") setRevealAfterLead(true);
+        }
+        setCurrentStage(leadStillNeeded ? "lead-after" : "final");
+      }
+      setResumed(true);
+    })()
+      .catch((error: unknown) => {
+        console.error("[play] Falha ao retomar a participação:", error);
+      })
+      .finally(() => {
+        if (!cancelled) setResuming(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Só no carregamento da página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -149,17 +264,23 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const stage = blockedReason ? "blocked" : sequence[stageIndex];
-
-  function advance() {
-    setStageIndex((i) => Math.min(i + 1, sequence.length - 1));
-  }
+  // O relógio do servidor começa quando o jogo aparece (memória e quiz);
+  // recarregar não o repõe.
+  useEffect(() => {
+    if (stage !== "game" || !ref || props.campaignType === "WHEEL") return;
+    if (begunRef.current === ref.participationId) return;
+    begunRef.current = ref.participationId;
+    void beginGameAction(ref).catch(() => undefined);
+  }, [stage, ref, props.campaignType]);
 
   async function handleStart() {
-    if (starting) return;
+    if (starting || resuming) return;
     setStarting(true);
     setStartError(null);
     void recordAnalyticsEventAction(props.campaignId, "START_CLICKED", props.isTestMode, sessionId);
+    // Guardado antes do pedido: se a página recarregar a meio, o próximo
+    // "Jogar" repete a mesma chave e não cria uma segunda participação.
+    writeStoredParticipation(props.campaignId, props.isTestMode, { token: idempotencyKey, sessionId });
     try {
       const result = await startParticipationAction({
         campaignId: props.campaignId,
@@ -169,11 +290,18 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         source: typeof document !== "undefined" ? document.referrer || undefined : undefined,
       });
       if (!result.ok) {
+        clearStoredParticipation(props.campaignId, props.isTestMode);
         setBlockedReason(result.reason);
         return;
       }
+      writeStoredParticipation(props.campaignId, props.isTestMode, {
+        token: idempotencyKey,
+        sessionId,
+        participationId: result.participationId,
+      });
       setParticipationId(result.participationId);
-      advance();
+      setLeadForm(result.leadForm);
+      setCurrentStage(nextStage("start", { ...flowContext, leadForm: result.leadForm, leadSubmitted: false }));
     } catch (error) {
       // Sem isto o botão ficava preso em "A preparar…" e o participante não
       // tinha forma de voltar a tentar. A chave de idempotência é a mesma, por
@@ -193,7 +321,10 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
    */
   async function runGameAction<T>(call: () => Promise<GameActionResponse<T>>): Promise<T> {
     let response = await call();
-    if (response.status === "lead_required") {
+    // O servidor pede o formulário antes de jogar (a posição mudou desde o
+    // início): com um formulário para mostrar, segue o mesmo caminho.
+    const leadMissing = response.status === "blocked" && response.reason === "lead_missing" && leadForm !== null;
+    if (response.status === "lead_required" || leadMissing) {
       await new Promise<void>((resolve) => {
         leadGateResolver.current = resolve;
         setAwaitingLead(true);
@@ -210,8 +341,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 
   async function spinWheel(currentRef: ParticipationRef): Promise<WheelSpinResult> {
     const result = await runGameAction(() => spinWheelAction(currentRef));
-    setPrizePending(result.prizePending);
-    if (result.prize) setWheelPrize(result.prize);
+    applySpin(result);
     return result;
   }
 
@@ -219,6 +349,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     if (!ref) return { ok: false, reason: "invalid" };
     const result = await submitLeadFormAction({ ref, values, consents, honeypot });
     if (!result.ok) return result;
+    setLeadSubmitted(true);
 
     if (leadGateResolver.current) {
       const resume = leadGateResolver.current;
@@ -231,25 +362,33 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       return result;
     }
 
-    if (prizePending) {
-      // O formulário foi aceite: agora o servidor já envia o prémio. Sem ele
-      // não se avança — o ecrã final ficava sem prémio e sem forma de o
-      // recuperar. Repetir o envio é seguro: o formulário já gravado devolve
-      // sucesso e a revelação é tentada outra vez.
+    if (prizePending || revealAfterLead) {
+      // O formulário foi aceite: agora o servidor já envia o prémio (ou o
+      // código). Sem ele não se avança — o ecrã final ficava sem prémio e sem
+      // forma de o recuperar. Repetir o envio é seguro: o formulário já
+      // gravado devolve sucesso e a revelação é tentada outra vez.
       try {
         const revealed = await spinWheelAction(ref);
         if (revealed.status !== "revealed" || revealed.result.prizePending) {
           return { ok: false, reason: "prize_unavailable" };
         }
+        setRevealAfterLead(false);
         setPrizePending(false);
+        setPrizeUnavailable(revealed.result.prizeUnavailable);
         setWheelPrize(revealed.result.prize);
       } catch (error) {
         console.error("[play] Falha ao obter o prémio:", error);
         return { ok: false, reason: "prize_unavailable" };
       }
     }
-    advance();
+    setCurrentStage((current) => nextStage(current, { ...flowContext, leadSubmitted: true }));
     return result;
+  }
+
+  function handleReplay() {
+    // Uma tentativa nova, sujeita aos limites: não retoma esta.
+    clearStoredParticipation(props.campaignId, props.isTestMode);
+    window.location.reload();
   }
 
   if (stage === "blocked") {
@@ -292,11 +431,11 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
           <button
             type="button"
             onClick={handleStart}
-            disabled={starting}
-            aria-busy={starting || undefined}
+            disabled={starting || resuming}
+            aria-busy={starting || resuming || undefined}
             className="mt-6 cursor-pointer touch-manipulation select-none rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white transition-[background-color,transform] duration-150 hover:bg-caetano-deep-blue-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2 active:bg-caetano-deep-blue disabled:cursor-progress disabled:opacity-60 motion-safe:active:scale-[0.97]"
           >
-            {starting ? "A preparar…" : props.start.buttonLabel || "Jogar"}
+            {starting ? "A preparar…" : resuming ? "A carregar…" : props.start.buttonLabel || "Jogar"}
           </button>
           {startError && (
             <p role="alert" className="mt-3 text-sm text-danger-strong">
@@ -306,17 +445,27 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         </div>
       )}
 
-      {(stage === "lead-before" || stage === "lead-after" || awaitingLead) && props.leadForm && (
+      {resumed && stage !== "start" && (
+        <p role="status" className="rounded-lg bg-caetano-cyan-20 px-4 py-2 text-sm text-caetano-anthracite">
+          Retomámos a sua participação.
+        </p>
+      )}
+
+      {(stage === "lead-before" || stage === "lead-after" || awaitingLead) &&
+        leadForm &&
+        leadForm.fields.length + leadForm.consents.length > 0 && (
         <PublicLeadForm
-          fields={props.leadForm.fields}
-          consents={props.leadForm.consents}
-          honeypotEnabled={props.leadForm.honeypotEnabled}
+          fields={leadForm.fields}
+          consents={leadForm.consents}
+          honeypotEnabled={leadForm.honeypotEnabled}
           intro={
-            awaitingLead
+            awaitingLead || revealAfterLead
               ? "O seu resultado está pronto. Preencha os seus dados para o ver."
-              : prizePending
-                ? "Preencha os seus dados para receber o prémio."
-                : undefined
+              : prizePending && wheelPrize
+                ? "Preencha os seus dados para receber o código do prémio."
+                : prizePending
+                  ? "Preencha os seus dados para receber o prémio."
+                  : undefined
           }
           submitLabel={awaitingLead ? "Ver o resultado" : undefined}
           onSubmit={handleLeadSubmit}
@@ -368,6 +517,12 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
           {props.final.title && <h2 className="text-xl font-bold text-caetano-anthracite">{props.final.title}</h2>}
           {props.final.message && <p className="mt-2 text-caetano-anthracite-80">{props.final.message}</p>}
+          {prizeUnavailable && !wheelPrize && (
+            <p className="mt-4 rounded-lg bg-caetano-medium-gray-20 p-4 text-sm text-caetano-anthracite">
+              O prémio já não pode ser atribuído a esta participação: o prazo para o reclamar terminou ou o
+              stock esgotou.
+            </p>
+          )}
           {wheelPrize && (
             <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
               <p className="text-sm">O seu prémio</p>
@@ -392,11 +547,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
           )}
           <div className="mt-4 flex justify-center gap-4 text-sm">
             {props.final.allowReplay && (
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="text-caetano-deep-blue underline"
-              >
+              <button type="button" onClick={handleReplay} className="text-caetano-deep-blue underline">
                 Jogar novamente
               </button>
             )}

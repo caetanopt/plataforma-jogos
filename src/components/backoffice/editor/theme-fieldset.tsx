@@ -1,9 +1,14 @@
 import { MediaUploadField } from "@/components/backoffice/editor/media-upload-field";
+import { ThemeColorField } from "@/components/backoffice/editor/theme-color-field";
+import { SyncedInput, SyncedSelect } from "@/components/forms/synced-fields";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { BRAND_THEME_LIMITS } from "@/lib/validation/brand";
 import type { MediaAsset } from "@/generated/prisma/client";
 
 const FONT_OPTIONS = ["Montserrat", "Inter", "Roboto", "Open Sans", "Arial"];
+
+const FIELD_CLASS =
+  "h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm text-caetano-anthracite focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan aria-invalid:border-danger";
 
 export interface ThemeFieldsetValues {
   logoMediaId: string | null;
@@ -18,49 +23,46 @@ export interface ThemeFieldsetValues {
   fontFamily: string;
   borderRadiusPx: number;
   shadowEnabled: boolean;
-  updatedAt: Date;
 }
 
-function ColorField({ id, label, defaultValue }: { id: string; label: string; defaultValue: string }) {
-  return (
-    <div>
-      <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          id={id}
-          name={id}
-          defaultValue={defaultValue}
-          className="h-10 w-14 cursor-pointer rounded-lg border border-caetano-medium-gray"
-        />
-        <span className="text-sm text-caetano-anthracite-80">{defaultValue}</span>
-      </div>
-    </div>
-  );
-}
+const COLOR_FIELDS = [
+  ["primaryColor", "Cor primária"],
+  ["secondaryColor", "Cor secundária"],
+  ["backgroundColor", "Cor de fundo"],
+  ["textColor", "Cor do texto"],
+  ["buttonColor", "Cor dos botões"],
+  ["buttonTextColor", "Cor do texto dos botões"],
+] as const;
 
+/**
+ * Campos do tema, partilhados pela etapa Marca e design e pelos brand kits.
+ *
+ * Sem `key` por versão: antes cada gravação remontava os blocos para que um
+ * brand kit aplicado aparecesse, o que tirava o foco a quem estava a escrever
+ * e matava um upload a decorrer noutro campo. Os campos seguem agora o valor
+ * gravado sem remontar (SyncedInput/SyncedSelect; o MediaUploadField segue
+ * os seus valores por omissão).
+ *
+ * `idPrefix`: a página Identidade visual tem um destes por brand kit, e os
+ * ids repetidos ligavam as labels ao input do primeiro kit.
+ */
 export function ThemeFieldset({
   theme,
   media,
+  idPrefix = "",
 }: {
   theme: ThemeFieldsetValues;
   media: { logo: MediaAsset | null; favicon: MediaAsset | null; background: MediaAsset | null };
+  idPrefix?: string;
 }) {
-  // Cada bloco de topo leva um `key` derivado de `theme.updatedAt` — sem
-  // isto, ao aplicar um brand kit (que substitui todos estes valores de
-  // uma vez via `applyBrandKitAction`), o React reconcilia os inputs
-  // não controlados existentes em vez de os recriar, e `defaultValue`/
-  // `defaultChecked` só são aplicados na montagem inicial. O resultado era
-  // cores, border-radius, sombra e os uploads de logo/favicon/fundo a
-  // continuarem a mostrar os valores antigos depois de aplicar o kit,
-  // apesar do texto ao lado de cada cor (que lê `theme.*` diretamente) já
-  // mostrar o valor novo.
-  const version = theme.updatedAt.toISOString();
+  const fieldId = (name: string) => `${idPrefix}${name}`;
+  // Uma tipografia gravada fora da lista (kit antigo) continua escolhida: sem
+  // a opção, o select mostrava a primeira e a gravação seguinte trocava-a.
+  const fontOptions = FONT_OPTIONS.includes(theme.fontFamily) ? FONT_OPTIONS : [theme.fontFamily, ...FONT_OPTIONS];
 
   return (
     <>
       <MediaUploadField
-        key={`logo-${version}`}
         name="logoMediaId"
         label="Logótipo"
         defaultMediaId={theme.logoMediaId}
@@ -69,7 +71,6 @@ export function ThemeFieldset({
         accept="image/jpeg,image/png,image/webp,image/svg+xml"
       />
       <MediaUploadField
-        key={`favicon-${version}`}
         name="faviconMediaId"
         label="Favicon"
         defaultMediaId={theme.faviconMediaId}
@@ -78,7 +79,6 @@ export function ThemeFieldset({
         accept="image/png,image/svg+xml"
       />
       <MediaUploadField
-        key={`background-${version}`}
         name="backgroundImageMediaId"
         label="Imagem de fundo"
         defaultMediaId={theme.backgroundImageMediaId}
@@ -87,50 +87,49 @@ export function ThemeFieldset({
         accept="image/jpeg,image/png,image/webp"
       />
 
-      <div key={`colors-${version}`} className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <ColorField id="primaryColor" label="Cor primária" defaultValue={theme.primaryColor} />
-        <ColorField id="secondaryColor" label="Cor secundária" defaultValue={theme.secondaryColor} />
-        <ColorField id="backgroundColor" label="Cor de fundo" defaultValue={theme.backgroundColor} />
-        <ColorField id="textColor" label="Cor do texto" defaultValue={theme.textColor} />
-        <ColorField id="buttonColor" label="Cor dos botões" defaultValue={theme.buttonColor} />
-        <ColorField
-          id="buttonTextColor"
-          label="Cor do texto dos botões"
-          defaultValue={theme.buttonTextColor}
-        />
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
+        {COLOR_FIELDS.map(([name, label]) => (
+          <ThemeColorField key={name} id={fieldId(name)} name={name} label={label} defaultValue={theme[name]} />
+        ))}
       </div>
 
-      <div key={`typography-${version}`} className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="fontFamily">Tipografia</Label>
-          <select
-            id="fontFamily"
+          <Label htmlFor={fieldId("fontFamily")}>Tipografia</Label>
+          <SyncedSelect
+            id={fieldId("fontFamily")}
             name="fontFamily"
             defaultValue={theme.fontFamily}
-            className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
+            className={FIELD_CLASS}
           >
-            {FONT_OPTIONS.map((font) => (
+            {fontOptions.map((font) => (
               <option key={font} value={font}>
                 {font}
               </option>
             ))}
-          </select>
+          </SyncedSelect>
         </div>
         <div>
-          <Label htmlFor="borderRadiusPx">Border radius (px)</Label>
-          <Input
-            id="borderRadiusPx"
+          <Label htmlFor={fieldId("borderRadiusPx")}>Border radius (px)</Label>
+          <SyncedInput
+            id={fieldId("borderRadiusPx")}
             name="borderRadiusPx"
             type="number"
-            min={0}
-            max={48}
+            inputMode="numeric"
+            min={BRAND_THEME_LIMITS.borderRadiusMin}
+            max={BRAND_THEME_LIMITS.borderRadiusMax}
+            step={1}
             defaultValue={theme.borderRadiusPx}
+            className={FIELD_CLASS}
           />
         </div>
       </div>
 
-      <label key={`shadow-${version}`} className="flex items-center gap-2 text-sm text-caetano-anthracite">
-        <input
+      {/* Checkbox com sentinela (ver CheckboxField), mas sincronizada: aplicar
+          um brand kit também muda a sombra. */}
+      <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
+        <input type="hidden" name="shadowEnabled" value="" />
+        <SyncedInput
           type="checkbox"
           name="shadowEnabled"
           defaultChecked={theme.shadowEnabled}

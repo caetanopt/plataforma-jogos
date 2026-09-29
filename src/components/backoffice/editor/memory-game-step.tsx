@@ -3,16 +3,19 @@ import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import {
+  addMemoryPairAction,
   moveMemoryPairAction,
   removeMemoryPairAction,
   updateMemoryConfigAction,
 } from "@/features/memory-game/actions";
+import { MEMORY_CONFIG_LIMITS } from "@/lib/validation/memory-game";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
-import { SaveStatus } from "@/components/backoffice/editor/save-status";
+import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { MediaUploadField } from "@/components/backoffice/editor/media-upload-field";
 import { MemoryPairForm } from "@/components/backoffice/editor/memory-pair-form";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { CheckboxField } from "@/components/ui/checkbox-field";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 const PAIR_KIND_LABELS = {
@@ -21,6 +24,11 @@ const PAIR_KIND_LABELS = {
   IMAGE_TEXT: "Imagem + texto",
   TEXT_TEXT: "Texto + texto",
 };
+
+const MOVE_BUTTON_CLASS =
+  "flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30";
+
+const L = MEMORY_CONFIG_LIMITS;
 
 export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
   // Mostra códigos de vouchers, pesos e respostas certas: a permissão é
@@ -34,13 +42,16 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
 
   const { memoryConfig } = campaign;
 
-  const mediaIds = memoryConfig.pairs.flatMap((pair) =>
-    [pair.cardAMediaId, pair.cardBMediaId].filter((v): v is string => Boolean(v)),
-  );
+  // O verso das cartas também: sem ele o campo não mostrava a imagem gravada.
+  const mediaIds = [
+    memoryConfig.cardBackMediaId,
+    ...memoryConfig.pairs.flatMap((pair) => [pair.cardAMediaId, pair.cardBMediaId]),
+  ].filter((v): v is string => Boolean(v));
   const mediaAssets = mediaIds.length
     ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds }, organizationId: context.organizationId } })
     : [];
   const mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
+  const cardBack = memoryConfig.cardBackMediaId ? mediaById.get(memoryConfig.cardBackMediaId) : undefined;
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -67,18 +78,46 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
           <div>
             <Label htmlFor="columns">Colunas</Label>
-            <Input id="columns" name="columns" type="number" min={2} max={8} defaultValue={memoryConfig.columns} />
+            <Input
+              id="columns"
+              name="columns"
+              type="number"
+              inputMode="numeric"
+              min={L.columnsMin}
+              max={L.columnsMax}
+              step={1}
+              defaultValue={memoryConfig.columns}
+            />
           </div>
           <div>
             <Label htmlFor="cardAspectRatio">Proporção da carta</Label>
-            <Input id="cardAspectRatio" name="cardAspectRatio" defaultValue={memoryConfig.cardAspectRatio} />
+            <Input
+              id="cardAspectRatio"
+              name="cardAspectRatio"
+              maxLength={L.cardAspectRatio}
+              placeholder="3/4"
+              aria-describedby="cardAspectRatio-help"
+              defaultValue={memoryConfig.cardAspectRatio}
+            />
+            <p id="cardAspectRatio-help" className="mt-1 text-xs text-caetano-anthracite-80">
+              Largura/altura, por exemplo 1/1 ou 3/4.
+            </p>
           </div>
           <div>
             <Label htmlFor="cardGapPx">Espaçamento (px)</Label>
-            <Input id="cardGapPx" name="cardGapPx" type="number" min={0} max={64} defaultValue={memoryConfig.cardGapPx} />
+            <Input
+              id="cardGapPx"
+              name="cardGapPx"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={L.cardGapMax}
+              step={1}
+              defaultValue={memoryConfig.cardGapPx}
+            />
           </div>
           <div>
             <Label htmlFor="timeLimitSeconds">Tempo limite (s)</Label>
@@ -86,17 +125,25 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
               id="timeLimitSeconds"
               name="timeLimitSeconds"
               type="number"
-              min={0}
+              inputMode="numeric"
+              min={L.timeLimitMin}
+              max={L.timeLimitMax}
+              step={1}
+              placeholder="Sem limite"
               defaultValue={memoryConfig.timeLimitSeconds ?? ""}
             />
           </div>
           <div>
-            <Label htmlFor="maxAttempts">Máx. tentativas</Label>
+            <Label htmlFor="maxAttempts">Máximo de tentativas</Label>
             <Input
               id="maxAttempts"
               name="maxAttempts"
               type="number"
-              min={0}
+              inputMode="numeric"
+              min={L.maxAttemptsMin}
+              max={L.maxAttemptsMax}
+              step={1}
+              placeholder="Sem limite"
               defaultValue={memoryConfig.maxAttempts ?? ""}
             />
           </div>
@@ -106,14 +153,26 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
               id="previewSeconds"
               name="previewSeconds"
               type="number"
+              inputMode="numeric"
               min={0}
-              max={30}
+              max={L.previewMax}
+              step={1}
+              placeholder="Sem pré-visualização"
               defaultValue={memoryConfig.previewSeconds ?? ""}
             />
           </div>
           <div>
             <Label htmlFor="pointsPerPair">Pontos por par</Label>
-            <Input id="pointsPerPair" name="pointsPerPair" type="number" min={0} defaultValue={memoryConfig.pointsPerPair} />
+            <Input
+              id="pointsPerPair"
+              name="pointsPerPair"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={L.pointsMax}
+              step={1}
+              defaultValue={memoryConfig.pointsPerPair}
+            />
           </div>
           <div>
             <Label htmlFor="penaltyPerMistake">Penalização por erro</Label>
@@ -121,7 +180,10 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
               id="penaltyPerMistake"
               name="penaltyPerMistake"
               type="number"
+              inputMode="numeric"
               min={0}
+              max={L.penaltyMax}
+              step={1}
               defaultValue={memoryConfig.penaltyPerMistake}
             />
           </div>
@@ -131,45 +193,42 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
               id="rankingMaxEntries"
               name="rankingMaxEntries"
               type="number"
-              min={1}
+              inputMode="numeric"
+              min={L.rankingMin}
+              max={L.rankingMax}
+              step={1}
+              placeholder="10"
               defaultValue={memoryConfig.rankingMaxEntries ?? ""}
             />
           </div>
         </div>
 
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input type="checkbox" name="randomizeOrder" defaultChecked={memoryConfig.randomizeOrder} className="h-4 w-4 rounded border-caetano-medium-gray" />
+          <CheckboxField name="randomizeOrder" defaultChecked={memoryConfig.randomizeOrder}>
             Ordem aleatória
-          </label>
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input type="checkbox" name="speedBonusEnabled" defaultChecked={memoryConfig.speedBonusEnabled} className="h-4 w-4 rounded border-caetano-medium-gray" />
+          </CheckboxField>
+          <CheckboxField name="speedBonusEnabled" defaultChecked={memoryConfig.speedBonusEnabled}>
             Bónus por rapidez
-          </label>
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input type="checkbox" name="soundEnabled" defaultChecked={memoryConfig.soundEnabled} className="h-4 w-4 rounded border-caetano-medium-gray" />
+          </CheckboxField>
+          <CheckboxField name="soundEnabled" defaultChecked={memoryConfig.soundEnabled}>
             Sons
-          </label>
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input type="checkbox" name="rankingEnabled" defaultChecked={memoryConfig.rankingEnabled} className="h-4 w-4 rounded border-caetano-medium-gray" />
+          </CheckboxField>
+          <CheckboxField name="rankingEnabled" defaultChecked={memoryConfig.rankingEnabled}>
             Ativar ranking
-          </label>
-          <label className="flex items-center gap-2 text-sm text-caetano-anthracite">
-            <input type="checkbox" name="rankingAnonymize" defaultChecked={memoryConfig.rankingAnonymize} className="h-4 w-4 rounded border-caetano-medium-gray" />
+          </CheckboxField>
+          <CheckboxField name="rankingAnonymize" defaultChecked={memoryConfig.rankingAnonymize}>
             Anonimizar ranking
-          </label>
+          </CheckboxField>
         </div>
 
         <MediaUploadField
           name="cardBackMediaId"
           label="Verso das cartas"
           defaultMediaId={memoryConfig.cardBackMediaId}
-          defaultUrl={memoryConfig.cardBackMediaId ? mediaById.get(memoryConfig.cardBackMediaId)?.url : undefined}
-          defaultKind={memoryConfig.cardBackMediaId ? mediaById.get(memoryConfig.cardBackMediaId)?.kind : undefined}
+          defaultUrl={cardBack?.url}
+          defaultKind={cardBack?.kind}
           accept="image/jpeg,image/png,image/webp,image/svg+xml"
         />
-
-        <SaveStatus />
       </AutoSaveForm>
 
       <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
@@ -185,52 +244,65 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
 
         <ul className="space-y-2">
           {memoryConfig.pairs.map((pair, index) => (
-            <li key={pair.id} className="flex items-center justify-between gap-3 rounded-lg border border-caetano-medium-gray-20 p-2">
-              <div className="flex items-center gap-3">
+            <li
+              key={pair.id}
+              className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-caetano-medium-gray-20 p-2"
+            >
+              <div className="flex min-w-0 items-center gap-3">
                 <PairThumb
                   url={pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined}
                   text={pair.cardAText}
-                  label="Carta A"
+                  label={pair.cardAAltText || `Par ${index + 1}, carta A`}
                 />
-                <span className="text-caetano-anthracite-80">↔</span>
+                <span aria-hidden="true" className="text-caetano-anthracite-80">↔</span>
                 <PairThumb
                   url={pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined}
                   text={pair.cardBText}
-                  label="Carta B"
+                  label={pair.cardBAltText || `Par ${index + 1}, carta B`}
                 />
                 <span className="text-xs text-caetano-anthracite-80">{PAIR_KIND_LABELS[pair.kind]}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <form action={moveMemoryPairAction}>
+              <div className="flex items-start gap-1">
+                <ActionForm action={moveMemoryPairAction} messageClassName="mt-1 max-w-48">
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="up" />
-                  <button type="submit" disabled={index === 0} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30" aria-label="Mover para cima">
+                  <button
+                    type="submit"
+                    disabled={index === 0}
+                    className={MOVE_BUTTON_CLASS}
+                    aria-label={`Mover o par ${index + 1} para cima`}
+                  >
                     ↑
                   </button>
-                </form>
-                <form action={moveMemoryPairAction}>
+                </ActionForm>
+                <ActionForm action={moveMemoryPairAction} messageClassName="mt-1 max-w-48">
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="down" />
-                  <button type="submit" disabled={index === memoryConfig.pairs.length - 1} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30" aria-label="Mover para baixo">
+                  <button
+                    type="submit"
+                    disabled={index === memoryConfig.pairs.length - 1}
+                    className={MOVE_BUTTON_CLASS}
+                    aria-label={`Mover o par ${index + 1} para baixo`}
+                  >
                     ↓
                   </button>
-                </form>
-                <form action={removeMemoryPairAction}>
+                </ActionForm>
+                <ActionForm action={removeMemoryPairAction} messageClassName="mt-1 max-w-48">
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
-                  <ConfirmSubmitButton confirmMessage="Remover este par?" size="sm">
+                  <ConfirmSubmitButton confirmMessage={`Remover o par ${index + 1}?`} size="sm">
                     Remover
                   </ConfirmSubmitButton>
-                </form>
+                </ActionForm>
               </div>
             </li>
           ))}
         </ul>
 
         <div className="mt-4">
-          <MemoryPairForm campaignId={campaign.id} />
+          <MemoryPairForm action={addMemoryPairAction} campaignId={campaign.id} />
         </div>
       </div>
     </div>
