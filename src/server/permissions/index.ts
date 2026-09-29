@@ -30,9 +30,13 @@ const ROLE_ACTIONS: Record<MembershipRole, PermissionAction[]> = {
     "stats:view",
     "audit:view",
   ],
-  EDITOR: ["campaign:create", "campaign:edit", "campaign:archive", "stats:view"],
+  // Secção 3: arquivar é do administrador — tira a campanha do ar, e o Editor
+  // só publica com permissão explícita (canPublish).
+  EDITOR: ["campaign:create", "campaign:edit", "stats:view"],
   ANALYST: ["leads:view", "stats:view"],
-  VIEWER: ["leads:view", "stats:view"],
+  // Secção 3: o Visualizador consulta projetos e relatórios. Participações e
+  // leads (nomes, e-mails, telefones, códigos atribuídos) são do Analista.
+  VIEWER: ["stats:view"],
 };
 
 /**

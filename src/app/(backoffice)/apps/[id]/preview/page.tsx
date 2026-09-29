@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import { MemoryGamePreview } from "@/components/public-game/memory-game-preview";
 import { WheelGamePreview } from "@/components/public-game/wheel-game-preview";
@@ -11,7 +11,7 @@ export default async function CampaignPreviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const context = await requireOrgContext();
+  const context = await requirePagePermission("campaign:edit");
 
   const campaign = await prisma.campaign.findFirst({
     where: { id, organizationId: context.organizationId },
@@ -48,7 +48,7 @@ export default async function CampaignPreviewPage({
     );
   }
   if (mediaIdsToFetch.length) {
-    const mediaAssets = await prisma.mediaAsset.findMany({ where: { id: { in: mediaIdsToFetch } } });
+    const mediaAssets = await prisma.mediaAsset.findMany({ where: { id: { in: mediaIdsToFetch }, organizationId: context.organizationId } });
     mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
   }
 

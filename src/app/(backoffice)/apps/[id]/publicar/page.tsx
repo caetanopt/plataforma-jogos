@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { getPublishReadiness } from "@/features/publishing/readiness";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
@@ -45,7 +45,7 @@ export default async function PublishStepPage({
 }) {
   const { id } = await params;
   const search = await searchParams;
-  const context = await requireOrgContext();
+  const context = await requirePagePermission("campaign:edit");
 
   const campaign = await getCampaignForEditor(context.organizationId, id);
   if (!campaign) notFound();
@@ -68,8 +68,8 @@ export default async function PublishStepPage({
     : null;
   const [qrPng, qrSvg] = publication
     ? await Promise.all([
-        publication.qrPngMediaId ? prisma.mediaAsset.findUnique({ where: { id: publication.qrPngMediaId } }) : null,
-        publication.qrSvgMediaId ? prisma.mediaAsset.findUnique({ where: { id: publication.qrSvgMediaId } }) : null,
+        publication.qrPngMediaId ? prisma.mediaAsset.findFirst({ where: { id: publication.qrPngMediaId, organizationId: context.organizationId } }) : null,
+        publication.qrSvgMediaId ? prisma.mediaAsset.findFirst({ where: { id: publication.qrSvgMediaId, organizationId: context.organizationId } }) : null,
       ])
     : [null, null];
 

@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan } from "@/server/permissions";
+import { resolveOrgContext } from "@/server/auth/session";
+import { can } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { resolveDateRange } from "@/lib/dates/range";
 import { listLeadsForExport } from "@/features/leads/queries";
 import { leadsToCsv, toLeadRow } from "@/features/leads/format";
 
 export async function GET(request: Request) {
-  const context = await requireOrgContext();
-  assertCan(context, "leads:export");
+  // 401/403 em vez do redirect para o login (307) ou do erro 500 de um
+  // assertCan falhado. A tentativa recusada fica na auditoria (§26).
+  const result = await resolveOrgContext();
+  if (!result.ok) return NextResponse.json({ error: "Sessão necessária." }, { status: 401 });
+  const { context } = result;
+  if (!can(context, "leads:export")) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "EXPORT",
+      entityType: "Participation",
+      result: "FAILURE",
+      metadata: { reason: "forbidden" },
+    });
+    return NextResponse.json({ error: "Sem permissão para exportar leads." }, { status: 403 });
+  }
 
   const url = new URL(request.url);
   const params = Object.fromEntries(url.searchParams.entries());

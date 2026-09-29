@@ -12,21 +12,21 @@ export interface OrgContext {
   membership: Membership | null;
 }
 
-export async function requireUser() {
-  const session = await auth();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  return session.user;
-}
+export type OrgContextResult =
+  | { ok: true; context: OrgContext }
+  | { ok: false; reason: "no_session" | "no_organization" };
 
 /**
- * Resolve o contexto de organização ativo do utilizador autenticado. Junta-se
- * sempre à base de dados para obter o papel/flags atuais em vez de confiar no
- * token — mudanças de permissão feitas por um admin aplicam-se de imediato.
+ * Resolve o contexto de organização ativo do utilizador autenticado, sem
+ * redirecionar — as rotas da API respondem 401 em vez de um redirect HTML.
+ * Junta-se sempre à base de dados para obter o papel/flags atuais em vez de
+ * confiar no token — mudanças de permissão feitas por um admin aplicam-se de
+ * imediato.
  */
-export async function requireOrgContext(): Promise<OrgContext> {
-  const user = await requireUser();
+export async function resolveOrgContext(): Promise<OrgContextResult> {
+  const session = await auth();
+  const user = session?.user;
+  if (!user) return { ok: false, reason: "no_session" };
 
   let organizationId = user.activeOrganizationId;
   let membership: Membership | null = null;
@@ -42,23 +42,29 @@ export async function requireOrgContext(): Promise<OrgContext> {
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
     });
-    if (!fallback) {
-      redirect("/login?error=no_organization");
-    }
+    if (!fallback) return { ok: false, reason: "no_organization" };
     membership = fallback;
     organizationId = fallback.organizationId;
   }
 
-  if (!organizationId) {
-    redirect("/login?error=no_organization");
-  }
+  if (!organizationId) return { ok: false, reason: "no_organization" };
 
   return {
-    userId: user.id,
-    userName: user.name ?? user.email ?? "",
-    userEmail: user.email ?? "",
-    isSuperAdmin: user.isSuperAdmin,
-    organizationId,
-    membership,
+    ok: true,
+    context: {
+      userId: user.id,
+      userName: user.name ?? user.email ?? "",
+      userEmail: user.email ?? "",
+      isSuperAdmin: user.isSuperAdmin,
+      organizationId,
+      membership,
+    },
   };
+}
+
+/** Para páginas e server actions: sem sessão ou organização, vai para o login. */
+export async function requireOrgContext(): Promise<OrgContext> {
+  const result = await resolveOrgContext();
+  if (!result.ok) redirect(result.reason === "no_session" ? "/login" : "/login?error=no_organization");
+  return result.context;
 }

@@ -1,5 +1,4 @@
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan } from "@/server/permissions";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import {
   createBrandKitAction,
@@ -18,8 +17,7 @@ import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 export const metadata = { title: "Identidade visual" };
 
 export default async function BrandKitsPage() {
-  const context = await requireOrgContext();
-  assertCan(context, "brand:manage");
+  const context = await requirePagePermission("brand:manage");
 
   const organization = await prisma.organization.findUnique({
     where: { id: context.organizationId },
@@ -42,7 +40,7 @@ export default async function BrandKitsPage() {
     ),
   );
   const mediaAssets = mediaIds.length
-    ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds } } })
+    ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds }, organizationId: context.organizationId } })
     : [];
   const mediaById = new Map(mediaAssets.map((asset) => [asset.id, asset]));
 

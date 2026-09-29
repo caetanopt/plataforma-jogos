@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { requireOrgContext } from "@/server/auth/session";
+import { can } from "@/server/permissions";
+import { NAV_ITEMS } from "@/components/backoffice/nav-items";
 import { prisma } from "@/server/db/client";
 import { Sidebar } from "@/components/backoffice/sidebar";
 import { Topbar } from "@/components/backoffice/topbar";
@@ -18,7 +20,9 @@ export default async function BackofficeLayout({ children }: { children: ReactNo
       })
     : null;
 
-  const isOrgAdmin = context.isSuperAdmin || context.membership?.role === "ORG_ADMIN";
+  const visibleHrefs = NAV_ITEMS.filter((item) => !item.permission || can(context, item.permission)).map(
+    (item) => item.href,
+  );
 
   return (
     <NavigationProgressProvider>
@@ -31,7 +35,7 @@ export default async function BackofficeLayout({ children }: { children: ReactNo
           Saltar para o conteúdo
         </a>
         <Sidebar
-          isOrgAdmin={isOrgAdmin}
+          visibleHrefs={visibleHrefs}
           organizationName={organization?.name ?? ""}
           logoUrl={logo?.url}
         />
@@ -39,7 +43,7 @@ export default async function BackofficeLayout({ children }: { children: ReactNo
           <Topbar
             organizationName={organization?.name ?? ""}
             userName={context.userName}
-            isOrgAdmin={isOrgAdmin}
+            visibleHrefs={visibleHrefs}
             logoUrl={logo?.url}
           />
           <main id="conteudo" tabIndex={-1} className="flex-1">

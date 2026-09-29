@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import {
   addAnswerAction,
@@ -29,7 +29,9 @@ const QUESTION_TYPE_LABELS = {
 };
 
 export async function QuizGameStep({ campaignId }: { campaignId: string }) {
-  const context = await requireOrgContext();
+  // Mostra códigos de vouchers, pesos e respostas certas: a permissão é
+  // verificada aqui também, e não só na página que o inclui.
+  const context = await requirePagePermission("campaign:edit");
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId: context.organizationId, type: "QUIZ" },
     include: {

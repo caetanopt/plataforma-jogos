@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import {
   moveMemoryPairAction,
@@ -23,7 +23,9 @@ const PAIR_KIND_LABELS = {
 };
 
 export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
-  const context = await requireOrgContext();
+  // Mostra códigos de vouchers, pesos e respostas certas: a permissão é
+  // verificada aqui também, e não só na página que o inclui.
+  const context = await requirePagePermission("campaign:edit");
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId: context.organizationId, type: "MEMORY" },
     include: { memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } } },
@@ -36,7 +38,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
     [pair.cardAMediaId, pair.cardBMediaId].filter((v): v is string => Boolean(v)),
   );
   const mediaAssets = mediaIds.length
-    ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds } } })
+    ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds }, organizationId: context.organizationId } })
     : [];
   const mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
 

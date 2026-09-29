@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
+import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -29,6 +30,8 @@ export async function updateFinalScreenAction(formData: FormData): Promise<void>
     finalAllowShare: getField(formData, "finalAllowShare"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.finalMediaId]))) return;
 
   await prisma.campaign.update({
     where: { id: campaignId },

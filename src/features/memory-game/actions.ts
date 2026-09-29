@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
+import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -43,6 +44,8 @@ export async function updateMemoryConfigAction(formData: FormData): Promise<void
     cardBackMediaId: formData.get("cardBackMediaId"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.cardBackMediaId]))) return;
 
   const timeLimitSeconds = parsed.data.timeLimitSeconds ?? null;
   const maxAttempts = parsed.data.maxAttempts ?? null;
@@ -123,6 +126,8 @@ export async function addMemoryPairAction(formData: FormData): Promise<void> {
     cardBAltText: getField(formData, "cardBAltText"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.cardAMediaId, parsed.data.cardBMediaId]))) return;
 
   const existing = await prisma.memoryCardPair.findMany({
     where: { memoryGameConfigId: owned.memoryConfig.id },

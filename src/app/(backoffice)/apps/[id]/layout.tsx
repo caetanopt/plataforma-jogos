@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan } from "@/server/permissions";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { getIncompleteSteps } from "@/features/campaigns/step-completion";
 import { EditorNav } from "@/components/backoffice/editor/editor-nav";
@@ -17,8 +16,7 @@ export default async function CampaignEditorLayout({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const context = await requireOrgContext();
-  assertCan(context, "campaign:edit");
+  const context = await requirePagePermission("campaign:edit");
 
   const campaign = await getCampaignForEditor(context.organizationId, id);
   if (!campaign) notFound();

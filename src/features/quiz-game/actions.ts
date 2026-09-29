@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
+import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -180,6 +181,8 @@ export async function updateQuestionAction(formData: FormData): Promise<void> {
     immediateFeedback: getField(formData, "immediateFeedback"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   await prisma.quizQuestion.update({
     where: { id: questionId },
@@ -293,6 +296,8 @@ export async function addAnswerAction(formData: FormData): Promise<void> {
     isCorrect: getField(formData, "isCorrect"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   const existing = await prisma.quizAnswer.findMany({
     where: { questionId },
@@ -419,6 +424,8 @@ export async function addResultProfileAction(formData: FormData): Promise<void> 
     ctaUrl: getField(formData, "ctaUrl"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   const profile = await prisma.quizResultProfile.create({
     data: {

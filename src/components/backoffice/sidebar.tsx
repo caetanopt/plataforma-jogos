@@ -7,11 +7,12 @@ import { BrandLogo } from "@/components/backoffice/brand-logo";
 import { cn } from "@/lib/utils";
 
 export function Sidebar({
-  isOrgAdmin,
+  visibleHrefs,
   organizationName,
   logoUrl,
 }: {
-  isOrgAdmin: boolean;
+  /** Entradas que o papel permite, calculadas no servidor. */
+  visibleHrefs: string[];
   organizationName: string;
   logoUrl?: string | null;
 }) {
@@ -25,7 +26,7 @@ export function Sidebar({
       <div className="mb-6 flex items-center px-2">
         <BrandLogo logoUrl={logoUrl} organizationName={organizationName} />
       </div>
-      {NAV_ITEMS.filter((item) => !item.adminOnly || isOrgAdmin).map((item) => {
+      {NAV_ITEMS.filter((item) => visibleHrefs.includes(item.href)).map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = item.icon;
         return (

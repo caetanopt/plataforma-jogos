@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
+import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -65,6 +66,8 @@ export async function addWheelSegmentAction(formData: FormData): Promise<void> {
 
   const parsed = parseSegmentForm(formData);
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   const existing = await prisma.wheelSegment.findMany({
     where: { wheelConfigId: owned.wheelConfig.id },
@@ -122,6 +125,8 @@ export async function updateWheelSegmentAction(formData: FormData): Promise<void
 
   const parsed = parseSegmentForm(formData);
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   const prizeId = await resolveSegmentPrizeId(owned.campaign.id, parsed.data);
 

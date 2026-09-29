@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan, can } from "@/server/permissions";
+import { requirePagePermission } from "@/server/auth/page-guard";
+import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { resolveDateRange } from "@/lib/dates/range";
 import { listLeads } from "@/features/leads/queries";
@@ -37,8 +37,7 @@ export default async function LeadsPage({
   searchParams: Promise<LeadsSearchParams>;
 }) {
   const params = await searchParams;
-  const context = await requireOrgContext();
-  assertCan(context, "leads:view");
+  const context = await requirePagePermission("leads:view");
   const range = resolveDateRange(params);
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const excludeTest = params.excludeTest !== "false";

@@ -69,9 +69,31 @@ export async function recordAnalyticsEventAction(
   sessionId?: string,
 ): Promise<void> {
   // Server action pública: os argumentos chegam como o browser os mandar.
+  // Antes, qualquer pessoa gravava eventos para qualquer campanha — rascunhos,
+  // outras organizações — e escolhia se contavam como teste ou como reais,
+  // adulterando visualizações, taxa de início e CTA (§20, §31).
   const parsed = analyticsEventSchema.safeParse({ campaignId, type, isTest, sessionId });
   if (!parsed.success) return;
-  await recordEvent(parsed.data.campaignId, parsed.data.type, parsed.data.isTest, parsed.data.sessionId);
+
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: parsed.data.campaignId },
+    select: { id: true, organizationId: true, status: true, scheduleStartAt: true, scheduleEndAt: true },
+  });
+  if (!campaign || getEffectivePublicState(campaign) !== "active") return;
+
+  // Limite largo por IP: um quiosque num evento gera muitas visitas; o
+  // objetivo é travar a injeção em massa, não visitas reais.
+  const ip = await getRequestIp();
+  const rateLimit = await checkRateLimit(
+    `analytics:${campaign.id}:${ip ?? parsed.data.sessionId ?? "anon"}`,
+    600,
+    3600,
+  );
+  if (!rateLimit.allowed) return;
+
+  // O modo de teste é decidido no servidor, como no início da participação.
+  const testMode = parsed.data.isTest && (await canTestCampaign(campaign.organizationId));
+  await recordEvent(campaign.id, parsed.data.type, testMode, parsed.data.sessionId);
 }
 
 export interface StartParticipationInput {

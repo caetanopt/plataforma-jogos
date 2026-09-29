@@ -4,18 +4,18 @@ import { MobileNav } from "@/components/backoffice/mobile-nav";
 export function Topbar({
   organizationName,
   userName,
-  isOrgAdmin,
+  visibleHrefs,
   logoUrl,
 }: {
   organizationName: string;
   userName: string;
-  isOrgAdmin: boolean;
+  visibleHrefs: string[];
   logoUrl?: string | null;
 }) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-caetano-medium-gray-40 bg-white px-4 md:px-6">
       <div className="flex items-center gap-3">
-        <MobileNav isOrgAdmin={isOrgAdmin} organizationName={organizationName} logoUrl={logoUrl} />
+        <MobileNav visibleHrefs={visibleHrefs} organizationName={organizationName} logoUrl={logoUrl} />
         <span className="text-sm font-medium text-caetano-anthracite">{organizationName}</span>
       </div>
       <div className="flex items-center gap-4">

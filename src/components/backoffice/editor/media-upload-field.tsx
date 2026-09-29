@@ -64,7 +64,7 @@ export function MediaUploadField({
         if (!presignRes.ok) {
           throw new Error((await presignRes.json().catch(() => null))?.error ?? "Falha no upload.");
         }
-        const { uploadUrl, key, publicUrl } = await presignRes.json();
+        const { uploadUrl, key } = await presignRes.json();
 
         const putRes = await fetch(uploadUrl, {
           method: "PUT",
@@ -76,7 +76,7 @@ export function MediaUploadField({
         const confirmRes = await fetch("/api/uploads/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key, mimeType: file.type, sizeBytes: file.size, publicUrl }),
+          body: JSON.stringify({ key, mimeType: file.type, sizeBytes: file.size }),
         });
         if (!confirmRes.ok) {
           throw new Error((await confirmRes.json().catch(() => null))?.error ?? "Falha no upload.");

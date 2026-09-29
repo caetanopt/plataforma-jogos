@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateScheduleAction } from "@/features/campaigns/steps/schedule-actions";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { utcToZonedDateTimeLocal } from "@/lib/dates/timezone";
+import { can } from "@/server/permissions";
+import { isLiveStatus } from "@/features/campaigns/live-status";
 
 export default async function ScheduleStepPage({
   params,
@@ -15,10 +17,14 @@ export default async function ScheduleStepPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const context = await requireOrgContext();
+  const context = await requirePagePermission("campaign:edit");
 
   const campaign = await getCampaignForEditor(context.organizationId, id);
   if (!campaign) notFound();
+
+  // Numa campanha no ar, mudar as datas abre ou fecha a campanha: só quem pode
+  // publicar (ver updateScheduleAction, que aplica a mesma regra).
+  const datesLocked = isLiveStatus(campaign.status) && !can(context, "campaign:publish");
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -40,6 +46,13 @@ export default async function ScheduleStepPage({
       >
         <input type="hidden" name="campaignId" value={campaign.id} />
 
+        {datesLocked && (
+          <p id="schedule-dates-locked" className="text-sm text-caetano-anthracite-80">
+            A campanha já foi publicada: mudar as datas abre-a ou fecha-a, por isso só quem tem
+            permissão para publicar o pode fazer. As mensagens continuam editáveis.
+          </p>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label htmlFor="scheduleStartAt">Início</Label>
@@ -47,6 +60,8 @@ export default async function ScheduleStepPage({
               id="scheduleStartAt"
               name="scheduleStartAt"
               type="datetime-local"
+              disabled={datesLocked}
+              aria-describedby={datesLocked ? "schedule-dates-locked" : undefined}
               defaultValue={campaign.scheduleStartAt ? utcToZonedDateTimeLocal(campaign.scheduleStartAt, campaign.timezone) : ""}
             />
           </div>
@@ -56,6 +71,8 @@ export default async function ScheduleStepPage({
               id="scheduleEndAt"
               name="scheduleEndAt"
               type="datetime-local"
+              disabled={datesLocked}
+              aria-describedby={datesLocked ? "schedule-dates-locked" : undefined}
               defaultValue={campaign.scheduleEndAt ? utcToZonedDateTimeLocal(campaign.scheduleEndAt, campaign.timezone) : ""}
             />
           </div>

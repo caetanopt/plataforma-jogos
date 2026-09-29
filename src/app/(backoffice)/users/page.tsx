@@ -1,5 +1,5 @@
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan, can } from "@/server/permissions";
+import { requirePagePermission } from "@/server/auth/page-guard";
+import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { inviteUserAction, removeMembershipAction, updateMembershipAction } from "@/features/users/actions";
 import { Alert } from "@/components/ui/alert";
@@ -26,8 +26,7 @@ export default async function UsersPage({
 }: {
   searchParams: Promise<{ error?: string; page?: string }>;
 }) {
-  const context = await requireOrgContext();
-  assertCan(context, "user:manage");
+  const context = await requirePagePermission("user:manage");
   const search = await searchParams;
 
   const page = Math.max(1, Number(search.page ?? 1) || 1);

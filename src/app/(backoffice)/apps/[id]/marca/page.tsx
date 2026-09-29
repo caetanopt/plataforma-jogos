@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import {
@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 
 export default async function BrandStepPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const context = await requireOrgContext();
+  const context = await requirePagePermission("campaign:edit");
 
   const campaign = await prisma.campaign.findFirst({
     where: { id, organizationId: context.organizationId },
@@ -26,13 +26,13 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
 
   const [logoMedia, faviconMedia, backgroundMedia, brandKits] = await Promise.all([
     campaign.theme.logoMediaId
-      ? prisma.mediaAsset.findUnique({ where: { id: campaign.theme.logoMediaId } })
+      ? prisma.mediaAsset.findFirst({ where: { id: campaign.theme.logoMediaId, organizationId: context.organizationId } })
       : null,
     campaign.theme.faviconMediaId
-      ? prisma.mediaAsset.findUnique({ where: { id: campaign.theme.faviconMediaId } })
+      ? prisma.mediaAsset.findFirst({ where: { id: campaign.theme.faviconMediaId, organizationId: context.organizationId } })
       : null,
     campaign.theme.backgroundImageMediaId
-      ? prisma.mediaAsset.findUnique({ where: { id: campaign.theme.backgroundImageMediaId } })
+      ? prisma.mediaAsset.findFirst({ where: { id: campaign.theme.backgroundImageMediaId, organizationId: context.organizationId } })
       : null,
     prisma.campaignTheme.findMany({
       where: { organizationId: context.organizationId, isBrandKit: true },

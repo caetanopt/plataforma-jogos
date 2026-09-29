@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
 import { updateFinalScreenAction } from "@/features/campaigns/steps/final-screen-actions";
 import { prisma } from "@/server/db/client";
@@ -16,13 +16,13 @@ export default async function FinalScreenStepPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const context = await requireOrgContext();
+  const context = await requirePagePermission("campaign:edit");
 
   const campaign = await getCampaignForEditor(context.organizationId, id);
   if (!campaign) notFound();
 
   const finalMedia = campaign.finalMediaId
-    ? await prisma.mediaAsset.findUnique({ where: { id: campaign.finalMediaId } })
+    ? await prisma.mediaAsset.findFirst({ where: { id: campaign.finalMediaId, organizationId: context.organizationId } })
     : null;
 
   return (

@@ -22,17 +22,29 @@ export async function generateMetadata({
   const { slug } = await params;
   const campaign = await prisma.campaign.findUnique({
     where: { slug },
-    select: { publicTitle: true, internalName: true, startIntroText: true, status: true },
+    select: {
+      publicTitle: true,
+      startTitle: true,
+      startIntroText: true,
+      status: true,
+      scheduleStartAt: true,
+      scheduleEndAt: true,
+    },
   });
 
-  if (!campaign) return { title: "Campanha não encontrada" };
+  // Rascunhos, campanhas em validação e arquivadas não existem para o
+  // público — os metadados também não os podem revelar.
+  const noIndex = { index: false, follow: false };
+  if (!campaign || getEffectivePublicState(campaign) === "unavailable") {
+    return { title: "Campanha não encontrada", robots: noIndex };
+  }
 
-  const title = campaign.publicTitle || campaign.internalName;
+  // Nunca o nome interno: é do backoffice (ex.: "Roda — teste cliente X").
+  const title = campaign.publicTitle || campaign.startTitle || "Campanha";
   return {
     title,
     description: campaign.startIntroText ?? undefined,
-    // Rascunhos e campanhas fora do ar não devem ser indexados.
-    robots: campaign.status === "PUBLISHED" ? undefined : { index: false, follow: false },
+    robots: campaign.status === "PUBLISHED" ? undefined : noIndex,
     openGraph: { title, description: campaign.startIntroText ?? undefined },
   };
 }
@@ -90,7 +102,7 @@ export default async function PublicPlayPage({
     ...(campaign.quizConfig?.questions.flatMap((q) => [q.imageMediaId, ...q.answers.map((a) => a.imageMediaId)]) ?? []),
   ].filter((v): v is string => Boolean(v));
 
-  const mediaAssets = mediaIds.length ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds } } }) : [];
+  const mediaAssets = mediaIds.length ? await prisma.mediaAsset.findMany({ where: { id: { in: mediaIds }, organizationId: campaign.organizationId } }) : [];
   const mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
 
   const screenBefore = campaign.screens.find((s) => s.kind === "INTERMEDIATE_BEFORE");

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
+import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -35,6 +36,8 @@ export async function addPrizeAction(formData: FormData): Promise<void> {
     endAt: getField(formData, "endAt"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   const prize = await prisma.prize.create({
     data: {
@@ -91,6 +94,8 @@ export async function updatePrizeAction(formData: FormData): Promise<void> {
     endAt: getField(formData, "endAt"),
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.imageMediaId]))) return;
 
   const quantityChanged =
     parsed.data.totalQuantity !== (prize.totalQuantity ?? undefined) ||

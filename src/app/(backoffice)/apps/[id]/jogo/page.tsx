@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import { Alert } from "@/components/ui/alert";
 import { MemoryGameStep } from "@/components/backoffice/editor/memory-game-step";
@@ -14,7 +14,7 @@ export default async function GameConfigStepPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const context = await requireOrgContext();
+  const context = await requirePagePermission("campaign:edit");
   const campaign = await prisma.campaign.findFirst({
     where: { id, organizationId: context.organizationId },
     select: { type: true, status: true },

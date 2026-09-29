@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan } from "@/server/permissions";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import { resolveDateRange } from "@/lib/dates/range";
 import { getCampaignStats, type CampaignStatsFilters } from "@/features/analytics/campaign-stats";
@@ -35,8 +34,7 @@ export default async function AnalyticsPage({
   searchParams: Promise<AnalyticsSearchParams>;
 }) {
   const params = await searchParams;
-  const context = await requireOrgContext();
-  assertCan(context, "stats:view");
+  const context = await requirePagePermission("stats:view");
   const range = resolveDateRange(params);
 
   const type =

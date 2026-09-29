@@ -1,7 +1,6 @@
 import { Brain, Disc3, ListChecks } from "lucide-react";
-import { requireOrgContext } from "@/server/auth/session";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
-import { assertCan } from "@/server/permissions";
 import { createCampaignAction } from "@/features/campaigns/actions";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Alert } from "@/components/ui/alert";
@@ -40,8 +39,7 @@ export default async function NewAppPage({
   searchParams: Promise<{ error?: string; folderId?: string }>;
 }) {
   const params = await searchParams;
-  const context = await requireOrgContext();
-  assertCan(context, "campaign:create");
+  const context = await requirePagePermission("campaign:create");
 
   const workspaces = await prisma.workspace.findMany({
     where: { organizationId: context.organizationId },

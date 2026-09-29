@@ -1,5 +1,4 @@
-import { requireOrgContext } from "@/server/auth/session";
-import { assertCan } from "@/server/permissions";
+import { requirePagePermission } from "@/server/auth/page-guard";
 import { prisma } from "@/server/db/client";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -24,8 +23,7 @@ export default async function SettingsPage({
   searchParams: Promise<SettingsSearchParams>;
 }) {
   const params = await searchParams;
-  const context = await requireOrgContext();
-  assertCan(context, "audit:view");
+  const context = await requirePagePermission("audit:view");
 
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const action =

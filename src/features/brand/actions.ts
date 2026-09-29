@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
+import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -58,6 +59,8 @@ export async function updateBrandKitAction(formData: FormData): Promise<void> {
     shadowEnabled: formData.get("shadowEnabled") ?? "",
   });
   if (!parsed.success) return;
+  // Só media da própria organização (ver mediaBelongsToOrganization).
+  if (!(await mediaBelongsToOrganization(context.organizationId, [parsed.data.logoMediaId, parsed.data.faviconMediaId, parsed.data.backgroundImageMediaId]))) return;
 
   await prisma.campaignTheme.update({
     where: { id: kitId },

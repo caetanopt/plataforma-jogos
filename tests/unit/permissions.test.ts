@@ -69,12 +69,13 @@ describe("can — RBAC (secção 3)", () => {
     }
   });
 
-  it("EDITOR só autoriza criar/editar/arquivar campanhas e ver estatísticas", () => {
+  it("EDITOR só autoriza criar/editar campanhas e ver estatísticas — arquivar é do administrador (§3)", () => {
     const ctx = context({ membership: membership("EDITOR") });
     expect(can(ctx, "campaign:create")).toBe(true);
     expect(can(ctx, "campaign:edit")).toBe(true);
-    expect(can(ctx, "campaign:archive")).toBe(true);
     expect(can(ctx, "stats:view")).toBe(true);
+
+    expect(can(ctx, "campaign:archive")).toBe(false);
 
     expect(can(ctx, "workspace:manage")).toBe(false);
     expect(can(ctx, "user:manage")).toBe(false);
@@ -109,14 +110,15 @@ describe("can — RBAC (secção 3)", () => {
     expect(can(withoutFlag, "user:manage")).toBe(false);
   });
 
-  it("VIEWER só consulta leads/estatísticas — nunca edita nem exporta, mesmo com canExportLeads=true", () => {
+  it("VIEWER só consulta estatísticas — sem leads (§3), nunca edita nem exporta, mesmo com canExportLeads=true", () => {
     // O bypass de leads:export só existe para o papel ANALYST — um VIEWER
     // nunca deve conseguir exportar, mesmo que a flag esteja (indevidamente)
     // definida na BD.
     const ctx = context({ membership: membership("VIEWER", { canExportLeads: true, canPublish: true }) });
 
-    expect(can(ctx, "leads:view")).toBe(true);
     expect(can(ctx, "stats:view")).toBe(true);
+    // Nomes, e-mails, telefones e códigos atribuídos são do Analista.
+    expect(can(ctx, "leads:view")).toBe(false);
     expect(can(ctx, "leads:export")).toBe(false);
     expect(can(ctx, "campaign:publish")).toBe(false);
     expect(can(ctx, "campaign:create")).toBe(false);

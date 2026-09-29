@@ -9,11 +9,12 @@ import { BrandLogo } from "@/components/backoffice/brand-logo";
 import { cn } from "@/lib/utils";
 
 export function MobileNav({
-  isOrgAdmin,
+  visibleHrefs,
   organizationName,
   logoUrl,
 }: {
-  isOrgAdmin: boolean;
+  /** Entradas que o papel permite, calculadas no servidor. */
+  visibleHrefs: string[];
   organizationName: string;
   logoUrl?: string | null;
 }) {
@@ -92,7 +93,7 @@ export function MobileNav({
               </button>
             </div>
             <nav aria-label="Navegação principal" className="flex flex-col gap-1">
-              {NAV_ITEMS.filter((item) => !item.adminOnly || isOrgAdmin).map((item) => {
+              {NAV_ITEMS.filter((item) => visibleHrefs.includes(item.href)).map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const Icon = item.icon;
                 return (
