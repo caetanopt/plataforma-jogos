@@ -71,9 +71,17 @@ describe("exportação CSV", () => {
     expect(csv.split("\n")[1]).toContain(",+351912345678,");
   });
 
+  it("uma lead anonimizada sai sem identidade e com a data da anonimização", () => {
+    const anonymizedAt = new Date("2026-10-01T03:17:00Z");
+    const row = toLeadRow(participation({ firstName: null, email: null, anonymizedAt }), now);
+    expect(row).toMatchObject({ name: "", email: "", anonymizedAt: "2026-10-01T03:17:00.000Z" });
+    expect(leadsToCsv([row]).split("\n")[1]!.endsWith(",2026-10-01T03:17:00.000Z")).toBe(true);
+    expect(toLeadRow(participation(), now).anonymizedAt).toBe("");
+  });
+
   it("acrescenta as colunas novas no fim, sem mudar a posição das antigas", () => {
     const header = leadsToCsv([]).split("\n")[0];
-    expect(header.endsWith(",Teste,Estado do prémio,Consentimento de marketing,Consentimentos")).toBe(true);
+    expect(header.endsWith(",Teste,Estado do prémio,Consentimento de marketing,Consentimentos,Anonimizada em")).toBe(true);
   });
 });
 
@@ -130,11 +138,11 @@ describe("consentimentos na lista e na exportação", () => {
     );
     const [header, line] = csv.split("\n");
     expect(header.endsWith(
-      ",Consentimentos,Consentimento: Aceito o regulamento (v2),Consentimento: Aceito receber novidades por e-mail (v3),Consentimento: Consentimento acrescentado depois (v1)",
+      ",Consentimentos,Anonimizada em,Consentimento: Aceito o regulamento (v2),Consentimento: Aceito receber novidades por e-mail (v3),Consentimento: Consentimento acrescentado depois (v1)",
     )).toBe(true);
     expect(line.endsWith(
       // O marketing foi recusado na v2; a coluna é a v3 (texto novo).
-      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,Aceite,Recusado (v2),",
+      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,,Aceite,Recusado (v2),",
     )).toBe(true);
   });
 });

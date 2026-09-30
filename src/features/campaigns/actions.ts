@@ -173,6 +173,10 @@ export async function duplicateCampaignAction(formData: FormData): Promise<void>
         dedupStrategies: original.dedupStrategies,
         dedupFieldCombination: original.dedupFieldCombination,
         minAge: original.minAge,
+        // O prazo em dias copia-se; a data não: era a do fim da campanha
+        // original, e numa cópia que corre depois anonimizava cada lead um
+        // dia depois de chegar.
+        dataRetentionDays: original.dataRetentionDays,
         finalTitle: original.finalTitle,
         finalMessage: original.finalMessage,
         finalMediaId: original.finalMediaId,

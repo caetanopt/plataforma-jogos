@@ -33,6 +33,7 @@ const {
   submitLeadFormAction,
   submitMemoryResultAction,
 } = await import("@/features/play/actions");
+const { anonymizeParticipationsByIds } = await import("@/features/privacy/anonymize");
 
 interface Options {
   type?: CampaignType;
@@ -125,7 +126,7 @@ async function createFixture(options: Options = {}) {
       testRequested: false,
     });
 
-  return { campaignId: campaign.id, leadFormId, start };
+  return { campaignId: campaign.id, organizationId: organization.id, leadFormId, start };
 }
 
 afterEach(async () => {
@@ -495,5 +496,31 @@ describe("clique em «Jogar» (START_CLICKED)", () => {
 
     expect(await fixture.start()).toMatchObject({ ok: true });
     expect(create).toHaveBeenCalled();
+  });
+});
+
+describe("participação anonimizada", () => {
+  it("já não se retoma, não se joga e não volta a receber dados", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: "BEFORE_GAME" });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    const ref = { participationId: started.participationId, token };
+
+    // Anonimizada a pedido enquanto o separador continua aberto.
+    await anonymizeParticipationsByIds(fixture.organizationId, [ref.participationId]);
+
+    expect(
+      await resumeParticipationAction({ campaignId: fixture.campaignId, ref, testRequested: false }),
+    ).toEqual({ ok: false, reason: "gone" });
+    expect(await beginGameAction(ref)).toEqual({ ok: false });
+    expect(await submitLeadFormAction({ ref, values: { email: "ana@example.pt" }, consents: {} })).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    const saved = await prisma.participation.findUniqueOrThrow({ where: { id: ref.participationId } });
+    expect(saved).toMatchObject({ email: null, leadFormResponse: null });
+    expect(saved.anonymizedAt).not.toBeNull();
   });
 });

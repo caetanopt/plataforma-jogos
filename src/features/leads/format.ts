@@ -51,6 +51,8 @@ export interface LeadRow {
   consents: string;
   /** Estado e versão do último registo de cada consentimento (colunas por consentimento). */
   consentStatusByDefinition: Record<string, { status: string; version: number }>;
+  /** Data da anonimização (ISO); vazio numa participação com os dados. */
+  anonymizedAt: string;
 }
 
 export const CONSENT_STATUS_LABELS: Record<string, string> = {
@@ -185,6 +187,7 @@ export function toLeadRow(p: LeadParticipation, now: Date = new Date()): LeadRow
     os: p.os ?? "",
     sessionId: p.sessionId ?? "",
     ...consentColumns(p.consentRecords),
+    anonymizedAt: p.anonymizedAt?.toISOString() ?? "",
   };
 }
 
@@ -215,6 +218,7 @@ const CSV_COLUMNS: Array<[CsvColumnKey, string]> = [
   ["prizeStatus", "Estado do prémio"],
   ["marketingConsent", "Consentimento de marketing"],
   ["consents", "Consentimentos"],
+  ["anonymizedAt", "Anonimizada em"],
 ];
 
 /** Uma coluna por consentimento do formulário (exportação de uma campanha). */

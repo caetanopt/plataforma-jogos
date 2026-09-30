@@ -29,10 +29,13 @@ export function ActionForm({
   className,
   resetOnSuccess = true,
   messageClassName,
+  id,
 }: {
   action: FormAction;
   children: ReactNode;
   className?: string;
+  /** Para campos fora do formulário que se lhe juntam com `form="…"` (seleção numa tabela). */
+  id?: string;
   /** Limpar os campos depois de uma resposta de sucesso (formulários de criar). */
   resetOnSuccess?: boolean;
   messageClassName?: string;
@@ -79,7 +82,7 @@ export function ActionForm({
 
   return (
     <FormActionContext.Provider value={contextValue}>
-      <form ref={formRef} className={className} onSubmit={handleSubmit}>
+      <form ref={formRef} id={id} className={className} onSubmit={handleSubmit}>
         <Fragment key={resetKey}>{children}</Fragment>
         <FormMessage className={messageClassName} />
       </form>

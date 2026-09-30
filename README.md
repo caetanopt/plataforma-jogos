@@ -91,8 +91,10 @@ A página inicial do backoffice (`/folders`) é a grelha de pastas: é para lá 
 `/` redirecionam. Não há página de dashboard — os alertas de fim de campanha e de stock, e as
 contagens por estado, vivem em Estatísticas (`/analytics`); `/dashboard` redireciona para lá.
 
+Inclui também a conservação e anonimização dos dados (§24, ver abaixo).
+
 Ficam para uma iteração seguinte (não bloqueiam este âmbito): exportação XLSX, importação CSV
-em massa de códigos/vouchers, anonimização e retenção agendada, allowlist de domínios de embed,
+em massa de códigos/vouchers, exportação dos dados do titular, allowlist de domínios de embed,
 CAPTCHA, interface multilingue e suite Playwright completa (ficam incluídos apenas os smoke
 tests essenciais de cada jogo).
 
@@ -187,6 +189,37 @@ para "desmarcada" se distinguir de "ausente".
 - Um quiz submetido com a mesma pergunta ou a mesma resposta repetidas é recusado: a pontuação e
   as estatísticas liam-nas de maneira diferente. O jogo nunca as manda.
 
+### Conservação e anonimização dos dados
+
+- **Prazo de conservação** (§24): em Configurações > Privacidade, o prazo por omissão da
+  organização (30, 90, 180 ou 365 dias, ou nenhum). Cada campanha pode ter o seu, na etapa
+  Formulário de leads: outro prazo em dias, ou uma data a partir da qual todas as participações
+  são anonimizadas. Só os administradores mudam prazos e anonimizam (`privacy:manage`); os
+  editores veem o prazo.
+- Os dias contam-se a partir de cada participação: com 90 dias, as leads vão sendo anonimizadas à
+  medida que chegam aos 90 dias, não todas no fim da campanha. Uma participação com menos de um
+  dia nunca é anonimizada automaticamente (pode estar a meio do jogo).
+- **Anonimizar** retira o nome, o e-mail, o telefone, as respostas ao formulário, o IP, a sessão,
+  a ligação ao browser (cookie), `utm_content` e `utm_term`. Ficam o resultado, o prémio e o
+  código, os consentimentos (sem ninguém a quem se liguem), a origem e o dispositivo: as
+  estatísticas não mudam. O participante que fica sem participações é apagado. É irreversível.
+- Uma participação anonimizada deixa de contar para os limites de participação: quem jogou numa
+  campanha "uma vez no total" pode voltar a jogar depois de os seus dados saírem.
+- **Aviso antes**: a lista de leads e a etapa Formulário de leads avisam das leads que vão ser
+  anonimizadas nos 7 dias seguintes, para as exportar antes.
+- **Anonimização manual**, na lista de leads: as selecionadas, ou todas as que os filtros mostram
+  (por exemplo, um pedido de um titular, pesquisado pelo e-mail em todas as campanhas). Pede
+  confirmação. A lista pode ocultar as anonimizadas, e o CSV tem uma coluna nova no fim,
+  "Anonimizada em".
+- Tudo fica na auditoria como operação de privacidade, só com contagens (nunca o texto
+  pesquisado). Cada execução da tarefa diária fica num registo global.
+- **Tarefa diária**: `vercel.json` agenda `GET /api/cron/retention` para as 03:17 UTC. A rota só
+  aceita o cabeçalho `Authorization: Bearer $CRON_SECRET`; sem `CRON_SECRET` definido recusa
+  sempre. Anonimiza por lotes de 500 e pára ao fim de 4 minutos; o resto fica para o dia seguinte.
+  Para correr à mão, com o `DATABASE_URL` da base de dados: `npm run privacy:retention`.
+- Se a tarefa deixar de correr (leads que passaram o prazo há mais de dois dias e continuam com os
+  dados), Configurações > Privacidade e a lista de leads avisam.
+
 ### Antes de fazer deploy destas alterações
 
 Uma campanha publicada com idade mínima passa a recusar todas as participações quando a idade não
@@ -262,6 +295,11 @@ Nesse caso, marcar a migração como revertida e voltar a correr o workflow:
 ```bash
 npx prisma migrate resolve --rolled-back 20260930165124_performance_indexes
 ```
+
+Para os prazos de conservação serem aplicados, definir `CRON_SECRET` nas variáveis de ambiente de
+produção do Vercel (um valor aleatório longo, `openssl rand -base64 32`). O Vercel lê o
+`vercel.json` e agenda a tarefa sozinho no deploy de produção. Sem prazo definido (o valor por
+omissão), a tarefa corre e não anonimiza nada.
 
 ### Depois do deploy
 

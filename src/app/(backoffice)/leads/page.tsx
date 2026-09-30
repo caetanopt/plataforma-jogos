@@ -3,9 +3,16 @@ import { requirePagePermission } from "@/server/auth/page-guard";
 import { firstValues } from "@/lib/forms/search-params";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
-import { resolveDateRange } from "@/lib/dates/range";
-import { listLeads, parseMarketingConsentFilter } from "@/features/leads/queries";
+import { countLeadsToAnonymize, listLeads } from "@/features/leads/queries";
+import { leadsFiltersFromParams, leadsFiltersToParams } from "@/features/leads/filters";
 import { toLeadRow } from "@/features/leads/format";
+import { anonymizeLeadsAction } from "@/features/privacy/actions";
+import { retentionOutlook } from "@/features/privacy/retention-queries";
+import { RETENTION_WARNING_DAYS } from "@/features/privacy/retention-policy";
+import { ActionForm } from "@/components/backoffice/editor/action-form";
+import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
+import { SelectAllCheckbox } from "@/components/backoffice/leads/select-all-checkbox";
+import { Alert } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
 import { Input } from "@/components/ui/input";
@@ -23,8 +30,15 @@ interface LeadsSearchParams {
   to?: string;
   excludeTest?: string;
   marketingConsent?: string;
+  hideAnonymized?: string;
   page?: string;
 }
+
+const SELECTION_FORM_ID = "lead-selection";
+const MAX_OUTLOOK_CAMPAIGNS = 5;
+
+const ANONYMIZE_WARNING =
+  "Os dados pessoais (nome, e-mail, telefone, respostas ao formulário, IP) são apagados para sempre. Ficam o resultado, o prémio e as estatísticas. Não é possível desfazer.";
 
 const MARKETING_TONES: Record<string, "success" | "neutral" | "warning"> = {
   Concedido: "success",
@@ -46,37 +60,32 @@ export default async function LeadsPage({
 }) {
   const params: LeadsSearchParams = firstValues(await searchParams);
   const context = await requirePagePermission("leads:view");
-  const range = resolveDateRange(params);
+  const { range, filters } = leadsFiltersFromParams(params);
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
-  const excludeTest = params.excludeTest !== "false";
-  const marketingConsent = parseMarketingConsentFilter(params.marketingConsent);
+  const excludeTest = filters.excludeTest !== false;
+  const marketingConsent = filters.marketingConsent;
+  const canManagePrivacy = can(context, "privacy:manage");
 
-  const [campaigns, leads] = await Promise.all([
+  const [campaigns, leads, toAnonymize, outlook] = await Promise.all([
     prisma.campaign.findMany({
       where: { organizationId: context.organizationId },
-      select: { id: true, internalName: true },
+      select: { id: true, internalName: true, timezone: true },
       orderBy: { internalName: "asc" },
     }),
-    listLeads(context.organizationId, range, {
-      campaignId: params.campaignId || undefined,
-      search: params.search || undefined,
-      excludeTest,
-      marketingConsent,
-      page,
-    }),
+    listLeads(context.organizationId, range, { ...filters, page }),
+    canManagePrivacy ? countLeadsToAnonymize(context.organizationId, range, filters) : Promise.resolve(0),
+    // Aviso antes da anonimização (§24): o que o prazo vai levar em breve.
+    retentionOutlook(context.organizationId, { campaignId: filters.campaignId }),
   ]);
 
   const rows = leads.items.map((item) => toLeadRow(item));
   const canExport = can(context, "leads:export");
 
-  const exportQuery = new URLSearchParams({
-    ...(params.campaignId ? { campaignId: params.campaignId } : {}),
-    ...(params.search ? { search: params.search } : {}),
-    period: range.preset,
-    ...(range.preset === "custom" ? { from: params.from ?? "", to: params.to ?? "" } : {}),
-    excludeTest: String(excludeTest),
-    ...(marketingConsent ? { marketingConsent } : {}),
-  }).toString();
+  // Os filtros ativos, iguais na exportação, na paginação e na anonimização.
+  const filterParams = leadsFiltersToParams(range, filters, params);
+  const exportQuery = new URLSearchParams(filterParams).toString();
+  const upcomingTotal = outlook.reduce((sum, campaign) => sum + campaign.upcoming, 0);
+  const campaignTimezone = new Map(campaigns.map((campaign) => [campaign.id, campaign.timezone]));
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -91,6 +100,35 @@ export default async function LeadsPage({
           </a>
         )}
       </div>
+
+      {upcomingTotal > 0 && (
+        <div className="mb-6">
+          <Alert variant="warning">
+            <p>
+              {upcomingTotal === 1 ? "1 lead vai ser anonimizada" : `${upcomingTotal} leads vão ser anonimizadas`} nos
+              próximos {RETENTION_WARNING_DAYS} dias, por fim do prazo de conservação. Exporte antes as que precisar.
+            </p>
+            <ul className="mt-2 list-disc space-y-0.5 pl-5">
+              {outlook.slice(0, MAX_OUTLOOK_CAMPAIGNS).map((campaign) => (
+                <li key={campaign.campaignId}>
+                  {campaign.internalName}: {campaign.upcoming}
+                  {campaign.nextAt &&
+                    `, a primeira ${campaign.dueNow ? "na próxima execução" : `a ${campaign.nextAt.toLocaleDateString("pt-PT", { timeZone: campaignTimezone.get(campaign.campaignId) })}`}`}
+                </li>
+              ))}
+            </ul>
+            {outlook.length > MAX_OUTLOOK_CAMPAIGNS && (
+              <p className="mt-1">E mais {outlook.length - MAX_OUTLOOK_CAMPAIGNS} campanhas.</p>
+            )}
+            {outlook.some((campaign) => campaign.overdue > 0) && (
+              <p className="mt-1">
+                Algumas já passaram o prazo há mais de dois dias: a tarefa diária de anonimização não está a correr
+                (ver Configurações &gt; Privacidade).
+              </p>
+            )}
+          </Alert>
+        </div>
+      )}
 
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div>
@@ -150,10 +188,59 @@ export default async function LeadsPage({
           <input type="checkbox" name="excludeTest" value="true" defaultChecked={excludeTest} className="h-4 w-4 rounded border-caetano-medium-gray" />
           Excluir participações de teste
         </label>
+        <label className="flex h-10 items-center gap-2 text-sm text-caetano-anthracite">
+          <input
+            type="checkbox"
+            name="hideAnonymized"
+            value="true"
+            defaultChecked={filters.hideAnonymized}
+            className="h-4 w-4 rounded border-caetano-medium-gray"
+          />
+          Ocultar anonimizadas
+        </label>
         <Button type="submit" variant="outline">
           Aplicar filtros
         </Button>
       </form>
+
+      {canManagePrivacy && (
+        <div className="mb-3 flex flex-wrap items-start gap-3">
+          {/* As caixas de cada linha pertencem a este formulário (form="…"). */}
+          <ActionForm
+            id={SELECTION_FORM_ID}
+            action={anonymizeLeadsAction}
+            resetOnSuccess={false}
+            className="flex flex-col gap-1"
+            messageClassName="max-w-md"
+          >
+            <input type="hidden" name="scope" value="selection" />
+            <ConfirmSubmitButton
+              confirmTitle="Anonimizar as leads selecionadas?"
+              confirmMessage={ANONYMIZE_WARNING}
+              confirmLabel="Anonimizar"
+              variant="outline"
+            >
+              Anonimizar selecionadas
+            </ConfirmSubmitButton>
+          </ActionForm>
+          {toAnonymize > 0 && (
+            <ActionForm action={anonymizeLeadsAction} resetOnSuccess={false} className="flex flex-col gap-1" messageClassName="max-w-md">
+              <input type="hidden" name="scope" value="filters" />
+              {Object.entries(filterParams).map(([name, value]) => (
+                <input key={name} type="hidden" name={name} value={value} />
+              ))}
+              <ConfirmSubmitButton
+                confirmTitle={toAnonymize === 1 ? "Anonimizar 1 lead?" : `Anonimizar ${toAnonymize} leads?`}
+                confirmMessage={`Todas as leads que os filtros atuais mostram, em todas as páginas (${toAnonymize}). ${ANONYMIZE_WARNING}`}
+                confirmLabel="Anonimizar"
+                variant="outline"
+              >
+                {toAnonymize === 1 ? "Anonimizar a lead dos filtros" : `Anonimizar as ${toAnonymize} leads dos filtros`}
+              </ConfirmSubmitButton>
+            </ActionForm>
+          )}
+        </div>
+      )}
 
       <div
         tabIndex={0}
@@ -165,6 +252,11 @@ export default async function LeadsPage({
           <caption className="sr-only">Participações e leads recolhidos</caption>
           <thead>
             <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
+              {canManagePrivacy && (
+                <th scope="col" className="px-4 py-3">
+                  <SelectAllCheckbox formId={SELECTION_FORM_ID} name="participationId" label="Selecionar todas as leads desta página" />
+                </th>
+              )}
               <th scope="col" className="px-4 py-3">Data</th>
               <th scope="col" className="px-4 py-3">Campanha</th>
               <th scope="col" className="px-4 py-3">Nome</th>
@@ -179,13 +271,28 @@ export default async function LeadsPage({
           <tbody className="divide-y divide-caetano-medium-gray-20">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-caetano-anthracite-80">
+                <td colSpan={canManagePrivacy ? 10 : 9} className="px-4 py-8 text-center text-caetano-anthracite-80">
                   Nenhuma participação encontrada para os filtros atuais.
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.id}>
+                  {canManagePrivacy && (
+                    <td className="px-4 py-3">
+                      {/* A chave muda com a anonimização: a caixa volta desmarcada. */}
+                      <input
+                        key={row.anonymizedAt || "com-dados"}
+                        type="checkbox"
+                        form={SELECTION_FORM_ID}
+                        name="participationId"
+                        value={row.id}
+                        disabled={Boolean(row.anonymizedAt)}
+                        aria-label={`Selecionar a lead de ${row.createdAt.toLocaleString("pt-PT")}`}
+                        className="h-4 w-4 rounded border-caetano-medium-gray"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 whitespace-nowrap text-caetano-anthracite-80">
                     {row.createdAt.toLocaleString("pt-PT")}
                   </td>
@@ -197,7 +304,18 @@ export default async function LeadsPage({
                       ({CAMPAIGN_TYPE_LABELS[row.campaignType as keyof typeof CAMPAIGN_TYPE_LABELS]})
                     </span>
                   </td>
-                  <td className="px-4 py-3">{row.name || "—"}</td>
+                  <td className="px-4 py-3">
+                    {row.anonymizedAt ? (
+                      <span className="whitespace-nowrap">
+                        <Badge tone="neutral">Anonimizada</Badge>
+                        <span className="block text-xs text-caetano-anthracite-80">
+                          {new Date(row.anonymizedAt).toLocaleDateString("pt-PT")}
+                        </span>
+                      </span>
+                    ) : (
+                      row.name || "—"
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-caetano-anthracite-80">
                     {row.email || row.phone || "—"}
                   </td>
@@ -239,17 +357,7 @@ export default async function LeadsPage({
         pageCount={leads.pageCount}
         total={leads.total}
         label="Paginação de leads"
-        buildHref={(target) =>
-          `/leads?${new URLSearchParams({
-            ...(params.campaignId ? { campaignId: params.campaignId } : {}),
-            ...(params.search ? { search: params.search } : {}),
-            period: range.preset,
-            ...(range.preset === "custom" ? { from: params.from ?? "", to: params.to ?? "" } : {}),
-            excludeTest: String(excludeTest),
-            ...(marketingConsent ? { marketingConsent } : {}),
-            page: String(target),
-          }).toString()}`
-        }
+        buildHref={(target) => `/leads?${new URLSearchParams({ ...filterParams, page: String(target) }).toString()}`}
       />
     </div>
   );

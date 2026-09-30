@@ -80,6 +80,9 @@ model Organization {
   /// ficheiro, o backoffice mostra apenas o nome do produto.
   logoMediaId         String?
   privacyContactEmail String?
+  /// Prazo de conservação das leads, em dias, contado a partir de cada
+  /// participação (§24). Null: sem anonimização automática. Uma campanha pode
+  /// ter o seu (Campaign.dataRetentionDays / dataRetentionUntil).
   dataRetentionDays   Int?
   defaultTimezone     String    @default("Europe/Lisbon")
   suspendedAt         DateTime?
@@ -301,6 +304,13 @@ model Campaign {
   dedupStrategies        DedupStrategy[]        @default([])
   dedupFieldCombination  String[]               @default([])
   minAge                 Int?
+
+  // Conservação dos dados (secção 24). Sem nenhum dos dois, vale o prazo da
+  // organização. Com os dois, vale a data.
+  /// Dias, contados a partir de cada participação.
+  dataRetentionDays      Int?
+  /// A partir deste instante, todas as participações são anonimizadas.
+  dataRetentionUntil     DateTime?
 
   // Agenda (secção 17)
   scheduleStartAt       DateTime?
@@ -550,6 +560,10 @@ model Participation {
   /// posição na campanha só afeta participações novas. Null nas anteriores
   /// a esta coluna, que seguem a posição atual.
   leadFormPosition  LeadFormPosition?
+  /// Dados pessoais retirados (prazo de conservação ou pedido, §24): ficam o
+  /// resultado, os consentimentos (sem ninguém a quem se liguem) e o que
+  /// alimenta as estatísticas.
+  anonymizedAt      DateTime?
   startedAt         DateTime            @default(now())
   completedAt       DateTime?
   createdAt         DateTime            @default(now())

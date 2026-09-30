@@ -2,6 +2,11 @@ import { requirePagePermission } from "@/server/auth/page-guard";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { updatePrivacySettingsAction } from "@/features/organizations/actions";
+import { updateOrganizationRetentionAction } from "@/features/privacy/actions";
+import { lastRetentionRun } from "@/features/privacy/retention-job";
+import { isRetentionJobStale, retentionOutlook } from "@/features/privacy/retention-queries";
+import { RETENTION_DAY_OPTIONS, RETENTION_WARNING_DAYS } from "@/features/privacy/retention-policy";
+import { Alert } from "@/components/ui/alert";
 import { ORGANIZATION_LIMITS } from "@/lib/validation/organization";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
 import { Input } from "@/components/ui/input";
@@ -60,12 +65,22 @@ export default async function SettingsPage({
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canManageOrganization = can(context, "organization:manage");
+  const canManagePrivacy = can(context, "privacy:manage");
   const organization = canManageOrganization
     ? await prisma.organization.findUnique({
         where: { id: context.organizationId },
-        select: { privacyContactEmail: true },
+        select: { privacyContactEmail: true, dataRetentionDays: true, defaultTimezone: true },
       })
     : null;
+  // A tarefa diária aplica os prazos: se deixou de correr, os dados ficam
+  // para lá do prazo sem ninguém dar por isso.
+  // Sinal fiável: leads que passaram o prazo há mais de dois dias e ainda
+  // têm os dados; ou uma última execução antiga.
+  const [lastRun, outlook] = organization
+    ? await Promise.all([lastRetentionRun(), retentionOutlook(context.organizationId)])
+    : [null, []];
+  const overdue = outlook.reduce((sum, campaign) => sum + campaign.overdue, 0);
+  const retentionStale = isRetentionJobStale(outlook, lastRun);
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -95,6 +110,51 @@ export default async function SettingsPage({
               correção ou eliminação dos seus dados (RGPD).
             </p>
           </AutoSaveForm>
+
+          {canManagePrivacy && (
+            <AutoSaveForm action={updateOrganizationRetentionAction} className="mt-5 space-y-1">
+              <Label htmlFor="dataRetentionDays">Prazo de conservação das leads</Label>
+              <select
+                id="dataRetentionDays"
+                name="dataRetentionDays"
+                defaultValue={organization.dataRetentionDays ? String(organization.dataRetentionDays) : ""}
+                aria-describedby="dataRetentionDays-help"
+                className="h-10 w-full max-w-sm rounded-lg border border-caetano-medium-gray px-3 text-sm"
+              >
+                <option value="">Sem prazo (anonimização só à mão)</option>
+                {RETENTION_DAY_OPTIONS.map((days) => (
+                  <option key={days} value={days}>
+                    {days} dias
+                  </option>
+                ))}
+              </select>
+              <p id="dataRetentionDays-help" className="text-xs text-caetano-anthracite-80">
+                Contado a partir de cada participação. Ao fim do prazo, os dados pessoais (nome, e-mail, telefone,
+                respostas ao formulário, IP) são anonimizados; ficam o resultado, o prémio e as estatísticas. Vale
+                para as campanhas sem prazo próprio (etapa Formulário de leads). A lista de leads avisa com{" "}
+                {RETENTION_WARNING_DAYS} dias de antecedência.
+              </p>
+            </AutoSaveForm>
+          )}
+
+          {canManagePrivacy && (
+            <p className="mt-3 text-xs text-caetano-anthracite-80">
+              Tarefa diária de anonimização:{" "}
+              {lastRun
+                ? `última execução a ${lastRun.at.toLocaleString("pt-PT", { timeZone: organization.defaultTimezone })}${lastRun.result === "FAILURE" ? " (com falhas)" : ""}.`
+                : "ainda não correu."}
+            </p>
+          )}
+          {canManagePrivacy && retentionStale && (
+            <div className="mt-2">
+              <Alert variant="warning">
+                A tarefa diária que aplica os prazos de conservação não está a correr
+                {overdue > 0 ? ` (${overdue === 1 ? "1 lead passou" : `${overdue} leads passaram`} o prazo há mais de dois dias)` : ""}:
+                as leads ficam guardadas para lá do prazo. Peça a quem gere o alojamento para confirmar a tarefa
+                agendada e a variável CRON_SECRET (ver o README).
+              </Alert>
+            </div>
+          )}
         </section>
       )}
 

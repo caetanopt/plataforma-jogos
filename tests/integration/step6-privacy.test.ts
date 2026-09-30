@@ -565,7 +565,7 @@ describe("consentimentos nas leads", () => {
     expect(response.status).toBe(200);
     const [header, ...lines] = (await response.text()).split("\n");
     expect(header.endsWith(
-      ",Consentimento de marketing,Consentimentos,Consentimento: Aceito o regulamento (v1),Consentimento: Aceito receber novidades (v3)",
+      ",Consentimento de marketing,Consentimentos,Anonimizada em,Consentimento: Aceito o regulamento (v1),Consentimento: Aceito receber novidades (v3)",
     )).toBe(true);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("sim@example.pt");
@@ -584,6 +584,6 @@ describe("consentimentos nas leads", () => {
 
     const response = await exportRoute.GET(new Request("http://localhost:3000/api/leads/export?period=all"));
     const header = (await response.text()).split("\n")[0];
-    expect(header.endsWith(",Consentimento de marketing,Consentimentos")).toBe(true);
+    expect(header.endsWith(",Consentimento de marketing,Consentimentos,Anonimizada em")).toBe(true);
   });
 });

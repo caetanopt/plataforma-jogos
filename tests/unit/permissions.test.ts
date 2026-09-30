@@ -15,6 +15,7 @@ const ALL_ACTIONS: PermissionAction[] = [
   "campaign:delete",
   "leads:view",
   "leads:export",
+  "privacy:manage",
   "stats:view",
   "audit:view",
 ];
@@ -84,6 +85,7 @@ describe("can — RBAC (secção 3)", () => {
     expect(can(ctx, "campaign:delete")).toBe(false);
     expect(can(ctx, "leads:view")).toBe(false);
     expect(can(ctx, "leads:export")).toBe(false);
+    expect(can(ctx, "privacy:manage")).toBe(false);
     expect(can(ctx, "audit:view")).toBe(false);
   });
 
@@ -102,6 +104,8 @@ describe("can — RBAC (secção 3)", () => {
     expect(can(withoutFlag, "stats:view")).toBe(true);
     expect(can(withoutFlag, "leads:export")).toBe(false);
     expect(can(withFlag, "leads:export")).toBe(true);
+    // Anonimizar é irreversível e o prazo de conservação é da organização.
+    expect(can(withFlag, "privacy:manage")).toBe(false);
 
     expect(can(withoutFlag, "campaign:create")).toBe(false);
     expect(can(withoutFlag, "campaign:edit")).toBe(false);
@@ -130,6 +134,7 @@ describe("can — RBAC (secção 3)", () => {
     expect(can(ctx, "user:manage")).toBe(false);
     expect(can(ctx, "brand:manage")).toBe(false);
     expect(can(ctx, "audit:view")).toBe(false);
+    expect(can(ctx, "privacy:manage")).toBe(false);
   });
 });
 

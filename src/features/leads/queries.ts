@@ -10,6 +10,8 @@ export interface LeadsFilters {
   excludeTest?: boolean;
   /** Com (ou sem) pelo menos um consentimento de marketing aceite (§21, §24). */
   marketingConsent?: MarketingConsentFilter;
+  /** Sem as participações já anonimizadas (§24). */
+  hideAnonymized?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -57,6 +59,7 @@ function buildWhere(
     createdAt: { gte: range.from, lte: range.to },
     ...(filters.marketingConsent === "granted" ? MARKETING_GRANTED : {}),
     ...(filters.marketingConsent === "not_granted" ? { NOT: MARKETING_GRANTED } : {}),
+    ...(filters.hideAnonymized ? { anonymizedAt: null } : {}),
     ...(filters.search
       ? {
           // A identidade de cada lead é a da participação (ver identity.ts).
@@ -70,6 +73,13 @@ function buildWhere(
         }
       : {}),
   };
+}
+
+/** Quantas das participações que os filtros apanham ainda têm os dados. */
+export function countLeadsToAnonymize(organizationId: string, range: DateRange, filters: LeadsFilters) {
+  return prisma.participation.count({
+    where: { AND: [buildWhere(organizationId, range, filters), { anonymizedAt: null }] },
+  });
 }
 
 export async function listLeads(organizationId: string, range: DateRange, filters: LeadsFilters) {
@@ -145,6 +155,33 @@ export async function* iterateLeadsForExport(
     if (batch.length < batchSize) return;
     const tail = batch[batch.length - 1]!;
     last = { createdAt: tail.createdAt, id: tail.id };
+  }
+}
+
+/**
+ * Os ids das participações que os filtros apanham e ainda não foram
+ * anonimizadas, por lotes (anonimizar "tudo o que os filtros mostram"). Por
+ * id, de lote em lote: uma participação saltada (a ser gravada agora) não
+ * volta a ser lida no mesmo pedido.
+ */
+export async function* iterateLeadIdsToAnonymize(
+  organizationId: string,
+  range: DateRange,
+  filters: LeadsFilters,
+  batchSize = EXPORT_BATCH_SIZE,
+) {
+  const where: Prisma.ParticipationWhereInput = { AND: [buildWhere(organizationId, range, filters), { anonymizedAt: null }] };
+  let lastId: string | undefined;
+  for (;;) {
+    const batch = await prisma.participation.findMany({
+      where: lastId ? { AND: [where, { id: { gt: lastId } }] } : where,
+      orderBy: { id: "asc" },
+      take: batchSize,
+      select: { id: true },
+    });
+    if (batch.length > 0) yield batch.map((row) => row.id);
+    if (batch.length < batchSize) return;
+    lastId = batch[batch.length - 1]!.id;
   }
 }
 

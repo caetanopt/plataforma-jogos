@@ -18,7 +18,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "privacy:retention": "tsx scripts/run-retention.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1086.0",

@@ -27,6 +27,16 @@ import { CONSENT_LIMITS, fieldTypeHasOptions, LEAD_FIELD_LIMITS } from "@/lib/va
 import { Alert } from "@/components/ui/alert";
 import { isLiveStatus } from "@/features/campaigns/live-status";
 import { hasPrivacyNotice, LIVE_PRIVACY_NOTICE_MISSING_WARNING } from "@/features/publishing/readiness";
+import { can } from "@/server/permissions";
+import { updateCampaignRetentionAction } from "@/features/privacy/actions";
+import { retentionOutlook } from "@/features/privacy/retention-queries";
+import {
+  describeRetention,
+  effectiveRetention,
+  RETENTION_DAY_OPTIONS,
+  RETENTION_WARNING_DAYS,
+} from "@/features/privacy/retention-policy";
+import { utcToZonedDateTimeLocal } from "@/lib/dates/timezone";
 import type { DedupStrategy, LeadFieldType } from "@/generated/prisma/client";
 
 const MOVE_BUTTON_CLASS =
@@ -47,6 +57,7 @@ export default async function LeadFormStepPage({
     where: { id, organizationId: context.organizationId },
     include: {
       theme: { select: { legalLinks: true } },
+      organization: { select: { dataRetentionDays: true } },
       leadForm: {
         include: {
           fields: { orderBy: { order: "asc" } },
@@ -59,6 +70,19 @@ export default async function LeadFormStepPage({
 
   const { leadForm } = campaign;
   const privacyNoticeMissing = isLiveStatus(campaign.status) && !hasPrivacyNotice(campaign);
+
+  const canManagePrivacy = can(context, "privacy:manage");
+  const retention = effectiveRetention({ campaign, organizationDays: campaign.organization.dataRetentionDays });
+  const [retentionSoon, anonymizedCount] = await Promise.all([
+    retentionOutlook(context.organizationId, { campaignId: campaign.id }).then((outlook) => outlook[0] ?? null),
+    prisma.participation.count({ where: { campaignId: campaign.id, anonymizedAt: { not: null } } }),
+  ]);
+  const retentionValue = campaign.dataRetentionUntil
+    ? "until"
+    : campaign.dataRetentionDays
+      ? String(campaign.dataRetentionDays)
+      : "inherit";
+  const organizationDays = campaign.organization.dataRetentionDays;
   // Consentimentos já aceites (não se removem). Só os deste formulário: o
   // `_count` do Prisma agregava a tabela ConsentRecord inteira.
   const consentsInUse = new Set(
@@ -400,6 +424,91 @@ export default async function LeadFormStepPage({
           </div>
         </ActionForm>
       </div>
+
+      <section
+        aria-labelledby="retention-heading"
+        className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+      >
+        <div>
+          <h3 id="retention-heading" className="text-sm font-bold text-caetano-anthracite">
+            Conservação dos dados
+          </h3>
+          <p className="mt-1 text-xs text-caetano-anthracite-80">
+            Ao fim do prazo, os dados pessoais de cada participação (nome, e-mail, telefone, respostas ao
+            formulário, IP) são anonimizados por uma tarefa diária. Ficam o resultado, o prémio e as estatísticas.
+            As participações anonimizadas deixam de contar para os limites de participação.
+          </p>
+        </div>
+
+        {canManagePrivacy ? (
+          <AutoSaveForm action={updateCampaignRetentionAction} className="space-y-3">
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <div>
+              <Label htmlFor="retention">Prazo de conservação</Label>
+              <select
+                id="retention"
+                name="retention"
+                defaultValue={retentionValue}
+                className="h-10 w-full max-w-sm rounded-lg border border-caetano-medium-gray px-3 text-sm"
+              >
+                <option value="inherit">
+                  {organizationDays
+                    ? `O da organização (${organizationDays} dias)`
+                    : "O da organização (sem prazo)"}
+                </option>
+                {RETENTION_DAY_OPTIONS.map((days) => (
+                  <option key={days} value={days}>
+                    {days} dias depois de cada participação
+                  </option>
+                ))}
+                <option value="until">Numa data (todas as participações)</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="retentionUntil">Data de anonimização (só para «Numa data»)</Label>
+              <input
+                id="retentionUntil"
+                name="retentionUntil"
+                type="date"
+                defaultValue={
+                  campaign.dataRetentionUntil
+                    ? utcToZonedDateTimeLocal(campaign.dataRetentionUntil, campaign.timezone).slice(0, 10)
+                    : ""
+                }
+                aria-describedby="retentionUntil-help"
+                className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm aria-invalid:border-danger"
+              />
+              <p id="retentionUntil-help" className="mt-1 text-xs text-caetano-anthracite-80">
+                A partir das 00:00 desse dia ({campaign.timezone}), todas as participações da campanha são
+                anonimizadas, e as que chegarem depois também, um dia depois de criadas.
+              </p>
+            </div>
+          </AutoSaveForm>
+        ) : (
+          <p className="text-sm text-caetano-anthracite">
+            {describeRetention(retention, campaign.timezone)}{" "}
+            <span className="text-xs text-caetano-anthracite-80">Só um administrador pode mudar o prazo.</span>
+          </p>
+        )}
+
+        {retentionSoon && (
+          <Alert variant="warning">
+            {retentionSoon.upcoming === 1
+              ? "1 participação vai ser anonimizada"
+              : `${retentionSoon.upcoming} participações vão ser anonimizadas`}{" "}
+            nos próximos {RETENTION_WARNING_DAYS} dias
+            {retentionSoon.nextAt
+              ? ` (a primeira a ${retentionSoon.nextAt.toLocaleDateString("pt-PT", { timeZone: campaign.timezone })})`
+              : ""}
+            . Exporte antes as leads de que precisar.
+          </Alert>
+        )}
+        {anonymizedCount > 0 && (
+          <p className="text-xs text-caetano-anthracite-80">
+            {anonymizedCount === 1 ? "1 participação já foi anonimizada." : `${anonymizedCount} participações já foram anonimizadas.`}
+          </p>
+        )}
+      </section>
     </div>
   );
 }

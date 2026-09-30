@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { resolveOrgContext } from "@/server/auth/session";
 import { can } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
-import { resolveDateRange } from "@/lib/dates/range";
-import {
-  iterateLeadsForExport,
-  listCampaignConsentDefinitions,
-  parseMarketingConsentFilter,
-} from "@/features/leads/queries";
+import { iterateLeadsForExport, listCampaignConsentDefinitions } from "@/features/leads/queries";
+import { leadsFiltersFromParams } from "@/features/leads/filters";
 import { csvHeader, csvLine, toLeadRow } from "@/features/leads/format";
 
 export async function GET(request: Request) {
@@ -34,15 +30,10 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const params = Object.fromEntries(url.searchParams.entries());
-  const range = resolveDateRange(params);
-
-  const marketingConsent = parseMarketingConsentFilter(params.marketingConsent);
-  const filters = {
-    campaignId: params.campaignId || undefined,
-    search: params.search || undefined,
-    excludeTest: params.excludeTest !== "false",
-    marketingConsent,
-  };
+  // Os mesmos filtros da lista (leadsFiltersFromParams): a exportação
+  // respeita os filtros ativos (§21).
+  const { range, filters } = leadsFiltersFromParams(params);
+  const marketingConsent = filters.marketingConsent;
 
   // Uma campanha: uma coluna por consentimento do formulário, além do resumo.
   const consentColumns = params.campaignId
@@ -72,6 +63,7 @@ export async function GET(request: Request) {
           campaignId: params.campaignId ?? null,
           excludeTest: params.excludeTest,
           marketingConsent: marketingConsent ?? null,
+          hideAnonymized: filters.hideAnonymized ?? false,
           preset: range.preset,
           from: range.from.toISOString(),
           to: range.to.toISOString(),

@@ -345,6 +345,7 @@ export async function resumeParticipationAction(
       resultSummary: true,
       leadFormResponse: true,
       leadFormPosition: true,
+      anonymizedAt: true,
       campaign: {
         select: {
           organizationId: true,
@@ -358,6 +359,8 @@ export async function resumeParticipationAction(
   });
   if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) return GONE;
   if (participation.campaignId !== input.campaignId || participation.status === "BLOCKED") return GONE;
+  // Anonimizada: nem retoma nem mostra o resultado de alguém que já não existe.
+  if (participation.anonymizedAt) return GONE;
 
   // O modo (teste ou real) tem de coincidir com o da página, decidido no
   // servidor como no início.
@@ -456,7 +459,7 @@ export async function submitLeadFormAction(
       },
     },
   });
-  if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) {
+  if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token) || participation.anonymizedAt) {
     return { ok: false, reason: "invalid" };
   }
 
@@ -581,8 +584,9 @@ export async function submitLeadFormAction(
       }
     }
 
+    // Nunca numa participação anonimizada entretanto: os dados voltavam.
     const saved = await tx.participation.updateMany({
-      where: { id: participation.id, leadFormResponse: { equals: Prisma.DbNull } },
+      where: { id: participation.id, leadFormResponse: { equals: Prisma.DbNull }, anonymizedAt: null },
       data: { leadFormResponse: values, ...identity },
     });
     if (saved.count === 0) return { status: "already_saved" as const };

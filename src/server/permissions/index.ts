@@ -13,6 +13,7 @@ export type PermissionAction =
   | "campaign:delete"
   | "leads:view"
   | "leads:export"
+  | "privacy:manage"
   | "stats:view"
   | "audit:view";
 
@@ -30,6 +31,9 @@ const ROLE_ACTIONS: Record<MembershipRole, PermissionAction[]> = {
     "campaign:delete",
     "leads:view",
     "leads:export",
+    // Prazo de conservação e anonimização de leads (§24): apagar dados
+    // pessoais é irreversível, e o prazo decide quanto tempo se guardam.
+    "privacy:manage",
     "stats:view",
     "audit:view",
   ],

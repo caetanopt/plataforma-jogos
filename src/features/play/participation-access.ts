@@ -80,6 +80,7 @@ export async function openGameGate(
       leadFormResponse: true,
       leadFormPosition: true,
       resultSummary: true,
+      anonymizedAt: true,
       campaign: {
         select: {
           type: true,
@@ -93,7 +94,8 @@ export async function openGameGate(
       },
     },
   });
-  if (!participation || !tokenMatches(participation.idempotencyKey, ref.token)) {
+  // Anonimizada (prazo de conservação ou pedido): já não é de ninguém.
+  if (!participation || !tokenMatches(participation.idempotencyKey, ref.token) || participation.anonymizedAt) {
     return { ok: false, reason: "not_found" };
   }
 
