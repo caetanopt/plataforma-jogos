@@ -32,7 +32,7 @@ async function getOwnedLeadForm(organizationId: string, campaignId: string) {
     where: { id: campaignId, organizationId },
     include: {
       leadForm: {
-        include: { fields: { select: { id: true, type: true } }, _count: { select: { consentDefinitions: true } } },
+        include: { fields: { select: { id: true, type: true } }, consentDefinitions: { select: { id: true } } },
       },
     },
   });
@@ -42,7 +42,7 @@ async function getOwnedLeadForm(organizationId: string, campaignId: string) {
 type OwnedLeadForm = NonNullable<Awaited<ReturnType<typeof getOwnedLeadForm>>>;
 
 function ageFormOf(leadForm: OwnedLeadForm["leadForm"]): AgeCheckForm {
-  return { position: leadForm.position, fields: leadForm.fields, consentCount: leadForm._count.consentDefinitions };
+  return { position: leadForm.position, fields: leadForm.fields, consentCount: leadForm.consentDefinitions.length };
 }
 
 /** A edição fecharia a campanha publicada por a idade deixar de se verificar. */
@@ -441,13 +441,17 @@ export async function removeConsentAction(_previous: ActionResult, formData: For
 
     const consent = await prisma.consentDefinition.findFirst({
       where: { id: consentId, leadFormId: owned.leadForm.id },
-      select: { id: true, _count: { select: { consentRecords: true } } },
+      select: { id: true },
     });
     if (!consent) return fail(CONSENT_GONE_MESSAGE);
 
     // O registo de cada consentimento dado aponta para a definição (RESTRICT):
     // é a prova do que o participante aceitou e não pode ficar órfão.
-    if (consent._count.consentRecords > 0) return fail(CONSENT_IN_USE_MESSAGE);
+    const inUse = await prisma.consentRecord.findFirst({
+      where: { consentDefinitionId: consent.id },
+      select: { id: true },
+    });
+    if (inUse) return fail(CONSENT_IN_USE_MESSAGE);
 
     try {
       await prisma.consentDefinition.delete({ where: { id: consent.id } });

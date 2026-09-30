@@ -98,7 +98,7 @@ async function drawInTransaction(participationId: string, now: Date): Promise<Wh
           select: {
             timezone: true,
             leadForm: {
-              select: { position: true, _count: { select: { fields: true, consentDefinitions: true } } },
+              select: { position: true, fields: { select: { id: true } }, consentDefinitions: { select: { id: true } } },
             },
           },
         },
@@ -117,8 +117,8 @@ async function drawInTransaction(participationId: string, now: Date): Promise<Wh
       liveForm
         ? {
             position: liveForm.position,
-            fieldCount: liveForm._count.fields,
-            consentCount: liveForm._count.consentDefinitions,
+            fieldCount: liveForm.fields.length,
+            consentCount: liveForm.consentDefinitions.length,
           }
         : null,
     );

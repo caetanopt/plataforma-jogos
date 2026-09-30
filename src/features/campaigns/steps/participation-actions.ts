@@ -28,7 +28,7 @@ export async function updateParticipationRulesAction(_previous: ActionResult, fo
         participationCustomMax: true,
         minAge: true,
         leadForm: {
-          select: { position: true, fields: { select: { type: true } }, _count: { select: { consentDefinitions: true } } },
+          select: { position: true, fields: { select: { type: true } }, consentDefinitions: { select: { id: true } } },
         },
       },
     });
@@ -65,7 +65,7 @@ export async function updateParticipationRulesAction(_previous: ActionResult, fo
       ? {
           position: campaign.leadForm.position,
           fields: campaign.leadForm.fields,
-          consentCount: campaign.leadForm._count.consentDefinitions,
+          consentCount: campaign.leadForm.consentDefinitions.length,
         }
       : null;
     if (

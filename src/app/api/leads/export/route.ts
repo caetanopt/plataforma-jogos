@@ -4,11 +4,11 @@ import { can } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { resolveDateRange } from "@/lib/dates/range";
 import {
+  iterateLeadsForExport,
   listCampaignConsentDefinitions,
-  listLeadsForExport,
   parseMarketingConsentFilter,
 } from "@/features/leads/queries";
-import { leadsToCsv, toLeadRow } from "@/features/leads/format";
+import { csvHeader, csvLine, toLeadRow } from "@/features/leads/format";
 
 export async function GET(request: Request) {
   // 401/403 em vez do redirect para o login (307) ou do erro 500 de um
@@ -37,12 +37,12 @@ export async function GET(request: Request) {
   const range = resolveDateRange(params);
 
   const marketingConsent = parseMarketingConsentFilter(params.marketingConsent);
-  const participations = await listLeadsForExport(context.organizationId, range, {
+  const filters = {
     campaignId: params.campaignId || undefined,
     search: params.search || undefined,
     excludeTest: params.excludeTest !== "false",
     marketingConsent,
-  });
+  };
 
   // Uma campanha: uma coluna por consentimento do formulário, além do resumo.
   const consentColumns = params.campaignId
@@ -52,40 +52,77 @@ export async function GET(request: Request) {
         version: definition.version,
       }))
     : [];
-  const csv = leadsToCsv(
-    participations.map((participation) => toLeadRow(participation)),
-    consentColumns,
-  );
 
-  await logAudit({
-    organizationId: context.organizationId,
-    userId: context.userId,
-    action: "EXPORT",
-    entityType: "Participation",
-    entityId: params.campaignId || "all",
-    result: "SUCCESS",
-    // Nunca incluir `params.search` — é o mesmo campo de pesquisa por
-    // nome/e-mail/telefone (src/features/leads/queries.ts), por isso pode
-    // conter dados pessoais de um lead. Só se regista se a exportação usou
-    // pesquisa, não o texto pesquisado.
-    metadata: {
-      count: participations.length,
-      hadSearch: Boolean(params.search),
-      filters: {
-        campaignId: params.campaignId ?? null,
-        excludeTest: params.excludeTest,
-        marketingConsent: marketingConsent ?? null,
-        preset: range.preset,
-        from: range.from.toISOString(),
-        to: range.to.toISOString(),
+  const audit = (result: "SUCCESS" | "FAILURE", count: number, extra: Record<string, unknown> = {}) =>
+    logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "EXPORT",
+      entityType: "Participation",
+      entityId: params.campaignId || "all",
+      result,
+      // Nunca incluir `params.search` — é o mesmo campo de pesquisa por
+      // nome/e-mail/telefone (src/features/leads/queries.ts), por isso pode
+      // conter dados pessoais de um lead. Só se regista se a exportação usou
+      // pesquisa, não o texto pesquisado.
+      metadata: {
+        count,
+        hadSearch: Boolean(params.search),
+        filters: {
+          campaignId: params.campaignId ?? null,
+          excludeTest: params.excludeTest,
+          marketingConsent: marketingConsent ?? null,
+          preset: range.preset,
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+        },
+        ...extra,
       },
+    });
+
+  // Em streaming, por lotes (iterateLeadsForExport): antes a exportação
+  // inteira ficava em memória, três vezes. A auditoria regista no fim quantas
+  // linhas saíram, ou que a exportação foi interrompida.
+  const encoder = new TextEncoder();
+  const batches = iterateLeadsForExport(context.organizationId, range, filters);
+  let count = 0;
+  let started = false;
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        if (!started) {
+          started = true;
+          // BOM: sem ele o Excel lê o UTF-8 como Latin-1 e parte os acentos.
+          controller.enqueue(encoder.encode(`\uFEFF${csvHeader(consentColumns)}`));
+          return;
+        }
+        const next = await batches.next();
+        if (next.done) {
+          await audit("SUCCESS", count);
+          controller.close();
+          return;
+        }
+        count += next.value.length;
+        const lines = next.value.map((participation) => `\n${csvLine(toLeadRow(participation), consentColumns)}`);
+        controller.enqueue(encoder.encode(lines.join("")));
+      } catch (error) {
+        const name = error instanceof Error ? error.name : typeof error;
+        console.error(`[leads-export] falha a meio da exportação (${name})`);
+        await audit("FAILURE", count, { reason: "error" }).catch(() => undefined);
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await batches.return(undefined);
+      await audit("FAILURE", count, { reason: "cancelled" }).catch(() => undefined);
     },
   });
 
-  return new NextResponse(csv, {
+  return new Response(stream, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.csv"`,
+      "Cache-Control": "no-store",
     },
   });
 }

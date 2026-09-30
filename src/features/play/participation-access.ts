@@ -86,7 +86,7 @@ export async function openGameGate(
           scheduleStartAt: true,
           scheduleEndAt: true,
           leadForm: {
-            select: { position: true, _count: { select: { fields: true, consentDefinitions: true } } },
+            select: { position: true, fields: { select: { id: true } }, consentDefinitions: { select: { id: true } } },
           },
         },
       },
@@ -109,7 +109,7 @@ export async function openGameGate(
   const position = participationLeadFormPosition(
     participation.leadFormPosition,
     liveForm
-      ? { position: liveForm.position, fieldCount: liveForm._count.fields, consentCount: liveForm._count.consentDefinitions }
+      ? { position: liveForm.position, fieldCount: liveForm.fields.length, consentCount: liveForm.consentDefinitions.length }
       : null,
   );
   const leadSubmitted = participation.leadFormResponse !== null;

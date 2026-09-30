@@ -49,10 +49,11 @@ export default async function SettingsPage({
       include: { user: { select: { name: true, email: true } } },
     }),
     prisma.auditLog.count({ where }),
-    prisma.auditLog.findMany({
+    // GROUP BY na base de dados: o `distinct` do Prisma lia todas as linhas
+    // da auditoria e tirava os repetidos em memória.
+    prisma.auditLog.groupBy({
+      by: ["entityType"],
       where: context.isSuperAdmin ? {} : { organizationId: context.organizationId },
-      distinct: ["entityType"],
-      select: { entityType: true },
       orderBy: { entityType: "asc" },
     }),
   ]);

@@ -29,7 +29,7 @@ export default async function GameConfigStepPage({
   // de publicar (ex.: repor stock) também é um fluxo legítimo.
   const hasRealParticipations =
     LIVE_STATUSES.includes(campaign.status as (typeof LIVE_STATUSES)[number]) &&
-    (await prisma.participation.count({ where: { campaignId: id, isTest: false } })) > 0;
+    (await prisma.participation.findFirst({ where: { campaignId: id, isTest: false }, select: { id: true } })) !== null;
 
   return (
     <div className="space-y-4">

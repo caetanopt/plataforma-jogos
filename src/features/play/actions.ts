@@ -186,6 +186,10 @@ export async function startParticipationAction(
   if (!rateLimit.allowed) return { ok: false, reason: "rate_limited" };
 
   const isTest = input.testRequested && (await canTestCampaign(campaign.organizationId));
+  // O clique em "Jogar" (§31) fica registado aqui, e não numa ação à parte do
+  // browser: as server actions de uma página correm uma de cada vez, e o
+  // início da participação ficava à espera do registo do evento.
+  await recordEvent(campaign.id, "START_CLICKED", isTest, input.sessionId);
 
   // Idade mínima sem data de nascimento no formulário não se verifica: falha
   // fechado (§16) em vez de deixar jogar sem confirmar. A publicação e o
@@ -204,9 +208,11 @@ export async function startParticipationAction(
     return { ok: false, reason: "not_active" };
   }
 
+  // Só o id: o snapshot (JSON da campanha inteira) não é preciso aqui.
   const latestVersion = await prisma.campaignVersion.findFirst({
     where: { campaignId: campaign.id },
     orderBy: { versionNumber: "desc" },
+    select: { id: true },
   });
   if (!latestVersion) return { ok: false, reason: "not_active" };
 

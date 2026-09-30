@@ -64,7 +64,6 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
             orderBy: { createdAt: "asc" },
             include: { award: { select: { status: true, reservationExpiresAt: true } } },
           },
-          _count: { select: { awards: true } },
         },
       },
     },
@@ -90,6 +89,16 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         })
       : [];
   const mediaById = new Map(media.map((m) => [m.id, m]));
+  // Prémios já atribuídos (não se eliminam). Só os desta campanha: o
+  // `_count` do Prisma agregava a tabela PrizeAward inteira.
+  const awardedPrizeIds = new Set(
+    (
+      await prisma.prizeAward.groupBy({
+        by: ["prizeId"],
+        where: { prizeId: { in: campaign.prizes.map((prize) => prize.id) } },
+      })
+    ).map((row) => row.prizeId),
+  );
   // Mesmo instante para todos os códigos da página.
   const now = new Date();
   // Reservas à espera da lead: já saíram na roda, ainda não contam como atribuídas.
@@ -146,7 +155,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     </p>
                   </div>
                   {/* Um prémio já atribuído guarda o registo de quem o ganhou e não pode ser eliminado. */}
-                  {prize._count.awards > 0 ? (
+                  {awardedPrizeIds.has(prize.id) ? (
                     <span className="max-w-40 text-right text-xs text-caetano-anthracite-80">
                       Já atribuído, não pode ser eliminado.
                     </span>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
@@ -13,6 +14,30 @@ const STATE_MESSAGES: Record<string, string> = {
 };
 
 /**
+ * A campanha da página pública, lida uma vez por pedido: os metadados e a
+ * página usam a mesma leitura (antes eram duas, a página mais visitada).
+ */
+const loadPublicCampaign = cache((slug: string) =>
+  prisma.campaign.findUnique({
+    where: { slug },
+    include: {
+      theme: true,
+      organization: { select: { privacyContactEmail: true } },
+      // Um ecrã desligado no editor guarda o conteúdo, mas não se mostra.
+      screens: { where: { enabled: true } },
+      memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } },
+      wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
+      quizConfig: {
+        include: {
+          questions: { include: { answers: { orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
+          resultProfiles: { orderBy: { minPercentage: "asc" } },
+        },
+      },
+    },
+  }),
+);
+
+/**
  * Sem isto, a campanha era partilhada com o título do backoffice
  * ("Plataforma de Jogos | Caetano") em vez do seu próprio nome.
  */
@@ -22,19 +47,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const campaign = await prisma.campaign.findUnique({
-    where: { slug },
-    select: {
-      organizationId: true,
-      publicTitle: true,
-      startTitle: true,
-      startIntroText: true,
-      status: true,
-      scheduleStartAt: true,
-      scheduleEndAt: true,
-      theme: { select: { faviconMediaId: true } },
-    },
-  });
+  const campaign = await loadPublicCampaign(slug);
 
   // Rascunhos, campanhas em validação e arquivadas não existem para o
   // público — os metadados também não os podem revelar.
@@ -71,23 +84,7 @@ export default async function PublicPlayPage({
   const { slug } = await params;
   const search = await searchParams;
 
-  const campaign = await prisma.campaign.findUnique({
-    where: { slug },
-    include: {
-      theme: true,
-      organization: { select: { privacyContactEmail: true } },
-      // Um ecrã desligado no editor guarda o conteúdo, mas não se mostra.
-      screens: { where: { enabled: true } },
-      memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } },
-      wheelConfig: { include: { segments: { orderBy: { order: "asc" } } } },
-      quizConfig: {
-        include: {
-          questions: { include: { answers: { orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
-          resultProfiles: { orderBy: { minPercentage: "asc" } },
-        },
-      },
-    },
-  });
+  const campaign = await loadPublicCampaign(slug);
   if (!campaign) notFound();
 
   const effectiveState = getEffectivePublicState(campaign);

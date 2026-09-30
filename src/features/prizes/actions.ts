@@ -264,7 +264,7 @@ export async function removePrizeAction(_previous: ActionResult, formData: FormD
     // e um id alheio desligava os segmentos de outra organização.
     const prize = await prisma.prize.findFirst({
       where: { id: prizeId, campaignId: campaign.id },
-      select: { id: true, _count: { select: { awards: true } } },
+      select: { id: true },
     });
     if (!prize) notFound();
 
@@ -272,7 +272,8 @@ export async function removePrizeAction(_previous: ActionResult, formData: FormD
     // ganhou o quê, e a base de dados recusa-o (ON DELETE RESTRICT). O editor
     // não mostra o botão nesse caso; isto trava pedidos feitos à mão e a
     // página aberta antes da atribuição.
-    if (prize._count.awards > 0) return fail("Já atribuído, não pode ser eliminado.");
+    const awarded = await prisma.prizeAward.findFirst({ where: { prizeId: prize.id }, select: { id: true } });
+    if (awarded) return fail("Já atribuído, não pode ser eliminado.");
 
     // Os segmentos ligados ficam sem prémio pela própria chave estrangeira
     // (ON DELETE SET NULL), no mesmo comando — não há um passo intermédio que

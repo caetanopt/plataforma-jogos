@@ -80,7 +80,8 @@ export async function listLeads(organizationId: string, range: DateRange, filter
   const [items, total] = await Promise.all([
     prisma.participation.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      // Com o id a desempatar, a mesma participação não aparece em duas páginas.
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: {
@@ -95,17 +96,41 @@ export async function listLeads(organizationId: string, range: DateRange, filter
   return { items, total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
-export async function listLeadsForExport(organizationId: string, range: DateRange, filters: LeadsFilters) {
+/** Participações lidas por lote na exportação. */
+export const EXPORT_BATCH_SIZE = 500;
+
+const exportInclude = {
+  campaign: { select: { internalName: true, type: true } },
+  prizeAward: { include: { prize: true, prizeCode: true } },
+  consentRecords: leadConsentRecords,
+} satisfies Prisma.ParticipationInclude;
+
+/**
+ * As participações da exportação, por lotes, das mais recentes para as mais
+ * antigas. Antes lia-se tudo de uma vez (e o CSV era montado em memória com
+ * mais duas cópias): uma campanha grande esgotava a memória da função. Com
+ * um cursor por (data, id), cada lote continua onde o anterior acabou.
+ */
+export async function* iterateLeadsForExport(
+  organizationId: string,
+  range: DateRange,
+  filters: LeadsFilters,
+  batchSize = EXPORT_BATCH_SIZE,
+) {
   const where = buildWhere(organizationId, range, filters);
-  return prisma.participation.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      campaign: { select: { internalName: true, type: true } },
-      prizeAward: { include: { prize: true, prizeCode: true } },
-      consentRecords: leadConsentRecords,
-    },
-  });
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await prisma.participation.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: batchSize,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      include: exportInclude,
+    });
+    if (batch.length > 0) yield batch;
+    if (batch.length < batchSize) return;
+    cursor = batch[batch.length - 1]!.id;
+  }
 }
 
 /**

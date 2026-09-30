@@ -6,7 +6,7 @@ import { resolveDateRange } from "@/lib/dates/range";
 import { getCampaignStats, type CampaignStatsFilters } from "@/features/analytics/campaign-stats";
 import { getCampaignAlerts } from "@/features/analytics/campaign-alerts";
 import { StatCard } from "@/components/backoffice/stat-card";
-import { ParticipationTimelineChart } from "@/components/charts/participation-timeline-chart";
+import { ParticipationTimelineChart } from "@/components/charts/participation-timeline-chart-lazy";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/labels";

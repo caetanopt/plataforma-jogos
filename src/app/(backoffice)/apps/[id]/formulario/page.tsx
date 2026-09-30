@@ -46,10 +46,7 @@ export default async function LeadFormStepPage({
       leadForm: {
         include: {
           fields: { orderBy: { order: "asc" } },
-          consentDefinitions: {
-            orderBy: { order: "asc" },
-            include: { _count: { select: { consentRecords: true } } },
-          },
+          consentDefinitions: { orderBy: { order: "asc" } },
         },
       },
     },
@@ -57,6 +54,16 @@ export default async function LeadFormStepPage({
   if (!campaign || !campaign.leadForm) notFound();
 
   const { leadForm } = campaign;
+  // Consentimentos já aceites (não se removem). Só os deste formulário: o
+  // `_count` do Prisma agregava a tabela ConsentRecord inteira.
+  const consentsInUse = new Set(
+    (
+      await prisma.consentRecord.groupBy({
+        by: ["consentDefinitionId"],
+        where: { consentDefinitionId: { in: leadForm.consentDefinitions.map((consent) => consent.id) } },
+      })
+    ).map((row) => row.consentDefinitionId),
+  );
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -307,7 +314,7 @@ export default async function LeadFormStepPage({
                   </p>
                 </div>
                 {/* O registo de cada aceitação aponta para esta definição. */}
-                {consent._count.consentRecords > 0 ? (
+                {consentsInUse.has(consent.id) ? (
                   <span className="max-w-40 text-right text-xs text-caetano-anthracite-80">
                     Já aceite por participantes, não pode ser removido.
                   </span>

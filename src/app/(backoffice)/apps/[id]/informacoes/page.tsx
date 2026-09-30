@@ -59,7 +59,7 @@ export default async function ProjectInfoStepPage({
     : [...LOCALES, { value: campaign.locale, label: campaign.locale }];
   const timezones = TIMEZONES.includes(campaign.timezone) ? TIMEZONES : [...TIMEZONES, campaign.timezone];
 
-  const hasParticipations = campaign._count.participations > 0;
+  const hasParticipations = campaign.hasParticipations;
   const slugLocked = Boolean(campaign.publishedAt);
 
   return (

@@ -327,7 +327,6 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     if (starting || resuming) return;
     setStarting(true);
     setStartError(null);
-    void recordAnalyticsEventAction(props.campaignId, "START_CLICKED", props.isTestMode, sessionId);
     // Guardado antes do pedido: se a página recarregar a meio, o próximo
     // "Jogar" repete a mesma chave e não cria uma segunda participação.
     writeStoredParticipation(props.campaignId, props.isTestMode, { token: idempotencyKey, sessionId });

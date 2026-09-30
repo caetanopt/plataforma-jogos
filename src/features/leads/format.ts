@@ -249,20 +249,23 @@ function escapeCsvValue(value: unknown): string {
   return str;
 }
 
-export function leadsToCsv(rows: LeadRow[], consentColumns: readonly ConsentCsvColumn[] = []): string {
-  const header = [
-    ...CSV_COLUMNS.map(([, label]) => label),
-    ...consentColumns.map((column) => consentHeader(column)),
+/** Linha de cabeçalho do CSV (sem a quebra de linha). */
+export function csvHeader(consentColumns: readonly ConsentCsvColumn[] = []): string {
+  return [...CSV_COLUMNS.map(([, label]) => label), ...consentColumns.map((column) => consentHeader(column))]
+    .map(escapeCsvValue)
+    .join(",");
+}
+
+/** Uma linha do CSV (sem a quebra de linha). */
+export function csvLine(row: LeadRow, consentColumns: readonly ConsentCsvColumn[] = []): string {
+  return [
+    ...CSV_COLUMNS.map(([key]) => row[key]),
+    ...consentColumns.map((column) => row.consentStatusByDefinition[column.definitionId] ?? ""),
   ]
     .map(escapeCsvValue)
     .join(",");
-  const lines = rows.map((row) =>
-    [
-      ...CSV_COLUMNS.map(([key]) => row[key]),
-      ...consentColumns.map((column) => row.consentStatusByDefinition[column.definitionId] ?? ""),
-    ]
-      .map(escapeCsvValue)
-      .join(","),
-  );
-  return [header, ...lines].join("\n");
+}
+
+export function leadsToCsv(rows: LeadRow[], consentColumns: readonly ConsentCsvColumn[] = []): string {
+  return [csvHeader(consentColumns), ...rows.map((row) => csvLine(row, consentColumns))].join("\n");
 }

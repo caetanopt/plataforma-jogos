@@ -10,13 +10,43 @@ export interface CampaignStatsFilters {
   type?: CampaignType;
 }
 
-function groupCount<T extends string | null>(items: T[]): Array<{ key: string; count: number }> {
+/**
+ * Estatísticas (§20), agregadas na base de dados.
+ *
+ * Antes carregavam para memória todos os eventos de visualização e todas as
+ * participações do período (com as respostas do formulário, dados pessoais
+ * que nem eram usados), e cada pedido a /analytics crescia com a campanha.
+ * As médias da Memória eram calculadas só sobre as 500 melhores pontuações.
+ * Agora cada número é um COUNT/AVG/GROUP BY: o custo depende dos índices,
+ * não do número de participações.
+ */
+
+const UNKNOWN = "Desconhecido";
+
+/** Junta vazio e null em "Desconhecido" e ordena por contagem. */
+function breakdown(rows: Array<{ key: string | null; count: number }>): Array<{ key: string; count: number }> {
   const map = new Map<string, number>();
-  for (const item of items) {
-    const key = item || "Desconhecido";
-    map.set(key, (map.get(key) ?? 0) + 1);
+  for (const row of rows) {
+    const key = row.key || UNKNOWN;
+    map.set(key, (map.get(key) ?? 0) + row.count);
   }
   return [...map.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
+}
+
+async function groupParticipationsBy(
+  where: Prisma.ParticipationWhereInput,
+  field: "source" | "deviceType" | "browser" | "os",
+): Promise<Array<{ key: string; count: number }>> {
+  const rows = await prisma.participation.groupBy({ by: [field], where, _count: { _all: true } });
+  return breakdown(rows.map((row) => ({ key: row[field], count: row._count._all })));
+}
+
+/** Filtro SQL das participações reais das campanhas no período. */
+function participationSql(campaignIds: string[], range: DateRange, alias = ""): Prisma.Sql {
+  const column = (name: string) => Prisma.raw(alias ? `${alias}."${name}"` : `"${name}"`);
+  return Prisma.sql`${column("campaignId")} IN (${Prisma.join(campaignIds)})
+    AND ${column("isTest")} = false
+    AND ${column("createdAt")} >= ${range.from} AND ${column("createdAt")} <= ${range.to}`;
 }
 
 export async function getCampaignStats(
@@ -34,7 +64,8 @@ export async function getCampaignStats(
   };
 
   const campaigns = await prisma.campaign.findMany({ where: campaignWhere, select: { id: true, type: true } });
-  const campaignIds = campaigns.map((c) => c.id);
+  // Sem campanhas, "IN ()" não é SQL válido: um id que nunca existe.
+  const campaignIds = campaigns.length > 0 ? campaigns.map((c) => c.id) : ["-"];
   const singleType = filters.campaignId
     ? campaigns[0]?.type
     : filters.type ?? (new Set(campaigns.map((c) => c.type)).size === 1 ? campaigns[0]?.type : undefined);
@@ -44,63 +75,63 @@ export async function getCampaignStats(
     isTest: false,
     occurredAt: { gte: range.from, lte: range.to },
   };
-  const participationWhere = {
+  const participationWhere: Prisma.ParticipationWhereInput = {
     campaignId: { in: campaignIds },
     isTest: false,
     createdAt: { gte: range.from, lte: range.to },
   };
 
   const [
-    viewEvents,
+    views,
+    uniqueViewRows,
     startEvents,
     blockedEvents,
-    participations,
+    totalParticipations,
     completedParticipations,
     leadsCount,
+    mobileCount,
+    avgTimeRows,
+    timelineRows,
+    bySource,
+    byDevice,
+    byBrowser,
+    byOs,
   ] = await Promise.all([
-    prisma.analyticsEvent.findMany({ where: { ...eventWhere, type: "CAMPAIGN_VIEWED" }, select: { sessionId: true } }),
+    prisma.analyticsEvent.count({ where: { ...eventWhere, type: "CAMPAIGN_VIEWED" } }),
+    prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(DISTINCT "sessionId")::int AS count
+      FROM "AnalyticsEvent"
+      WHERE "campaignId" IN (${Prisma.join(campaignIds)})
+        AND "isTest" = false
+        AND "type" = 'CAMPAIGN_VIEWED'
+        AND "occurredAt" >= ${range.from} AND "occurredAt" <= ${range.to}`,
     prisma.analyticsEvent.count({ where: { ...eventWhere, type: "START_CLICKED" } }),
     prisma.analyticsEvent.count({ where: { ...eventWhere, type: "PARTICIPATION_BLOCKED" } }),
-    prisma.participation.findMany({
-      where: participationWhere,
-      select: {
-        id: true,
-        status: true,
-        source: true,
-        deviceType: true,
-        browser: true,
-        os: true,
-        startedAt: true,
-        completedAt: true,
-        createdAt: true,
-        leadFormResponse: true,
-      },
-    }),
+    prisma.participation.count({ where: participationWhere }),
     prisma.participation.count({ where: { ...participationWhere, status: "COMPLETED" } }),
     prisma.participation.count({ where: { ...participationWhere, leadFormResponse: { not: Prisma.JsonNull } } }),
+    prisma.participation.count({ where: { ...participationWhere, deviceType: "mobile" } }),
+    prisma.$queryRaw<Array<{ avg: number | null }>>`
+      SELECT AVG(EXTRACT(EPOCH FROM ("completedAt" - "startedAt")))::float8 AS avg
+      FROM "Participation"
+      WHERE ${participationSql(campaignIds, range)} AND "completedAt" IS NOT NULL`,
+    // Dias em UTC, como antes (toISOString).
+    prisma.$queryRaw<Array<{ date: string; count: number }>>`
+      SELECT to_char("createdAt", 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
+      FROM "Participation"
+      WHERE ${participationSql(campaignIds, range)}
+      GROUP BY 1
+      ORDER BY 1`,
+    groupParticipationsBy(participationWhere, "source"),
+    groupParticipationsBy(participationWhere, "deviceType"),
+    groupParticipationsBy(participationWhere, "browser"),
+    groupParticipationsBy(participationWhere, "os"),
   ]);
 
-  const views = viewEvents.length;
-  const uniqueViews = new Set(viewEvents.map((e) => e.sessionId).filter(Boolean)).size;
-  const totalParticipations = participations.length;
-  const completedTimes = participations
-    .filter((p) => p.completedAt)
-    .map((p) => (p.completedAt!.getTime() - p.startedAt.getTime()) / 1000);
-  const avgTimeSeconds = completedTimes.length
-    ? Math.round(completedTimes.reduce((a, b) => a + b, 0) / completedTimes.length)
-    : null;
-  const mobileCount = participations.filter((p) => p.deviceType === "mobile").length;
-
-  const timelineMap = new Map<string, number>();
-  for (const p of participations) {
-    const day = p.createdAt.toISOString().slice(0, 10);
-    timelineMap.set(day, (timelineMap.get(day) ?? 0) + 1);
-  }
-  const timeline = [...timelineMap.entries()].map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
-
+  const avgTime = avgTimeRows[0]?.avg;
   const general = {
     views,
-    uniqueViews,
+    uniqueViews: uniqueViewRows[0]?.count ?? 0,
     starts: startEvents,
     participations: totalParticipations,
     completions: completedParticipations,
@@ -109,13 +140,13 @@ export async function getCampaignStats(
     startRate: views > 0 ? startEvents / views : 0,
     completionRate: totalParticipations > 0 ? completedParticipations / totalParticipations : 0,
     leadConversion: views > 0 ? leadsCount / views : 0,
-    avgTimeSeconds,
+    avgTimeSeconds: avgTime != null ? Math.round(avgTime) : null,
     mobilePercent: totalParticipations > 0 ? mobileCount / totalParticipations : 0,
-    bySource: groupCount(participations.map((p) => p.source)),
-    byDevice: groupCount(participations.map((p) => p.deviceType)),
-    byBrowser: groupCount(participations.map((p) => p.browser)),
-    byOs: groupCount(participations.map((p) => p.os)),
-    timeline,
+    bySource,
+    byDevice,
+    byBrowser,
+    byOs,
+    timeline: timelineRows.map((row) => ({ date: row.date, count: row.count })),
   };
 
   const result: {
@@ -136,101 +167,130 @@ export async function getCampaignStats(
   return result;
 }
 
+const MAX_RANKING_ENTRIES = 10;
+
 async function getMemoryStats(campaignIds: string[], range: DateRange, showParticipantNames: boolean) {
-  const results = await prisma.memoryResult.findMany({
-    where: {
-      participation: {
-        campaignId: { in: campaignIds },
-        isTest: false,
-        createdAt: { gte: range.from, lte: range.to },
-      },
-    },
-    include: {
-      participation: {
-        include: { campaign: { include: { memoryConfig: true } } },
-      },
-    },
-    orderBy: { score: "desc" },
-    take: 500,
+  const where: Prisma.MemoryResultWhereInput = {
+    participation: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } },
+  };
+
+  // O ranking respeita a configuração por campanha (secção 12): só entram
+  // as campanhas com o ranking ligado, com o menor limite de posições entre
+  // elas, e uma com "rankingAnonymize" nunca mostra o nome real.
+  const rankingConfigs = await prisma.memoryGameConfig.findMany({
+    where: { campaignId: { in: campaignIds }, rankingEnabled: true },
+    select: { campaignId: true, rankingMaxEntries: true },
   });
-
-  const avg = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
-
-  // O ranking respeita a configuração por campanha (secção 12): uma
-  // campanha com "rankingEnabled" desligado fica fora do ranking (mas
-  // continua a contar para as métricas agregadas acima), e uma com
-  // "rankingAnonymize" ligado nunca mostra o nome real.
-  const rankable = results.filter((r) => r.participation.campaign.memoryConfig?.rankingEnabled !== false);
   const maxEntries = Math.min(
-    ...rankable.map((r) => r.participation.campaign.memoryConfig?.rankingMaxEntries ?? 10),
-    10,
+    MAX_RANKING_ENTRIES,
+    ...rankingConfigs.map((config) => config.rankingMaxEntries ?? MAX_RANKING_ENTRIES),
   );
 
+  const loadRanking = () =>
+    prisma.memoryResult.findMany({
+      where: {
+        participation: {
+          campaignId: { in: rankingConfigs.map((config) => config.campaignId) },
+          isTest: false,
+          createdAt: { gte: range.from, lte: range.to },
+        },
+      },
+      // Desempate pelo menor tempo (§12), depois pela primeira a chegar.
+      orderBy: [{ score: "desc" }, { timeSeconds: "asc" }, { participation: { createdAt: "asc" } }],
+      take: maxEntries,
+      select: {
+        score: true,
+        timeSeconds: true,
+        participation: {
+          select: {
+            firstName: true,
+            lastName: true,
+            campaign: { select: { memoryConfig: { select: { rankingAnonymize: true } } } },
+          },
+        },
+      },
+    });
+
+  const [aggregate, completed, ranking] = await Promise.all([
+    prisma.memoryResult.aggregate({
+      where,
+      _count: { _all: true },
+      _avg: { score: true, timeSeconds: true, attempts: true },
+    }),
+    prisma.memoryResult.count({ where: { ...where, completed: true } }),
+    rankingConfigs.length > 0 && maxEntries > 0 ? loadRanking() : [],
+  ]);
+
+  const plays = aggregate._count._all;
   return {
-    plays: results.length,
-    avgScore: Math.round(avg(results.map((r) => r.score))),
-    avgTimeSeconds: Math.round(avg(results.map((r) => r.timeSeconds))),
-    avgAttempts: Math.round(avg(results.map((r) => r.attempts))),
-    completionRate: results.length ? results.filter((r) => r.completed).length / results.length : 0,
-    ranking: rankable.slice(0, Number.isFinite(maxEntries) ? maxEntries : 10).map((r) => {
-      const anonymize = r.participation.campaign.memoryConfig?.rankingAnonymize ?? false;
-      const realName = [r.participation.firstName, r.participation.lastName]
-        .filter(Boolean)
-        .join(" ");
+    plays,
+    avgScore: Math.round(aggregate._avg.score ?? 0),
+    avgTimeSeconds: Math.round(aggregate._avg.timeSeconds ?? 0),
+    avgAttempts: Math.round(aggregate._avg.attempts ?? 0),
+    completionRate: plays > 0 ? completed / plays : 0,
+    ranking: ranking.map((row) => {
+      const anonymize = row.participation.campaign.memoryConfig?.rankingAnonymize ?? false;
+      const realName = [row.participation.firstName, row.participation.lastName].filter(Boolean).join(" ");
       return {
         // Nome real só para quem pode ver leads (ver getCampaignStats).
         name: anonymize || !showParticipantNames || !realName ? "Anónimo" : realName,
-        score: r.score,
-        timeSeconds: r.timeSeconds,
+        score: row.score,
+        timeSeconds: row.timeSeconds,
       };
     }),
   };
 }
 
 async function getWheelStats(campaignIds: string[], range: DateRange) {
-  const participations = await prisma.participation.findMany({
-    where: {
-      campaignId: { in: campaignIds },
-      isTest: false,
-      status: "COMPLETED",
-      createdAt: { gte: range.from, lte: range.to },
-    },
-    select: { resultSummary: true },
-  });
-
-  const winners = participations.filter((p) => (p.resultSummary as { outcome?: string } | null)?.outcome === "WIN").length;
-  const spins = participations.length;
+  const spinWhere: Prisma.ParticipationWhereInput = {
+    campaignId: { in: campaignIds },
+    isTest: false,
+    status: "COMPLETED",
+    createdAt: { gte: range.from, lte: range.to },
+  };
+  const awardWhere: Prisma.PrizeAwardWhereInput = {
+    participation: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } },
+  };
+  const now = new Date();
 
   // "Vencedores" é o resultado do sorteio e não muda; "atribuídos" são os
   // prémios que chegaram a alguém (lead aceite). A diferença são reservas em
   // curso ou libertadas: a distribuição por prémio só conta as atribuídas.
-  const awards = await prisma.prizeAward.findMany({
-    where: { participation: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } } },
-    select: { status: true, releaseReason: true, reservationExpiresAt: true, prize: { select: { publicName: true } } },
-  });
-  const now = new Date();
-  const distributionMap = new Map<string, number>();
+  const [spins, winners, awardGroups, expiredReserved, confirmedByPrize, prizes] = await Promise.all([
+    prisma.participation.count({ where: spinWhere }),
+    prisma.participation.count({ where: { ...spinWhere, resultSummary: { path: ["outcome"], equals: "WIN" } } }),
+    prisma.prizeAward.groupBy({ by: ["status", "releaseReason"], where: awardWhere, _count: { _all: true } }),
+    // Expirada mas ainda por libertar (só um sorteio seguinte a liberta, e
+    // numa campanha terminada não há): para as leads já é "fora do prazo".
+    prisma.prizeAward.count({ where: { ...awardWhere, status: "RESERVED", reservationExpiresAt: { lte: now } } }),
+    prisma.prizeAward.groupBy({ by: ["prizeId"], where: { ...awardWhere, status: "CONFIRMED" }, _count: { _all: true } }),
+    prisma.prize.findMany({
+      where: { campaignId: { in: campaignIds } },
+      select: { id: true, publicName: true, totalQuantity: true, awardedQuantity: true },
+    }),
+  ]);
+
+  let totalAwards = 0;
   let confirmed = 0;
-  let unclaimed = 0;
+  let releasedExpired = 0;
   let refused = 0;
-  for (const award of awards) {
-    if (award.status === "CONFIRMED") {
-      confirmed += 1;
-      distributionMap.set(award.prize.publicName, (distributionMap.get(award.prize.publicName) ?? 0) + 1);
-    } else if (award.status === "RELEASED") {
-      if (award.releaseReason === "EXPIRED") unclaimed += 1;
-      else refused += 1;
-    } else if (award.reservationExpiresAt && award.reservationExpiresAt <= now) {
-      // Expirada mas ainda por libertar (só um sorteio seguinte a liberta, e
-      // numa campanha terminada não há): para as leads já é "fora do prazo".
-      unclaimed += 1;
+  for (const group of awardGroups) {
+    const count = group._count._all;
+    totalAwards += count;
+    if (group.status === "CONFIRMED") confirmed += count;
+    else if (group.status === "RELEASED") {
+      if (group.releaseReason === "EXPIRED") releasedExpired += count;
+      else refused += count;
     }
   }
 
-  const prizes = await prisma.prize.findMany({
-    where: { campaignId: { in: campaignIds } },
-    select: { id: true, publicName: true, totalQuantity: true, awardedQuantity: true },
-  });
+  const prizeName = new Map(prizes.map((prize) => [prize.id, prize.publicName]));
+  const distributionMap = new Map<string, number>();
+  for (const group of confirmedByPrize) {
+    const name = prizeName.get(group.prizeId) ?? UNKNOWN;
+    distributionMap.set(name, (distributionMap.get(name) ?? 0) + group._count._all);
+  }
+
   // Retrato do momento, independente do período (como os alertas).
   const reservedByPrize = await activeReservationsByPrize(prizes.map((p) => p.id));
   const reservedNow = [...reservedByPrize.values()].reduce((sum, count) => sum + count, 0);
@@ -244,12 +304,12 @@ async function getWheelStats(campaignIds: string[], range: DateRange) {
     /** Reservas à espera da lead, agora. */
     prizesReserved: reservedNow,
     /** Reservas cujo formulário não chegou a tempo, no período. */
-    prizesUnclaimed: unclaimed,
+    prizesUnclaimed: releasedExpired + expiredReserved,
     /** Leads recusadas (duplicado, bot) que tinham um prémio reservado, no período. */
     prizesRefused: refused,
     /** Prémios atribuídos sobre prémios saídos no período. */
-    claimRate: awards.length > 0 ? confirmed / awards.length : 0,
-    prizeDistribution: [...distributionMap.entries()].map(([prizeName, count]) => ({ prizeName, count })),
+    claimRate: totalAwards > 0 ? confirmed / totalAwards : 0,
+    prizeDistribution: [...distributionMap.entries()].map(([name, count]) => ({ prizeName: name, count })),
     stock: prizes.map((p) => {
       const reserved = reservedByPrize.get(p.id) ?? 0;
       return {
@@ -263,63 +323,78 @@ async function getWheelStats(campaignIds: string[], range: DateRange) {
   };
 }
 
+function sameAnswers(selected: unknown, correct: ReadonlySet<string>): boolean {
+  if (!Array.isArray(selected)) return false;
+  const ids = new Set(selected.filter((id): id is string => typeof id === "string"));
+  return ids.size === correct.size && [...ids].every((id) => correct.has(id));
+}
+
 async function getQuizStats(campaignIds: string[], range: DateRange) {
-  const responses = await prisma.quizResponse.findMany({
-    where: {
-      participation: {
-        campaignId: { in: campaignIds },
-        isTest: false,
-        createdAt: { gte: range.from, lte: range.to },
-      },
-    },
-    include: { participation: true },
-  });
+  const responseWhere: Prisma.QuizResponseWhereInput = {
+    participation: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } },
+  };
 
-  const questions = await prisma.quizQuestion.findMany({
-    where: { quizConfig: { campaignId: { in: campaignIds } } },
-    include: { answers: true },
-    orderBy: { order: "asc" },
-  });
-
-  const profiles = await prisma.quizResultProfile.findMany({
-    where: { quizConfig: { campaignId: { in: campaignIds } } },
-  });
-
-  const started = await prisma.participation.count({
-    where: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } },
-  });
-
-  const avg = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
+  const [aggregate, passed, profileGroups, started, questions, profiles, answerGroups] = await Promise.all([
+    prisma.quizResponse.aggregate({
+      where: responseWhere,
+      _count: { _all: true },
+      _avg: { percentage: true, timeSeconds: true },
+    }),
+    prisma.quizResponse.count({ where: { ...responseWhere, passed: true } }),
+    prisma.quizResponse.groupBy({ by: ["resultProfileId"], where: responseWhere, _count: { _all: true } }),
+    prisma.participation.count({
+      where: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } },
+    }),
+    prisma.quizQuestion.findMany({
+      where: { quizConfig: { campaignId: { in: campaignIds } } },
+      select: { id: true, title: true, answers: { where: { isCorrect: true }, select: { id: true } } },
+      orderBy: { order: "asc" },
+    }),
+    prisma.quizResultProfile.findMany({
+      where: { quizConfig: { campaignId: { in: campaignIds } } },
+      select: { id: true, title: true },
+    }),
+    // Uma linha por (pergunta, combinação de respostas escolhidas): o número
+    // de linhas depende das combinações, não das participações. A primeira
+    // submissão de cada pergunta, como no cálculo da pontuação.
+    prisma.$queryRaw<Array<{ questionId: string | null; selected: unknown; count: number }>>`
+      SELECT first."questionId", first.selected, COUNT(*)::int AS count
+      FROM (
+        SELECT DISTINCT ON (r.id, element->>'questionId')
+          element->>'questionId' AS "questionId",
+          element->'selectedAnswerIds' AS selected
+        FROM "QuizResponse" r
+        JOIN "Participation" p ON p.id = r."participationId"
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(r.answers) = 'array' THEN r.answers ELSE '[]'::jsonb END
+        ) WITH ORDINALITY AS submission(element, position)
+        WHERE ${participationSql(campaignIds, range, "p")}
+        ORDER BY r.id, element->>'questionId', position
+      ) first
+      GROUP BY 1, 2`,
+  ]);
 
   const perQuestion = questions.map((question) => {
-    const correctAnswerIds = new Set(question.answers.filter((a) => a.isCorrect).map((a) => a.id));
-    let correct = 0;
+    const correctIds = new Set(question.answers.map((answer) => answer.id));
     let answered = 0;
-    for (const response of responses) {
-      const answers = response.answers as Array<{ questionId: string; selectedAnswerIds: string[] }>;
-      const submission = answers.find((a) => a.questionId === question.id);
-      if (!submission) continue;
-      answered += 1;
-      const selected = new Set(submission.selectedAnswerIds);
-      const isCorrect =
-        selected.size === correctAnswerIds.size && [...selected].every((id) => correctAnswerIds.has(id));
-      if (isCorrect) correct += 1;
+    let correct = 0;
+    for (const group of answerGroups) {
+      if (group.questionId !== question.id) continue;
+      answered += group.count;
+      if (sameAnswers(group.selected, correctIds)) correct += group.count;
     }
     return { title: question.title, correctRate: answered > 0 ? correct / answered : 0, answered };
   });
 
-  const profileCounts = new Map<string, number>();
-  for (const response of responses) {
-    if (!response.resultProfileId) continue;
-    profileCounts.set(response.resultProfileId, (profileCounts.get(response.resultProfileId) ?? 0) + 1);
-  }
+  const profileCounts = new Map(profileGroups.map((group) => [group.resultProfileId, group._count._all]));
+  const plays = aggregate._count._all;
 
   return {
-    plays: responses.length,
-    avgPercentage: Math.round(avg(responses.map((r) => r.percentage))),
-    passRate: responses.length ? responses.filter((r) => r.passed === true).length / responses.length : 0,
-    avgTimeSeconds: Math.round(avg(responses.map((r) => r.timeSeconds))),
-    abandonment: started > 0 ? (started - responses.length) / started : 0,
+    plays,
+    avgPercentage: Math.round(aggregate._avg.percentage ?? 0),
+    passRate: plays > 0 ? passed / plays : 0,
+    avgTimeSeconds: Math.round(aggregate._avg.timeSeconds ?? 0),
+    abandonment: started > 0 ? (started - plays) / started : 0,
     perQuestion,
     profiles: profiles.map((profile) => ({ title: profile.title, count: profileCounts.get(profile.id) ?? 0 })),
   };

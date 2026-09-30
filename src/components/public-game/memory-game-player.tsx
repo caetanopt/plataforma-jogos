@@ -76,6 +76,22 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
     (config.timeLimitSeconds != null && timeSeconds >= config.timeLimitSeconds) ||
     (config.maxAttempts != null && attempts >= config.maxAttempts);
 
+  // As imagens das cartas só começavam a descarregar quando a carta virava
+  // (e voltava a fechar aos 700 ms): num telemóvel, via-se a carta vazia.
+  // Pré-carregadas ao abrir o tabuleiro, estão prontas quando viram.
+  useEffect(() => {
+    const urls = new Set(pairs.flatMap((pair) => [pair.cardAMediaUrl, pair.cardBMediaUrl]).filter(Boolean));
+    const images = [...urls].map((url) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = url as string;
+      return image;
+    });
+    return () => {
+      for (const image of images) image.src = "";
+    };
+  }, [pairs]);
+
   useEffect(() => {
     if (!previewing) return;
     const timeout = setTimeout(() => setPreviewing(false), (config.previewSeconds ?? 0) * 1000);

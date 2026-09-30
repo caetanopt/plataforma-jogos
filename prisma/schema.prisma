@@ -43,7 +43,6 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
 
-  @@index([email])
 }
 
 model EmailVerificationToken {
@@ -94,8 +93,6 @@ model Organization {
   auditLogs    AuditLog[]
   participants Participant[]
   campaigns    Campaign[]
-
-  @@index([slug])
 }
 
 model Membership {
@@ -565,7 +562,17 @@ model Participation {
   quizResponse    QuizResponse?
 
   @@index([campaignId, status, createdAt])
+  // Lista e exportação de leads, estatísticas por período (passo 7).
+  @@index([campaignId, createdAt])
   @@index([campaignId, participantId])
+  // Chaves estrangeiras: sem índice, apagar um participante ou uma versão
+  // percorria a tabela inteira (o SET NULL/RESTRICT corre por linha).
+  @@index([participantId])
+  @@index([campaignVersionId])
+  // Controlo de duplicados por IP e por sessão, dentro da transação
+  // serializável (secção 11): sem índice, lia todas as participações.
+  @@index([campaignId, ipAddress])
+  @@index([campaignId, sessionId])
   // Controlo de duplicados por e-mail/telefone dentro da campanha (secção 11).
   @@index([campaignId, email])
   @@index([campaignId, phone])
@@ -591,6 +598,8 @@ model ConsentRecord {
   consentDefinition ConsentDefinition @relation(fields: [consentDefinitionId], references: [id])
 
   @@index([participationId])
+  // Filtro por consentimento de marketing e "já aceite" no editor.
+  @@index([consentDefinitionId])
 }
 
 model GameSession {
@@ -755,6 +764,8 @@ model PrizeCode {
   award PrizeAward?
 
   @@unique([prizeId, code])
+  // O código seguinte a atribuir (takeCode): o disponível mais antigo.
+  @@index([prizeId, status, createdAt])
 }
 
 // Estado do prémio saído na roda. Com o formulário depois do jogo, o prémio
@@ -802,6 +813,7 @@ model PrizeAward {
   // Reservas por expirar e limite diário (atribuídos e reservados de hoje).
   @@index([prizeId, status, reservationExpiresAt])
   @@index([prizeId, status, awardedAt])
+  @@index([wheelSegmentId])
 }
 
 // ============================================================================
@@ -967,5 +979,8 @@ model AuditLog {
   user         User?         @relation(fields: [userId], references: [id])
 
   @@index([organizationId, createdAt])
+  @@index([organizationId, action, createdAt])
+  // A vista global do superadministrador ordena por data sem organização.
+  @@index([createdAt])
   @@index([userId, createdAt])
 }

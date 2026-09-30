@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/server/db/client";
 import { Prisma, type CampaignStatus, type CampaignType } from "@/generated/prisma/client";
 
@@ -53,17 +54,36 @@ export async function listCampaigns(organizationId: string, filters: ListCampaig
         folder: { select: { id: true, name: true } },
         workspace: { select: { id: true, name: true } },
         owner: { select: { id: true, name: true } },
-        _count: { select: { participations: true } },
       },
     }),
     prisma.campaign.count({ where }),
   ]);
 
-  return { items, total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+  // Contagem só das campanhas desta página. O `_count` do Prisma fazia um
+  // GROUP BY sobre a tabela Participation inteira (todas as organizações) a
+  // cada listagem.
+  const counts = await countParticipationsByCampaign(items.map((item) => item.id));
+  const withCounts = items.map((item) => ({ ...item, _count: { participations: counts.get(item.id) ?? 0 } }));
+
+  return { items: withCounts, total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
-export function getCampaignForEditor(organizationId: string, campaignId: string) {
-  return prisma.campaign.findFirst({
+export async function countParticipationsByCampaign(campaignIds: string[]): Promise<Map<string, number>> {
+  if (campaignIds.length === 0) return new Map();
+  const rows = await prisma.participation.groupBy({
+    by: ["campaignId"],
+    where: { campaignId: { in: campaignIds } },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.campaignId, row._count._all]));
+}
+
+/**
+ * A campanha com tudo o que o editor mostra. Com `cache`, o layout e a
+ * página da mesma navegação partilham a leitura (eram ~17 queries cada).
+ */
+export const getCampaignForEditor = cache(async (organizationId: string, campaignId: string) => {
+  const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId },
     include: {
       workspace: true,
@@ -80,9 +100,15 @@ export function getCampaignForEditor(organizationId: string, campaignId: string)
         },
       },
       prizes: true,
-      _count: { select: { participations: true } },
     },
   });
-}
+  if (!campaign) return null;
+  // Só se há alguma, sem contar todas (antes: GROUP BY na tabela inteira).
+  const anyParticipation = await prisma.participation.findFirst({
+    where: { campaignId: campaign.id },
+    select: { id: true },
+  });
+  return { ...campaign, hasParticipations: anyParticipation !== null };
+});
 
 export type CampaignForEditor = NonNullable<Awaited<ReturnType<typeof getCampaignForEditor>>>;
