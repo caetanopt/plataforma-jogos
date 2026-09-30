@@ -136,6 +136,28 @@ para "desmarcada" se distinguir de "ausente".
   para funcionar dentro de um iframe noutro domínio; em HTTP numa rede local (por exemplo, a
   testar num telemóvel) fica `Lax`.
 
+### Marca, textos legais e consentimentos
+
+- O jogo público e a pré-visualização aplicam o tema da campanha (Marca e design): cores,
+  tipografia, border radius, sombras, imagem de fundo, logótipo e favicon. Sem tema, fica o
+  aspeto Caetano de sempre.
+- O texto tem de se ler (WCAG 2.2 AA, 4,5:1). Quando uma combinação da marca não chega lá, a
+  página usa outra cor de texto e o editor avisa. O tema por omissão tem botões azul cyan com
+  texto branco (2,4:1): na página pública o texto desses botões sai em antracite.
+- O texto legal do ecrã inicial aparece no ecrã inicial e junto ao formulário de leads. Os links
+  legais (política de privacidade, termos, cookies) configuram-se no tema, e o contacto de
+  privacidade em Configurações > Privacidade (só administradores). Todos aparecem também no
+  rodapé do jogo, com o regulamento.
+- Uma campanha cujo formulário pede dados pessoais só se publica (ou republica) com texto legal
+  ou com o link da política de privacidade.
+- A lista de leads mostra o consentimento de marketing e filtra por ele; a exportação respeita
+  o filtro. O CSV tem duas colunas novas no fim ("Consentimento de marketing" e
+  "Consentimentos"). Ao exportar uma só campanha, vem também uma coluna por consentimento do
+  formulário.
+- Eliminar uma campanha apaga também os participantes que só jogaram nessa campanha, com os
+  dados pessoais antigos que tivessem. A operação fica na auditoria como operação de
+  privacidade.
+
 ### Antes de fazer deploy destas alterações
 
 Uma campanha publicada com idade mínima passa a recusar todas as participações quando a idade não
@@ -162,6 +184,22 @@ WHERE c."minAge" IS NOT NULL
 
 (Um formulário sem campos nem consentimentos também conta como "Sem formulário"; não tem data de
 nascimento, por isso a última condição já o apanha.)
+
+As campanhas no ar continuam a funcionar sem texto legal, mas deixam de se poder republicar até
+o terem. Para as encontrar (formulário com campos visíveis, sem texto legal nem política de
+privacidade no tema):
+
+```sql
+SELECT c.id, c."internalName", c.status
+FROM "Campaign" c
+JOIN "LeadForm" lf ON lf."campaignId" = c.id
+LEFT JOIN "CampaignTheme" t ON t.id = c."themeId"
+WHERE c.status IN ('PUBLISHED', 'SCHEDULED', 'PAUSED')
+  AND lf.position <> 'NONE'
+  AND EXISTS (SELECT 1 FROM "LeadFormField" f WHERE f."leadFormId" = lf.id AND f.type <> 'HIDDEN')
+  AND COALESCE(btrim(c."legalText"), '') = ''
+  AND COALESCE(t."legalLinks"->>'privacyPolicyUrl', '') !~ '^https?://';
+```
 
 ### Depois do deploy
 
