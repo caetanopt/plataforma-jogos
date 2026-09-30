@@ -35,6 +35,19 @@ const SUMMARY_CLASS =
 const MOVE_BUTTON_CLASS =
   "flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30";
 
+/**
+ * Código de uma reserva que passou o prazo mas ainda não foi libertada (só um
+ * sorteio seguinte a liberta; numa campanha terminada não há): está livre, e
+ * remover liberta a reserva primeiro.
+ */
+function isStuckReservation(
+  code: { status: string; award: { status: string; reservationExpiresAt: Date | null } | null },
+  now: Date,
+): boolean {
+  const expiresAt = code.award?.reservationExpiresAt;
+  return code.status === "RESERVED" && code.award?.status === "RESERVED" && expiresAt != null && expiresAt <= now;
+}
+
 export async function WheelGameStep({ campaignId }: { campaignId: string }) {
   // Mostra códigos de vouchers, pesos e respostas certas: a permissão é
   // verificada aqui também, e não só na página que o inclui.
@@ -46,7 +59,13 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
       // Ordem estável: sem ela, um prémio editado podia mudar de lugar.
       prizes: {
         orderBy: { id: "asc" },
-        include: { codes: { orderBy: { createdAt: "asc" } }, _count: { select: { awards: true } } },
+        include: {
+          codes: {
+            orderBy: { createdAt: "asc" },
+            include: { award: { select: { status: true, reservationExpiresAt: true } } },
+          },
+          _count: { select: { awards: true } },
+        },
       },
     },
   });
@@ -71,6 +90,8 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
         })
       : [];
   const mediaById = new Map(media.map((m) => [m.id, m]));
+  // Mesmo instante para todos os códigos da página.
+  const now = new Date();
   // Reservas à espera da lead: já saíram na roda, ainda não contam como atribuídas.
   const reservedByPrize = await activeReservationsByPrize(campaign.prizes.map((p) => p.id));
 
@@ -181,11 +202,12 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                       {prize.codes.map((code) => (
                         <li key={code.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="min-w-0 break-all">
-                            <span className="font-mono">{code.code}</span> · {PRIZE_CODE_STATUS_LABELS[code.status]}
+                            <span className="font-mono">{code.code}</span> ·{" "}
+                            {isStuckReservation(code, now) ? "Reserva expirada" : PRIZE_CODE_STATUS_LABELS[code.status]}
                             {code.expiresAt && ` · válido até ${formatDateTime.format(code.expiresAt)}`}
                           </span>
-                          {/* Só um código disponível se remove: reservado ou atribuído já tem dono. */}
-                          {code.status === "AVAILABLE" && (
+                          {/* Só um código livre se remove: reservado ou atribuído já tem dono. */}
+                          {(code.status === "AVAILABLE" || isStuckReservation(code, now)) && (
                             <ActionForm action={removePrizeCodeAction} messageClassName="mt-1 max-w-56">
                               <input type="hidden" name="campaignId" value={campaignId} />
                               <input type="hidden" name="codeId" value={code.id} />
@@ -288,7 +310,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                     )}
                   </div>
                   <div className="flex items-start gap-1">
-                    <ActionForm action={moveWheelSegmentAction} messageClassName="mt-1 max-w-48">
+                    <ActionForm action={moveWheelSegmentAction} resetOnSuccess={false} messageClassName="mt-1 max-w-48">
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="segmentId" value={segment.id} />
                       <input type="hidden" name="direction" value="up" />
@@ -301,7 +323,7 @@ export async function WheelGameStep({ campaignId }: { campaignId: string }) {
                         ↑
                       </button>
                     </ActionForm>
-                    <ActionForm action={moveWheelSegmentAction} messageClassName="mt-1 max-w-48">
+                    <ActionForm action={moveWheelSegmentAction} resetOnSuccess={false} messageClassName="mt-1 max-w-48">
                       <input type="hidden" name="campaignId" value={campaignId} />
                       <input type="hidden" name="segmentId" value={segment.id} />
                       <input type="hidden" name="direction" value="down" />

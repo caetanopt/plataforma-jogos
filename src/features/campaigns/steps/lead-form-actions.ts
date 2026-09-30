@@ -17,16 +17,42 @@ import {
   normalizeNewlines,
 } from "@/lib/validation/lead-form";
 import { emptyToNull, getField, readCheckbox, readMultiple, readOptional } from "@/lib/forms/form-data";
-import { parsePartial } from "@/lib/forms/parse-partial";
+import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
+import {
+  editBreaksLiveAgeCheck,
+  LIVE_BIRTH_DATE_REQUIRED_MESSAGE,
+  LIVE_POSITION_NEEDS_FORM_MESSAGE,
+  type AgeCheckForm,
+} from "@/features/publishing/age-check";
 import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
 import { slugify } from "@/lib/random/slug";
 
 async function getOwnedLeadForm(organizationId: string, campaignId: string) {
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId },
-    include: { leadForm: true },
+    include: {
+      leadForm: {
+        include: { fields: { select: { id: true, type: true } }, _count: { select: { consentDefinitions: true } } },
+      },
+    },
   });
   return campaign?.leadForm ? { campaign, leadForm: campaign.leadForm } : null;
+}
+
+type OwnedLeadForm = NonNullable<Awaited<ReturnType<typeof getOwnedLeadForm>>>;
+
+function ageFormOf(leadForm: OwnedLeadForm["leadForm"]): AgeCheckForm {
+  return { position: leadForm.position, fields: leadForm.fields, consentCount: leadForm._count.consentDefinitions };
+}
+
+/** A edição fecharia a campanha publicada por a idade deixar de se verificar. */
+function breaksLiveAgeCheck(owned: OwnedLeadForm, after: AgeCheckForm): boolean {
+  const { campaign } = owned;
+  return editBreaksLiveAgeCheck(
+    campaign.status,
+    { minAge: campaign.minAge, form: ageFormOf(owned.leadForm) },
+    { minAge: campaign.minAge, form: after },
+  );
 }
 
 function formPath(campaignId: string): string {
@@ -47,11 +73,16 @@ export async function updateLeadFormSettingsAction(_previous: ActionResult, form
 
     // O grupo de duplicados leva uma sentinela vazia: sem nenhuma marcada
     // chega [] (desligar tudo), e não "campo ausente".
-    const { data, fieldErrors } = parsePartial(leadFormSettingsShape, {
+    const parse = parsePartial(leadFormSettingsShape, {
       position: readOptional(formData, "position"),
       honeypotEnabled: readCheckbox(formData, "honeypotEnabled"),
       dedupStrategies: readMultiple(formData, "dedupStrategies"),
     });
+    const { data, fieldErrors } = parse;
+
+    if (data.position !== undefined && breaksLiveAgeCheck(owned, { ...ageFormOf(owned.leadForm), position: data.position })) {
+      rejectField(parse, "position", LIVE_POSITION_NEEDS_FORM_MESSAGE);
+    }
 
     const leadFormUpdate = { position: data.position, honeypotEnabled: data.honeypotEnabled };
     const changedLeadForm = Object.values(leadFormUpdate).some((value) => value !== undefined);
@@ -213,6 +244,12 @@ export async function removeLeadFieldAction(_previous: ActionResult, formData: F
     const fieldId = readOptional(formData, "fieldId") ?? "";
     const owned = await getOwnedLeadForm(context.organizationId, campaignId);
     if (!owned) notFound();
+
+    if (!owned.leadForm.fields.some((field) => field.id === fieldId)) return fail(FIELD_GONE_MESSAGE);
+    const remaining = owned.leadForm.fields.filter((field) => field.id !== fieldId);
+    if (breaksLiveAgeCheck(owned, { ...ageFormOf(owned.leadForm), fields: remaining })) {
+      return fail(LIVE_BIRTH_DATE_REQUIRED_MESSAGE);
+    }
 
     const deleted = await prisma.leadFormField.deleteMany({ where: { id: fieldId, leadFormId: owned.leadForm.id } });
     if (deleted.count === 0) return fail(FIELD_GONE_MESSAGE);

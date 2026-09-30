@@ -41,6 +41,10 @@ const {
   updateLeadFormSettingsAction,
 } = await import("@/features/campaigns/steps/lead-form-actions");
 
+const { LIVE_BIRTH_DATE_REQUIRED_MESSAGE, LIVE_POSITION_NEEDS_FORM_MESSAGE } = await import(
+  "@/features/publishing/age-check"
+);
+
 const NOT_FOUND = { digest: expect.stringContaining("404") };
 
 interface Org {
@@ -478,6 +482,59 @@ describe("adicionar, remover e reordenar campos", () => {
       status: "error",
       message: "O campo já não existe. Recarregue a página.",
     });
+  });
+});
+
+describe("campanha publicada com idade mínima", () => {
+  async function withBirthDate(status: "PUBLISHED" | "DRAFT", minAge: number | null) {
+    await prisma.campaign.update({ where: { id: fixture.campaignId }, data: { status, minAge } });
+    return prisma.leadFormField.create({
+      data: { leadFormId: fixture.leadFormId, type: "BIRTH_DATE", internalKey: "nascimento", label: "Nascimento", order: 2 },
+    });
+  }
+
+  function removeForm(fieldId: string): FormData {
+    return toForm([
+      ["campaignId", fixture.campaignId],
+      ["fieldId", fieldId],
+    ]);
+  }
+
+  it("não remove a data de nascimento: a campanha deixava de aceitar participações", async () => {
+    const birthDate = await withBirthDate("PUBLISHED", 18);
+
+    expect(await removeLeadFieldAction(IDLE, removeForm(birthDate.id))).toMatchObject({
+      status: "error",
+      message: LIVE_BIRTH_DATE_REQUIRED_MESSAGE,
+    });
+    expect(await prisma.leadFormField.findUnique({ where: { id: birthDate.id } })).not.toBeNull();
+    // Os outros campos removem-se normalmente.
+    expect((await removeLeadFieldAction(IDLE, removeForm(fixture.dropdown.id))).status).toBe("success");
+  });
+
+  it("não passa a «Sem formulário», e o resto das definições grava", async () => {
+    await withBirthDate("PUBLISHED", 18);
+
+    const result = await updateLeadFormSettingsAction(IDLE, settingsForm(fixture.campaignId, "NONE", false, ["EMAIL"]));
+
+    expect(result).toMatchObject({
+      status: "error",
+      message: PARTIAL_SAVE_MESSAGE,
+      fieldErrors: { position: LIVE_POSITION_NEEDS_FORM_MESSAGE },
+    });
+    const leadForm = await prisma.leadForm.findUniqueOrThrow({ where: { id: fixture.leadFormId } });
+    expect(leadForm).toMatchObject({ position: "BEFORE_GAME", honeypotEnabled: false });
+    // Outra posição com formulário continua a poder mudar.
+    const moved = await updateLeadFormSettingsAction(IDLE, settingsForm(fixture.campaignId, "AFTER_GAME", false, ["EMAIL"]));
+    expect(moved.status).toBe("success");
+  });
+
+  it("num rascunho, ou sem idade mínima, a data de nascimento remove-se", async () => {
+    const draftField = await withBirthDate("DRAFT", 18);
+    expect((await removeLeadFieldAction(IDLE, removeForm(draftField.id))).status).toBe("success");
+
+    const liveField = await withBirthDate("PUBLISHED", null);
+    expect((await removeLeadFieldAction(IDLE, removeForm(liveField.id))).status).toBe("success");
   });
 });
 

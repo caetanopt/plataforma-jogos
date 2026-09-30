@@ -82,6 +82,10 @@ export const WHEEL_EDITOR_MESSAGES = {
   codeExpired: "Validade: tem de ser uma data futura.",
 } as const;
 
+export function segmentTotalBelowUsedMessage(used: number): string {
+  return `Stock: não pode ser inferior às ${used} unidades que já saíram (atribuídas ou reservadas).`;
+}
+
 export function prizeTotalBelowAwardedMessage(awarded: number, reserved = 0): string {
   if (reserved > 0) {
     return `Quantidade total: não pode ser inferior aos ${awarded + reserved} já atribuídos ou reservados (${reserved} à espera da lead).`;

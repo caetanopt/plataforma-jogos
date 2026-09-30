@@ -21,6 +21,9 @@ function databaseErrorKind(error: unknown): "unique" | "foreign_key" | "not_foun
   return null;
 }
 
+export const UNEXPECTED_ERROR_MESSAGE =
+  "Ocorreu um erro inesperado. Recarregue a página para confirmar o que ficou gravado.";
+
 /**
  * Corre o corpo de uma server action e transforma as falhas numa resposta
  * que o formulário mostra, em vez do ecrã de erro genérico.
@@ -49,7 +52,10 @@ export async function runAction(label: string, body: () => Promise<ActionResult>
     }
     const name = error instanceof Error ? error.name : typeof error;
     console.error(`[action:${label}] erro inesperado (${name})`);
-    return fail("Ocorreu um erro inesperado. As alterações não foram guardadas.");
+    // Não se sabe se a gravação chegou a acontecer: a maioria das ações grava
+    // primeiro e só depois audita, e uma falha na auditoria chegava aqui a
+    // dizer "não foram guardadas" com a alteração já em vigor.
+    return fail(UNEXPECTED_ERROR_MESSAGE);
   }
 }
 

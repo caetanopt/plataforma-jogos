@@ -12,8 +12,9 @@ import type { CampaignType, LeadFieldType, LeadFormPosition } from "@/generated/
  */
 
 vi.mock("@/server/auth", () => ({ auth: async () => null }));
+const rateLimit = vi.hoisted(() => ({ allowed: true }));
 vi.mock("@/lib/security/rate-limit", () => ({
-  checkRateLimit: async () => ({ allowed: true, remaining: 10 }),
+  checkRateLimit: async () => ({ allowed: rateLimit.allowed, remaining: rateLimit.allowed ? 10 : 0 }),
 }));
 vi.mock("@/lib/security/request-ip", () => ({ getRequestIp: async () => null }));
 const visitor = vi.hoisted(() => ({ cookieId: "" }));
@@ -22,6 +23,7 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers({ "user-agent"
 
 const {
   beginGameAction,
+  getStoredResultAction,
   resumeParticipationAction,
   startParticipationAction,
   submitLeadFormAction,
@@ -122,6 +124,7 @@ async function createFixture(options: Options = {}) {
 }
 
 afterEach(async () => {
+  rateLimit.allowed = true;
   while (cleanups.length) await cleanups.pop()!();
 });
 
@@ -161,12 +164,12 @@ describe("retoma depois de recarregar a página", () => {
     if (!started.ok) throw new Error("start");
 
     const ref = { participationId: started.participationId, token };
-    expect(await resumeParticipationAction({ campaignId: fixture.campaignId, ref: { ...ref, token: randomUUID() }, testRequested: false })).toEqual({ ok: false });
-    expect(await resumeParticipationAction({ campaignId: other.campaignId, ref, testRequested: false })).toEqual({ ok: false });
+    expect(await resumeParticipationAction({ campaignId: fixture.campaignId, ref: { ...ref, token: randomUUID() }, testRequested: false })).toEqual({ ok: false, reason: "gone" });
+    expect(await resumeParticipationAction({ campaignId: other.campaignId, ref, testRequested: false })).toEqual({ ok: false, reason: "gone" });
     // Uma participação de teste não é retomada numa página em modo real (o
     // modo é decidido no servidor; aqui não há sessão do backoffice).
     await prisma.participation.update({ where: { id: ref.participationId }, data: { isTest: true } });
-    expect(await resumeParticipationAction({ campaignId: fixture.campaignId, ref, testRequested: true })).toEqual({ ok: false });
+    expect(await resumeParticipationAction({ campaignId: fixture.campaignId, ref, testRequested: true })).toEqual({ ok: false, reason: "gone" });
     await prisma.participation.update({ where: { id: ref.participationId }, data: { isTest: false } });
     // A mesma chave noutra campanha não abre a participação de cá.
     const conflict = await other.start(token);
@@ -189,11 +192,84 @@ describe("retoma depois de recarregar a página", () => {
         ref: { participationId: started.participationId, token },
         testRequested: false,
       }),
-    ).toEqual({ ok: false });
+    ).toEqual({ ok: false, reason: "gone" });
+  });
+});
+
+describe("retoma: falha temporária ou definitiva", () => {
+  it("com o rate limit, a retoma diz para tentar de novo em vez de dar a participação por perdida", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: null });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    const input = { campaignId: fixture.campaignId, ref: { participationId: started.participationId, token }, testRequested: false };
+
+    rateLimit.allowed = false;
+    expect(await resumeParticipationAction(input)).toEqual({ ok: false, reason: "retry" });
+    rateLimit.allowed = true;
+    expect(await resumeParticipationAction(input)).toMatchObject({ ok: true, participationId: started.participationId });
+  });
+});
+
+describe("resultado guardado (retoma da memória e do quiz)", () => {
+  it("«Antes de revelar o resultado»: retido até à lead, depois devolvido sem jogar de novo", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: "BEFORE_RESULT" });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    const ref = { participationId: started.participationId, token };
+
+    // Ainda sem resultado: nada para mostrar.
+    expect(await getStoredResultAction(ref)).toEqual({ status: "blocked", reason: "not_found" });
+
+    expect(await beginGameAction(ref)).toEqual({ ok: true });
+    expect(await submitMemoryResultAction({ ref, attempts: 2, pairsFound: 2, timeSeconds: 5 })).toEqual({
+      status: "lead_required",
+    });
+    expect(await getStoredResultAction(ref)).toEqual({ status: "lead_required" });
+
+    expect(await submitLeadFormAction({ ref, values: { email: "ana@example.pt" }, consents: {} })).toEqual({ ok: true });
+    const stored = await getStoredResultAction(ref);
+    expect(stored).toEqual({ status: "revealed", result: { kind: "MEMORY", result: { score: expect.any(Number), completed: true } } });
+    expect(await prisma.memoryResult.count({ where: { participationId: ref.participationId } })).toBe(1);
+  });
+
+  it("exige o token da participação", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: null });
+    const started = await fixture.start();
+    if (!started.ok) throw new Error("start");
+
+    expect(await getStoredResultAction({ participationId: started.participationId, token: randomUUID() })).toEqual({
+      status: "blocked",
+      reason: "not_found",
+    });
   });
 });
 
 describe("relógio do servidor na memória", () => {
+  it("sem início registado no servidor, vale o tempo do browser (o formulário antes do jogo não conta)", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: null });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    const ref = { participationId: started.participationId, token };
+    // Participação iniciada há 5 minutos; o pedido de início do jogo perdeu-se.
+    await prisma.participation.update({
+      where: { id: ref.participationId },
+      data: { startedAt: new Date(Date.now() - 5 * 60_000) },
+    });
+
+    const response = await submitMemoryResultAction({ ref, attempts: 2, pairsFound: 2, timeSeconds: 20 });
+
+    expect(response).toMatchObject({ status: "revealed", result: { completed: true } });
+    const result = await prisma.memoryResult.findUniqueOrThrow({ where: { participationId: ref.participationId } });
+    expect(result.timeSeconds).toBe(20);
+  });
+
   it("recarregar não repõe o tempo: o limite de tempo conta desde que o jogo abriu", async () => {
     visitor.cookieId = randomUUID();
     const fixture = await createFixture({ position: null });
@@ -241,7 +317,17 @@ describe("formulário vazio, idade mínima e posição fixada", () => {
   it("com idade mínima e sem data de nascimento no formulário, não se joga (falha fechado)", async () => {
     visitor.cookieId = randomUUID();
     const fixture = await createFixture({ position: "BEFORE_GAME", minAge: 18 });
+    // O rate limit vem antes: um pedido limitado não grava um bloqueio.
+    rateLimit.allowed = false;
+    expect(await fixture.start()).toEqual({ ok: false, reason: "rate_limited" });
+    rateLimit.allowed = true;
+    expect(await prisma.analyticsEvent.count({ where: { campaignId: fixture.campaignId, type: "PARTICIPATION_BLOCKED" } })).toBe(0);
+
     expect(await fixture.start()).toEqual({ ok: false, reason: "not_active" });
+    const blocked = await prisma.analyticsEvent.findFirstOrThrow({
+      where: { campaignId: fixture.campaignId, type: "PARTICIPATION_BLOCKED" },
+    });
+    expect(blocked).toMatchObject({ isTest: false, metadata: { reason: "age_unverifiable" } });
 
     const withBirthDate = await createFixture({
       position: "BEFORE_GAME",

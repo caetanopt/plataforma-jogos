@@ -138,17 +138,39 @@ para "desmarcada" se distinguir de "ausente".
 
 ### Antes de fazer deploy destas alterações
 
-Uma campanha publicada com idade mínima e sem campo de data de nascimento no formulário passa a
-recusar participações (antes ignorava a idade). Para as encontrar:
+Uma campanha publicada com idade mínima passa a recusar todas as participações quando a idade não
+se pode verificar: o formulário não tem campo de data de nascimento ou está em "Sem formulário".
+Antes, com o formulário em "Sem formulário", a idade nunca era pedida e a campanha deixava jogar
+qualquer pessoa. Nas outras posições sem data de nascimento, a lead já era recusada. Depois do
+deploy, o editor não deixa criar este estado numa campanha publicada, e a etapa Regras avisa as
+que já estão assim. Para as encontrar antes:
 
 ```sql
 SELECT c.id, c."internalName", c.status
 FROM "Campaign" c
 LEFT JOIN "LeadForm" lf ON lf."campaignId" = c.id
 WHERE c."minAge" IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM "LeadFormField" f WHERE f."leadFormId" = lf.id AND f.type = 'BIRTH_DATE'
+  AND c.status IN ('PUBLISHED', 'SCHEDULED', 'PAUSED')
+  AND (
+    lf.id IS NULL
+    OR lf.position = 'NONE'
+    OR NOT EXISTS (
+      SELECT 1 FROM "LeadFormField" f WHERE f."leadFormId" = lf.id AND f.type = 'BIRTH_DATE'
+    )
   );
+```
+
+(Um formulário sem campos nem consentimentos também conta como "Sem formulário"; não tem data de
+nascimento, por isso a última condição já o apanha.)
+
+### Depois do deploy
+
+A migração `20260929230000_normalize_participation_phone` normaliza os telefones já gravados. As
+participações criadas pelo código antigo entre a migração e o arranque do código novo ficam por
+normalizar. A migração é idempotente, por isso volte a corrê-la depois do arranque:
+
+```bash
+npx prisma db execute --file prisma/migrations/20260929230000_normalize_participation_phone/migration.sql
 ```
 
 ## Estrutura

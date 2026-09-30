@@ -34,6 +34,7 @@ import { parseUserAgent } from "@/features/play/user-agent";
 import { canTestCampaign } from "@/features/play/test-mode";
 import { headers } from "next/headers";
 import { getEffectivePublicState } from "@/features/publishing/public-status";
+import { isAgeVerifiable } from "@/features/publishing/age-check";
 import { computeMemoryScore } from "@/features/memory-game/scoring";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
 import { drawAndAwardPrize, NoEligibleSegmentsError } from "@/features/wheel-game/draw";
@@ -172,15 +173,6 @@ export async function startParticipationAction(
   const liveShape = shapeOf(campaign.leadForm);
   const effectivePosition = effectiveLeadFormPosition(liveShape);
 
-  // Idade mínima sem data de nascimento no formulário não se verifica: falha
-  // fechado (§16) em vez de deixar jogar sem confirmar. A publicação já é
-  // recusada nesse caso; isto cobre campanhas publicadas antes.
-  const hasBirthDate = campaign.leadForm?.fields.some((field) => field.type === "BIRTH_DATE") ?? false;
-  if (campaign.minAge != null && (effectivePosition === "NONE" || !hasBirthDate)) {
-    await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", false, input.sessionId, { reason: "age_unverifiable" });
-    return { ok: false, reason: "not_active" };
-  }
-
   const ip = await getRequestIp();
   const cookieId = await getOrCreateVisitorCookieId();
   // Sem IP (proxy/CDN que não define x-forwarded-for), usa o cookie do
@@ -194,6 +186,23 @@ export async function startParticipationAction(
   if (!rateLimit.allowed) return { ok: false, reason: "rate_limited" };
 
   const isTest = input.testRequested && (await canTestCampaign(campaign.organizationId));
+
+  // Idade mínima sem data de nascimento no formulário não se verifica: falha
+  // fechado (§16) em vez de deixar jogar sem confirmar. A publicação e o
+  // editor de uma campanha publicada já o recusam; isto cobre campanhas
+  // publicadas antes. Depois do rate limit (cada pedido grava um evento) e
+  // do modo de teste (um teste não conta como bloqueio real).
+  const ageForm = campaign.leadForm
+    ? {
+        position: campaign.leadForm.position,
+        fields: campaign.leadForm.fields,
+        consentCount: campaign.leadForm.consentDefinitions.length,
+      }
+    : null;
+  if (!isAgeVerifiable(campaign.minAge, ageForm)) {
+    await recordEvent(campaign.id, "PARTICIPATION_BLOCKED", isTest, input.sessionId, { reason: "age_unverifiable" });
+    return { ok: false, reason: "not_active" };
+  }
 
   const latestVersion = await prisma.campaignVersion.findFirst({
     where: { campaignId: campaign.id },
@@ -277,7 +286,13 @@ export type ResumeParticipationResult =
       leadSubmitted: boolean;
       completed: boolean;
     }
-  | { ok: false };
+  /**
+   * "retry": não foi possível verificar agora (rate limit) e a participação
+   * pode continuar válida; "gone": já não se retoma, começa-se outra.
+   */
+  | { ok: false; reason: "retry" | "gone" };
+
+const GONE = { ok: false, reason: "gone" } as const;
 
 /**
  * Retoma a participação do separador depois de recarregar a página (§7:
@@ -293,13 +308,13 @@ export async function resumeParticipationAction(
   rawInput: ResumeParticipationInput,
 ): Promise<ResumeParticipationResult> {
   const parsed = resumeParticipationSchema.safeParse(rawInput);
-  if (!parsed.success) return { ok: false };
+  if (!parsed.success) return GONE;
   const input = parsed.data;
 
   const ip = await getRequestIp();
   // Largo: num evento, muitos visitantes partilham o IP do wi-fi.
   const rateLimit = await checkRateLimit(`resume:${input.campaignId}:${ip ?? input.ref.participationId}`, 300, 3600);
-  if (!rateLimit.allowed) return { ok: false };
+  if (!rateLimit.allowed) return { ok: false, reason: "retry" };
 
   const participation = await prisma.participation.findUnique({
     where: { id: input.ref.participationId },
@@ -324,20 +339,20 @@ export async function resumeParticipationAction(
       },
     },
   });
-  if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) return { ok: false };
-  if (participation.campaignId !== input.campaignId || participation.status === "BLOCKED") return { ok: false };
+  if (!participation || !tokenMatches(participation.idempotencyKey, input.ref.token)) return GONE;
+  if (participation.campaignId !== input.campaignId || participation.status === "BLOCKED") return GONE;
 
   // O modo (teste ou real) tem de coincidir com o da página, decidido no
   // servidor como no início.
   const testMode = input.testRequested && (await canTestCampaign(participation.campaign.organizationId));
-  if (participation.isTest !== testMode) return { ok: false };
+  if (participation.isTest !== testMode) return GONE;
 
   const completed = participation.resultSummary !== null;
-  if (!completed && getEffectivePublicState(participation.campaign) !== "active") return { ok: false };
+  if (!completed && getEffectivePublicState(participation.campaign) !== "active") return GONE;
   // Num quiosque, a pessoa seguinte no mesmo separador não vê o resultado da
   // anterior para sempre.
   if (completed && participation.completedAt && Date.now() - participation.completedAt.getTime() > RESUME_COMPLETED_WINDOW_MS) {
-    return { ok: false };
+    return GONE;
   }
 
   const position = participationLeadFormPosition(participation.leadFormPosition, shapeOf(participation.campaign.leadForm));
@@ -374,13 +389,17 @@ export async function beginGameAction(rawRef: ParticipationRef): Promise<{ ok: b
   return { ok: true };
 }
 
-/** Início do jogo no servidor; sem GameSession, o início da participação. */
+/**
+ * Início do jogo no servidor. Sem GameSession (o pedido de início falhou) vale
+ * só o tempo do browser: o início da participação incluía o formulário e o
+ * ecrã intermédio, e um jogador honesto ficava com "Tempo esgotado".
+ */
 async function gameStartedAt(participationId: string): Promise<Date | null> {
-  const participation = await prisma.participation.findUnique({
-    where: { id: participationId },
-    select: { startedAt: true, gameSession: { select: { startedAt: true } } },
+  const session = await prisma.gameSession.findUnique({
+    where: { participationId },
+    select: { startedAt: true },
   });
-  return participation?.gameSession?.startedAt ?? participation?.startedAt ?? null;
+  return session?.startedAt ?? null;
 }
 
 export interface SubmitLeadFormInput {
@@ -591,6 +610,38 @@ export interface MemorySubmitResult {
   completed: boolean;
 }
 
+export type StoredGameResult =
+  | { kind: "MEMORY"; result: MemorySubmitResult }
+  | { kind: "QUIZ"; result: QuizPlayerResult };
+
+interface QuizProfileForClient {
+  id: string;
+  title: string;
+  description: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+}
+
+function toClientProfile(profile: QuizProfileForClient | null | undefined): QuizPlayerResult["resultProfile"] {
+  return profile
+    ? { title: profile.title, description: profile.description, ctaLabel: profile.ctaLabel, ctaUrl: profile.ctaUrl }
+    : null;
+}
+
+function storedQuizResult(
+  response: { totalScore: number; percentage: number; passed: boolean | null; resultProfileId: string | null },
+  config: { questions: readonly { points: number }[]; resultProfiles: readonly QuizProfileForClient[] },
+): QuizPlayerResult {
+  const profile = response.resultProfileId ? config.resultProfiles.find((p) => p.id === response.resultProfileId) : null;
+  return {
+    totalScore: response.totalScore,
+    maxPossibleScore: config.questions.reduce((sum, q) => sum + q.points, 0),
+    percentage: response.percentage,
+    passed: response.passed,
+    resultProfile: toClientProfile(profile),
+  };
+}
+
 export async function submitMemoryResultAction(
   rawInput: MemorySubmitInput,
 ): Promise<GameActionResponse<MemorySubmitResult>> {
@@ -773,29 +824,8 @@ export async function submitQuizAction(
   const config = participation.campaign.quizConfig;
   if (!config) throw new Error("Quiz não configurado para esta campanha.");
 
-  const toClientProfile = (profile: (typeof config.resultProfiles)[number] | null | undefined) =>
-    profile
-      ? {
-          title: profile.title,
-          description: profile.description,
-          ctaLabel: profile.ctaLabel,
-          ctaUrl: profile.ctaUrl,
-        }
-      : null;
-
   const existing = participation.quizResponse;
-  if (existing) {
-    const profile = existing.resultProfileId
-      ? config.resultProfiles.find((p) => p.id === existing.resultProfileId)
-      : null;
-    return reveal({
-      totalScore: existing.totalScore,
-      maxPossibleScore: config.questions.reduce((sum, q) => sum + q.points, 0),
-      percentage: existing.percentage,
-      passed: existing.passed,
-      resultProfile: toClientProfile(profile),
-    });
-  }
+  if (existing) return reveal(storedQuizResult(existing, config));
 
   // O tempo que conta é o maior entre o do browser e o do servidor (ver
   // game-clock.ts): recarregar a página já não repõe o tempo total.
@@ -856,4 +886,52 @@ export async function submitQuizAction(
     passed: scored.passed,
     resultProfile: toClientProfile(profile),
   });
+}
+
+/**
+ * Resultado já gravado da memória ou do quiz, para uma participação retomada:
+ * o jogo não volta a aparecer e, com "Antes de revelar o resultado", o
+ * resultado só se vê depois do formulário — antes, quem recarregasse nesse
+ * formulário dava os dados e nunca via o resultado. Só leitura, com a mesma
+ * política de revelação das ações de jogo.
+ */
+export async function getStoredResultAction(rawRef: ParticipationRef): Promise<GameActionResponse<StoredGameResult>> {
+  const ref = parseParticipationRef(rawRef);
+  if (!ref) return { status: "blocked", reason: "not_found" };
+
+  const rateLimit = await checkRateLimit(`result:${ref.participationId}`, 30, 60);
+  if (!rateLimit.allowed)
+    throw new Error("Demasiadas tentativas. Tente novamente dentro de instantes.");
+
+  const access = await openGameGate(ref);
+  if (!access.ok) return { status: "blocked", reason: access.reason };
+  const { gate } = access;
+
+  const participation = await prisma.participation.findUniqueOrThrow({
+    where: { id: gate.participationId },
+    select: {
+      memoryResult: { select: { score: true, completed: true } },
+      quizResponse: { select: { totalScore: true, percentage: true, passed: true, resultProfileId: true } },
+      campaign: {
+        select: {
+          quizConfig: {
+            select: {
+              questions: { select: { points: true } },
+              resultProfiles: { select: { id: true, title: true, description: true, ctaLabel: true, ctaUrl: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  let stored: StoredGameResult | null = null;
+  if (gate.campaignType === "MEMORY" && participation.memoryResult) {
+    stored = { kind: "MEMORY", result: participation.memoryResult };
+  } else if (gate.campaignType === "QUIZ" && participation.quizResponse && participation.campaign.quizConfig) {
+    stored = { kind: "QUIZ", result: storedQuizResult(participation.quizResponse, participation.campaign.quizConfig) };
+  }
+  if (!stored) return { status: "blocked", reason: "not_found" };
+  if (gate.policy === "withhold_result") return { status: "lead_required" };
+  return { status: "revealed", result: stored };
 }

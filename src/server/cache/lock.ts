@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { redis } from "@/server/cache/redis";
-import { describeRedisError } from "@/lib/security/rate-limit";
+// Não de rate-limit: os testes substituem esse módulo, e o lock tem de falhar
+// aberto também aí.
+import { describeRedisError } from "@/lib/security/redis-errors";
 
 // Só apaga o lock se ainda for nosso (pode ter expirado e sido tomado por outro).
 const RELEASE_SCRIPT = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`;
@@ -30,7 +32,9 @@ interface LockOptions {
  * transação continua a garantir a correção, só volta a haver conflitos.
  */
 export async function withLock<T>(key: string, fn: () => Promise<T>, options: LockOptions = {}): Promise<T> {
-  const ttlMs = options.ttlMs ?? 10_000;
+  // Acima do tempo máximo da transação (10 s, transaction-retry.ts): o lock
+  // não pode expirar enquanto quem o tem ainda está a trabalhar.
+  const ttlMs = options.ttlMs ?? 20_000;
   const waitMs = options.waitMs ?? 5_000;
   const token = randomUUID();
   const deadline = Date.now() + waitMs;

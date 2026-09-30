@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { PARTICIPATION_LIMIT_TYPE_LABELS } from "@/lib/labels";
 import { PARTICIPATION_LIMITS } from "@/lib/validation/campaign";
+import { isLiveStatus } from "@/features/campaigns/live-status";
+import { isAgeVerifiable, LIVE_AGE_BLOCKED_WARNING } from "@/features/publishing/age-check";
 
 const LIMIT_TYPE_OPTIONS = Object.entries(PARTICIPATION_LIMIT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
@@ -22,6 +24,19 @@ export default async function ParticipationRulesStepPage({
 
   const campaign = await getCampaignForEditor(context.organizationId, id);
   if (!campaign) notFound();
+
+  const ageBlocked =
+    isLiveStatus(campaign.status) &&
+    !isAgeVerifiable(
+      campaign.minAge,
+      campaign.leadForm
+        ? {
+            position: campaign.leadForm.position,
+            fields: campaign.leadForm.fields,
+            consentCount: campaign.leadForm.consentDefinitions.length,
+          }
+        : null,
+    );
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -37,6 +52,8 @@ export default async function ParticipationRulesStepPage({
         etapa &quot;Formulário de leads&quot;. Estas regras são validadas sempre no servidor antes
         de iniciar o jogo.
       </Alert>
+
+      {ageBlocked ? <Alert variant="warning">{LIVE_AGE_BLOCKED_WARNING}</Alert> : null}
 
       <AutoSaveForm
         action={updateParticipationRulesAction}
@@ -66,7 +83,7 @@ export default async function ParticipationRulesStepPage({
             aria-describedby="minAge-help"
           />
           <p id="minAge-help" className="mt-1 text-xs text-caetano-anthracite-80">
-            Vazio: sem idade mínima.
+            Vazio: sem idade mínima. Só se verifica com o campo «Data de nascimento» no formulário de leads.
           </p>
         </div>
       </AutoSaveForm>

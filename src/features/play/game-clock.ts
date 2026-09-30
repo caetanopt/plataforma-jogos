@@ -2,11 +2,15 @@
  * Relógio do servidor para a memória e o quiz (secções 12 e 14).
  *
  * O tempo de jogo vinha só do browser: bastava recarregar a página a meio
- * (o cronómetro volta a zero) ou editar o pedido para anular o tempo limite,
- * o bónus de rapidez e o desempate do ranking. O servidor regista quando o
- * jogo abriu (GameSession, por participação, nunca reescrito) e usa o maior
- * dos dois valores, com uma margem para a latência, as animações e a
- * pré-visualização das cartas — um jogador honesto não é penalizado.
+ * para o cronómetro voltar a zero e anular o tempo limite, o bónus de
+ * rapidez e o desempate do ranking. O servidor regista quando o jogo abriu
+ * (GameSession, por participação, nunca reescrito) e usa o maior dos dois
+ * valores, com uma margem para a latência, as animações e a pré-visualização
+ * das cartas — um jogador honesto não é penalizado.
+ *
+ * Não trava um pedido forjado: é o browser que diz quando o jogo abriu
+ * (beginGameAction), e um script pode adiá-lo. Na memória o resultado inteiro
+ * (pares, tentativas) vem do browser; nenhum destes jogos tem prémios.
  */
 
 /** Latência e animações que o cronómetro do browser não conta. */
@@ -17,7 +21,7 @@ const MAX_SECONDS = 86_400;
 
 export function effectiveGameSeconds(input: {
   clientSeconds: number;
-  /** Início do jogo no servidor (GameSession) ou, sem ele, o da participação. */
+  /** Início do jogo no servidor (GameSession); sem ele, vale o do browser. */
   startedAt: Date | null;
   now: Date;
   /** Tempo que o browser exclui de propósito (pré-visualização da memória). */

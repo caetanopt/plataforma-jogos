@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/server/db/client";
 import { mediaBelongsToOrganization } from "@/server/media/ownership";
 import { activeReservationsByPrize } from "@/features/prizes/stock";
+import { releaseReservation } from "@/features/prizes/reservation";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -354,6 +355,17 @@ export async function removePrizeCodeAction(_previous: ActionResult, formData: F
     const codeId = getField(formData, "codeId");
     const campaign = await getOwnedCampaign(context.organizationId, campaignId);
     if (!campaign) notFound();
+
+    // Um código preso numa reserva que já expirou fica livre primeiro: só um
+    // sorteio seguinte a libertava, e numa campanha terminada não há.
+    const now = new Date();
+    await runSerializable(async (tx) => {
+      const stuck = await tx.prizeAward.findFirst({
+        where: { prizeCodeId: codeId, status: "RESERVED", reservationExpiresAt: { lte: now }, prize: { campaignId: campaign.id } },
+        select: { id: true, prizeCodeId: true, wheelSegmentId: true },
+      });
+      if (stuck) await releaseReservation(tx, stuck, "EXPIRED", now);
+    });
 
     // Só códigos disponíveis: um reservado ou atribuído já tem dono.
     const deleted = await prisma.prizeCode.deleteMany({

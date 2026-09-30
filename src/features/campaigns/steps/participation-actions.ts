@@ -9,6 +9,7 @@ import { logAudit } from "@/server/audit/log";
 import { runAction } from "@/server/actions/run-action";
 import { PARTICIPATION_CUSTOM_MAX_REQUIRED_MESSAGE, participationRulesShape } from "@/lib/validation/campaign";
 import { readOptional } from "@/lib/forms/form-data";
+import { editBreaksLiveAgeCheck, LIVE_MIN_AGE_NEEDS_BIRTH_DATE_MESSAGE } from "@/features/publishing/age-check";
 import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
 import { partialResult, type ActionResult } from "@/lib/forms/action-result";
 
@@ -20,7 +21,16 @@ export async function updateParticipationRulesAction(_previous: ActionResult, fo
     const campaignId = readOptional(formData, "campaignId") ?? "";
     const campaign = await prisma.campaign.findFirst({
       where: { id: campaignId, organizationId: context.organizationId },
-      select: { id: true, participationLimitType: true, participationCustomMax: true, minAge: true },
+      select: {
+        id: true,
+        status: true,
+        participationLimitType: true,
+        participationCustomMax: true,
+        minAge: true,
+        leadForm: {
+          select: { position: true, fields: { select: { type: true } }, _count: { select: { consentDefinitions: true } } },
+        },
+      },
     });
     if (!campaign) notFound();
 
@@ -47,6 +57,26 @@ export async function updateParticipationRulesAction(_previous: ActionResult, fo
         delete data.participationLimitType;
         type = campaign.participationLimitType;
       }
+    }
+
+    // Numa campanha publicada, uma idade mínima sem data de nascimento no
+    // formulário fechava-a a todos os visitantes.
+    const ageForm = campaign.leadForm
+      ? {
+          position: campaign.leadForm.position,
+          fields: campaign.leadForm.fields,
+          consentCount: campaign.leadForm._count.consentDefinitions,
+        }
+      : null;
+    if (
+      data.minAge !== undefined &&
+      editBreaksLiveAgeCheck(
+        campaign.status,
+        { minAge: campaign.minAge, form: ageForm },
+        { minAge: data.minAge, form: ageForm },
+      )
+    ) {
+      rejectField(parse, "minAge", LIVE_MIN_AGE_NEEDS_BIRTH_DATE_MESSAGE);
     }
 
     const update = {

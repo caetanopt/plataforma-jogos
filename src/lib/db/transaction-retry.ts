@@ -1,7 +1,9 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 
-const MAX_SERIALIZATION_RETRIES = 10;
+// Uma rajada na mesma campanha sem o lock (Redis em baixo, espera esgotada)
+// esgotava 10 tentativas nos sorteios da roda.
+const MAX_SERIALIZATION_RETRIES = 20;
 
 function backoffDelayMs(attempt: number): number {
   const base = Math.min(200, 10 * 2 ** attempt);

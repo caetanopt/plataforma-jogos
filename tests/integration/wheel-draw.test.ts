@@ -1,9 +1,17 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { drawAndAwardPrize, NoEligibleSegmentsError } from "@/features/wheel-game/draw";
+
+// Sem o lock por campanha: estes testes exercitam a transação serializável
+// sob concorrência real, que é o que garante o stock quando o lock falha
+// aberto (Redis em baixo, espera esgotada). Com o lock os pedidos passavam
+// um a um e uma regressão na transação não se via.
+vi.mock("@/server/cache/lock", () => ({
+  withLock: <T>(_key: string, fn: () => Promise<T>) => fn(),
+}));
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),

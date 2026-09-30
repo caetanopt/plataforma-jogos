@@ -263,7 +263,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
                 <span className="text-xs text-caetano-anthracite-80">{PAIR_KIND_LABELS[pair.kind]}</span>
               </div>
               <div className="flex items-start gap-1">
-                <ActionForm action={moveMemoryPairAction} messageClassName="mt-1 max-w-48">
+                <ActionForm action={moveMemoryPairAction} resetOnSuccess={false} messageClassName="mt-1 max-w-48">
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="up" />
@@ -276,7 +276,7 @@ export async function MemoryGameStep({ campaignId }: { campaignId: string }) {
                     ↑
                   </button>
                 </ActionForm>
-                <ActionForm action={moveMemoryPairAction} messageClassName="mt-1 max-w-48">
+                <ActionForm action={moveMemoryPairAction} resetOnSuccess={false} messageClassName="mt-1 max-w-48">
                   <input type="hidden" name="campaignId" value={campaign.id} />
                   <input type="hidden" name="pairId" value={pair.id} />
                   <input type="hidden" name="direction" value="down" />

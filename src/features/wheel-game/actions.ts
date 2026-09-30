@@ -10,7 +10,12 @@ import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { runAction } from "@/server/actions/run-action";
 import { runSerializable } from "@/lib/db/transaction-retry";
-import { WHEEL_EDITOR_MESSAGES, resolvePeriod, wheelSegmentShape } from "@/lib/validation/wheel-game";
+import {
+  WHEEL_EDITOR_MESSAGES,
+  resolvePeriod,
+  segmentTotalBelowUsedMessage,
+  wheelSegmentShape,
+} from "@/lib/validation/wheel-game";
 import { emptyToNull, getField, readCheckbox, readOptional } from "@/lib/forms/form-data";
 import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
 import { fail, ok, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
@@ -215,22 +220,35 @@ export async function updateWheelSegmentAction(_previous: ActionResult, formData
     // coisas descontava uma unidade que a gravação voltava a pôr.
     const saved = await runSerializable(async (tx) => {
       const before = await tx.wheelSegment.findUnique({ where: { id: segment.id } });
-      if (!before) return null;
+      if (!before) return { status: "gone" as const };
 
       let remainingQuantity: number | null | undefined;
       if (data.totalQuantity !== undefined) {
-        // Novo total menos o que já saiu deste segmento.
-        const awarded = before.totalQuantity != null ? before.totalQuantity - (before.remainingQuantity ?? 0) : 0;
-        remainingQuantity = data.totalQuantity != null ? Math.max(0, data.totalQuantity - awarded) : null;
+        // Unidades que já saíram deste segmento, atribuídas ou reservadas.
+        // Com limite, é o total menos o restante; sem limite até agora,
+        // contam-se os prémios do segmento ainda presos. Um total abaixo disso
+        // é recusado (como no prémio): antes ficava a 0 e, quando as reservas
+        // voltavam ao stock, o segmento dava mais do que o limite.
+        const used =
+          before.totalQuantity != null
+            ? before.totalQuantity - (before.remainingQuantity ?? 0)
+            : await tx.prizeAward.count({
+                where: { wheelSegmentId: before.id, status: { in: ["CONFIRMED", "RESERVED"] } },
+              });
+        if (data.totalQuantity != null && data.totalQuantity < used) return { status: "below_used" as const, used };
+        remainingQuantity = data.totalQuantity != null ? data.totalQuantity - used : null;
       }
 
       const after = await tx.wheelSegment.update({
         where: { id: before.id },
         data: { ...fields, totalQuantity: data.totalQuantity, remainingQuantity },
       });
-      return { before, after };
+      return { status: "saved" as const, before, after };
     });
-    if (!saved) return fail(SEGMENT_GONE_MESSAGE);
+    if (saved.status === "gone") return fail(SEGMENT_GONE_MESSAGE);
+    if (saved.status === "below_used") {
+      return fail(INVALID_SEGMENT_MESSAGE, { totalQuantity: segmentTotalBelowUsedMessage(saved.used) });
+    }
     const { before, after } = saved;
 
     await logAudit({

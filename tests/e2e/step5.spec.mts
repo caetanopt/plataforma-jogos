@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { disconnectPrisma, getPrisma } from "./db.mts";
-import { createCampaign, loginAsAdmin, publishCampaign, uniqueSuffix } from "./helpers";
+import { addQuizQuestionWithAnswers, createCampaign, loginAsAdmin, publishCampaign, uniqueSuffix } from "./helpers";
 
 /**
  * Passo 5: o editor diz a verdade sobre o que gravou, a roda só entrega o
@@ -104,9 +104,10 @@ test.describe("Editor: gravação honesta", () => {
     await expect(page.getByText("A carregar ficheiro…")).toBeVisible();
     await waitSaved(page);
 
+    // Espera pelo elemento e não por "networkidle": com os workers em
+    // paralelo, a rede do backoffice nem sempre fica parada 500 ms.
     await page.reload();
-    await page.waitForLoadState("networkidle");
-    await expect(page.getByAltText("Pré-visualização de Logótipo")).toBeVisible();
+    await expect(page.getByAltText("Pré-visualização de Logótipo")).toBeVisible({ timeout: 15_000 });
     const prisma = await getPrisma();
     const campaign = await prisma.campaign.findUniqueOrThrow({ where: { id: campaignId } });
     expect(campaign.startLogoMediaId).not.toBeNull();
@@ -190,6 +191,49 @@ test.describe("Jogo público", () => {
     await expect(visitor.getByText("Retomámos a sua participação.")).toBeVisible({ timeout: 10_000 });
     await expect(visitor.locator("button.aspect-square").first()).toBeVisible();
     expect(await prisma.participation.count({ where: { campaignId, isTest: false } })).toBe(1);
+  });
+});
+
+test.describe("Jogo público retomado", () => {
+  test("quiz com o resultado retido: recarregar no formulário mostra o resultado depois da lead", async ({ page }) => {
+    const prisma = await getPrisma();
+    await loginAsAdmin(page);
+    const campaignId = await createCampaign(page, "QUIZ");
+    const suffix = uniqueSuffix();
+    await addQuizQuestionWithAnswers(page, campaignId, `Pergunta ${suffix}`, `Certa-${suffix}`, `Errada-${suffix}`);
+    await prisma.leadForm.update({
+      where: { campaignId },
+      data: {
+        position: "BEFORE_RESULT",
+        fields: { create: [{ type: "EMAIL", internalKey: "email", label: "E-mail", required: true, order: 0 }] },
+      },
+    });
+    const slug = await publishCampaign(page, campaignId);
+
+    const visitor = await (await page.context().browser()!.newContext()).newPage();
+    await visitor.goto(`/play/${slug}`);
+    await visitor.waitForLoadState("networkidle");
+    await visitor.getByRole("button", { name: /Jogar/i }).click();
+    await visitor.getByRole("button", { name: `Certa-${suffix}`, exact: true }).click();
+    await visitor.getByRole("button", { name: "Terminar" }).click();
+    await expect(visitor.getByText("O seu resultado está pronto.", { exact: false })).toBeVisible({ timeout: 10_000 });
+
+    // Recarregar no formulário: antes, a lead era aceite e o resultado nunca aparecia.
+    await visitor.reload();
+    await visitor.waitForLoadState("networkidle");
+    await expect(visitor.getByText("Retomámos a sua participação.")).toBeVisible({ timeout: 10_000 });
+    await expect(visitor.getByText("O seu resultado está pronto.", { exact: false })).toBeVisible();
+    await expect(visitor.getByText("100%")).toHaveCount(0);
+    await visitor.getByLabel("E-mail").fill(`retoma-${suffix}@example.com`);
+    await visitor.getByRole("button", { name: "Continuar" }).click();
+
+    await expect(visitor.getByText("100% (", { exact: false })).toBeVisible({ timeout: 10_000 });
+
+    // Num dispositivo partilhado, o ecrã final retomado deixa passar à pessoa seguinte.
+    await visitor.getByRole("button", { name: "Começar uma nova participação" }).click();
+    await visitor.waitForLoadState("networkidle");
+    await expect(visitor.getByRole("button", { name: /Jogar/i })).toBeEnabled({ timeout: 10_000 });
+    await expect(visitor.getByText("Retomámos a sua participação.")).toHaveCount(0);
   });
 });
 

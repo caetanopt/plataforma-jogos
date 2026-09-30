@@ -30,7 +30,9 @@ vi.mock("@/lib/security/rate-limit", () => ({
 
 const { IDLE } = await import("@/lib/forms/action-result");
 const { utcToZonedDateTimeLocal } = await import("@/lib/dates/timezone");
-const { WHEEL_EDITOR_MESSAGES, prizeTotalBelowAwardedMessage } = await import("@/lib/validation/wheel-game");
+const { WHEEL_EDITOR_MESSAGES, prizeTotalBelowAwardedMessage, segmentTotalBelowUsedMessage } = await import(
+  "@/lib/validation/wheel-game"
+);
 const { addWheelSegmentAction, updateWheelSegmentAction, moveWheelSegmentAction, removeWheelSegmentAction } =
   await import("@/features/wheel-game/actions");
 const { addPrizeAction, updatePrizeAction, addPrizeCodeAction, removePrizeCodeAction } = await import(
@@ -403,6 +405,53 @@ describe("editar um segmento", () => {
     expect(stock[0].metadata).toMatchObject({ totalQuantityBefore: 10, totalQuantityAfter: 5 });
   });
 
+  it("recusa um total abaixo do que já saiu, em vez de o pôr a 0", async () => {
+    // 10 no total, 7 restantes: saíram 3 (atribuídas ou reservadas).
+    const result = await updateWheelSegmentAction(IDLE, segmentEditForm(f, { totalQuantity: "2", name: "Novo nome" }));
+
+    expect(result).toMatchObject({
+      status: "error",
+      fieldErrors: { totalQuantity: segmentTotalBelowUsedMessage(3) },
+    });
+    const segment = await prisma.wheelSegment.findUniqueOrThrow({ where: { id: f.segmentId } });
+    expect(segment).toMatchObject({ totalQuantity: 10, remainingQuantity: 7 });
+    expect(await updateWheelSegmentAction(IDLE, segmentEditForm(f, { totalQuantity: "3" }))).toMatchObject({
+      status: "success",
+    });
+    expect(await prisma.wheelSegment.findUniqueOrThrow({ where: { id: f.segmentId } })).toMatchObject({
+      totalQuantity: 3,
+      remainingQuantity: 0,
+    });
+  });
+
+  it("limitar um segmento sem limite conta os prémios atribuídos e as reservas que já saíram dele", async () => {
+    await prisma.wheelSegment.update({ where: { id: f.segmentId }, data: { totalQuantity: null, remainingQuantity: null } });
+    for (const status of ["CONFIRMED", "RESERVED", "RELEASED"] as const) {
+      const participation = await f.createParticipation();
+      await prisma.prizeAward.create({
+        data: {
+          participationId: participation.id,
+          prizeId: f.prizeId,
+          wheelSegmentId: f.segmentId,
+          status,
+          reservationExpiresAt: status === "RESERVED" ? new Date(Date.now() + 60_000) : null,
+        },
+      });
+    }
+
+    expect(await updateWheelSegmentAction(IDLE, segmentEditForm(f, { totalQuantity: "1" }))).toMatchObject({
+      status: "error",
+      fieldErrors: { totalQuantity: segmentTotalBelowUsedMessage(2) },
+    });
+    expect(await updateWheelSegmentAction(IDLE, segmentEditForm(f, { totalQuantity: "5" }))).toMatchObject({
+      status: "success",
+    });
+    expect(await prisma.wheelSegment.findUniqueOrThrow({ where: { id: f.segmentId } })).toMatchObject({
+      totalQuantity: 5,
+      remainingQuantity: 3,
+    });
+  });
+
   it("recusa a imagem de outra organização", async () => {
     const result = await updateWheelSegmentAction(IDLE, segmentEditForm(f, { imageMediaId: f.foreignImageId }));
 
@@ -673,6 +722,54 @@ describe("códigos de prémio", () => {
       message: "O código já não está disponível: foi reservado ou atribuído entretanto.",
     });
     expect(await prisma.prizeCode.count({ where: { id: code.id } })).toBe(1);
+  });
+});
+
+describe("códigos presos em reservas expiradas", () => {
+  it("remover liberta primeiro a reserva expirada e devolve a unidade ao segmento", async () => {
+    const code = await prisma.prizeCode.create({ data: { prizeId: f.prizeId, code: "PRESO", status: "RESERVED" } });
+    const participation = await f.createParticipation();
+    const stuck = await prisma.prizeAward.create({
+      data: {
+        participationId: participation.id,
+        prizeId: f.prizeId,
+        wheelSegmentId: f.segmentId,
+        prizeCodeId: code.id,
+        status: "RESERVED",
+        reservationExpiresAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    expect(await removePrizeCodeAction(IDLE, buildForm({ campaignId: f.campaignId, codeId: code.id }))).toMatchObject({
+      status: "success",
+    });
+    expect(await prisma.prizeCode.count({ where: { id: code.id } })).toBe(0);
+    expect(await prisma.prizeAward.findUniqueOrThrow({ where: { id: stuck.id } })).toMatchObject({
+      status: "RELEASED",
+      releaseReason: "EXPIRED",
+      prizeCodeId: null,
+    });
+    // 7 restantes + a unidade da reserva.
+    expect((await prisma.wheelSegment.findUniqueOrThrow({ where: { id: f.segmentId } })).remainingQuantity).toBe(8);
+  });
+
+  it("uma reserva ainda dentro do prazo não é tocada", async () => {
+    const code = await prisma.prizeCode.create({ data: { prizeId: f.prizeId, code: "EM-CURSO", status: "RESERVED" } });
+    const participation = await f.createParticipation();
+    await prisma.prizeAward.create({
+      data: {
+        participationId: participation.id,
+        prizeId: f.prizeId,
+        prizeCodeId: code.id,
+        status: "RESERVED",
+        reservationExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    expect(await removePrizeCodeAction(IDLE, buildForm({ campaignId: f.campaignId, codeId: code.id }))).toMatchObject({
+      status: "error",
+    });
+    expect(await prisma.prizeCode.findUniqueOrThrow({ where: { id: code.id } })).toMatchObject({ status: "RESERVED" });
   });
 });
 

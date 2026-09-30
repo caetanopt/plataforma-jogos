@@ -40,6 +40,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   duplicate: "Já detetámos uma participação anterior com estes dados.",
   phone: "Indique um número de telefone válido.",
   prize_unavailable: "Os seus dados foram guardados, mas não foi possível mostrar o prémio. Tente novamente.",
+  result_unavailable: "Os seus dados foram guardados, mas não foi possível mostrar o resultado. Tente novamente.",
 };
 
 export function PublicLeadForm({

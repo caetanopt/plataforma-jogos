@@ -206,8 +206,9 @@ async function getWheelStats(campaignIds: string[], range: DateRange) {
   // curso ou libertadas: a distribuição por prémio só conta as atribuídas.
   const awards = await prisma.prizeAward.findMany({
     where: { participation: { campaignId: { in: campaignIds }, isTest: false, createdAt: { gte: range.from, lte: range.to } } },
-    select: { status: true, releaseReason: true, prize: { select: { publicName: true } } },
+    select: { status: true, releaseReason: true, reservationExpiresAt: true, prize: { select: { publicName: true } } },
   });
+  const now = new Date();
   const distributionMap = new Map<string, number>();
   let confirmed = 0;
   let unclaimed = 0;
@@ -219,6 +220,10 @@ async function getWheelStats(campaignIds: string[], range: DateRange) {
     } else if (award.status === "RELEASED") {
       if (award.releaseReason === "EXPIRED") unclaimed += 1;
       else refused += 1;
+    } else if (award.reservationExpiresAt && award.reservationExpiresAt <= now) {
+      // Expirada mas ainda por libertar (só um sorteio seguinte a liberta, e
+      // numa campanha terminada não há): para as leads já é "fora do prazo".
+      unclaimed += 1;
     }
   }
 

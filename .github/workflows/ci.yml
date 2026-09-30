@@ -24,8 +24,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      # Os testes de concorrência da roda passam pelo lock por campanha
-      # (src/server/cache/lock.ts); sem Redis correm sem ele.
+      # Rate limit e lock por campanha (src/server/cache/lock.ts). O teste de
+      # concorrência do sorteio substitui o lock para exercitar a transação
+      # sozinha; os restantes passam por ele.
       redis:
         image: redis:7
         ports:

@@ -74,16 +74,25 @@ export function AutoSaveForm({
   // submeter o `<form>` a meio de uma navegação faz o Next falhar a resolver
   // a Server Action. Com a gravação parcial, só um campo inválido fica por
   // gravar.
+  //
+  // Só no desmonte: a referência da server action muda a cada refrescamento
+  // da página (cada gravação com revalidatePath), e com `[action]` esta
+  // limpeza corria nessa altura — a edição pendente ia por fora do
+  // useActionState e a resposta perdia-se (um erro nunca aparecia).
+  const actionRef = useRef(action);
+  useLayoutEffect(() => {
+    actionRef.current = action;
+  }, [action]);
   useLayoutEffect(() => {
     const form = formRef.current;
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
-        if (form) void action(IDLE, new FormData(form));
+        if (form) void actionRef.current(IDLE, new FormData(form));
       }
     };
-  }, [action]);
+  }, []);
 
   // Fechar o separador com uma gravação por fazer: grava já e pede ao
   // browser que confirme a saída.

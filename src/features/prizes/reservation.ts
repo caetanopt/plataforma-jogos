@@ -69,10 +69,16 @@ async function takeCode(tx: Tx, prizeId: string, now: Date, status: "RESERVED" |
     where: { prizeId, status: "AVAILABLE", expiresAt: { lt: now } },
     data: { status: "EXPIRED" },
   });
-  const code = await tx.prizeCode.findFirst({
-    where: { prizeId, status: "AVAILABLE" },
-    orderBy: { createdAt: "asc" },
-  });
+  const findAvailable = () =>
+    tx.prizeCode.findFirst({ where: { prizeId, status: "AVAILABLE" }, orderBy: { createdAt: "asc" } });
+  let code = await findAvailable();
+  if (!code) {
+    // Os códigos podem estar presos em reservas expiradas que o lote do
+    // sorteio ainda não libertou: liberta as deste prémio que têm código e
+    // tenta de novo, em vez de atribuir o prémio sem código. (Só as que têm
+    // código: um prémio sem códigos não tem nada a recuperar.)
+    if ((await releaseExpired(tx, { prizeId, prizeCodeId: { not: null } }, now)) > 0) code = await findAvailable();
+  }
   if (!code) return null;
   await tx.prizeCode.update({
     where: { id: code.id },
@@ -117,23 +123,41 @@ export async function releaseReservation(
     }
   }
   if (award.wheelSegmentId) {
-    await tx.wheelSegment.updateMany({
-      where: { id: award.wheelSegmentId, totalQuantity: { not: null } },
-      data: { remainingQuantity: { increment: 1 } },
-    });
+    // Nunca acima do total: se o limite do segmento mudou (ou passou a existir)
+    // depois do sorteio, a unidade devolvida não pode abrir mais do que ele.
+    await tx.$executeRaw`
+      UPDATE "WheelSegment"
+      SET "remainingQuantity" = LEAST(COALESCE("remainingQuantity", 0) + 1, "totalQuantity")
+      WHERE "id" = ${award.wheelSegmentId} AND "totalQuantity" IS NOT NULL`;
   }
   return true;
 }
 
+/** Reservas expiradas libertadas por sorteio (ver releaseExpiredReservations). */
+export const EXPIRED_RELEASE_BATCH = 25;
+
 /**
  * Liberta as reservas da campanha que passaram o prazo. Corre no início de
- * cada sorteio, antes de se calcular o stock e escolher códigos: sem isto um
- * código reservado por quem abandonou o formulário nunca voltava ao stock.
+ * cada sorteio, antes de escolher códigos: sem isto um código reservado por
+ * quem abandonou o formulário nunca voltava ao stock.
+ *
+ * No máximo um lote por sorteio, as mais antigas primeiro: com milhares por
+ * libertar (uma campanha pausada depois de um pico), libertá-las todas de uma
+ * vez passava o tempo da transação, tudo voltava atrás e nenhuma rotação
+ * conseguia correr. O stock do prémio não depende disto — as reservas
+ * expiradas já não contam (loadPrizeCounters) —, só os códigos e as unidades
+ * dos segmentos voltam aos poucos.
  */
 export async function releaseExpiredReservations(tx: Tx, campaignId: string, now: Date): Promise<number> {
+  return releaseExpired(tx, { prize: { campaignId } }, now);
+}
+
+async function releaseExpired(tx: Tx, scope: Prisma.PrizeAwardWhereInput, now: Date): Promise<number> {
   const expired = await tx.prizeAward.findMany({
-    where: { status: "RESERVED", reservationExpiresAt: { lte: now }, prize: { campaignId } },
+    where: { ...scope, status: "RESERVED", reservationExpiresAt: { lte: now } },
     select: { id: true, prizeCodeId: true, wheelSegmentId: true },
+    orderBy: { reservationExpiresAt: "asc" },
+    take: EXPIRED_RELEASE_BATCH,
   });
   let count = 0;
   for (const award of expired) {

@@ -10,6 +10,7 @@ import { PublicQuizGame } from "@/components/public-game/public-quiz-game";
 import { PublicLeadForm } from "@/components/public-game/public-lead-form";
 import {
   beginGameAction,
+  getStoredResultAction,
   recordAnalyticsEventAction,
   resumeParticipationAction,
   startParticipationAction,
@@ -17,6 +18,8 @@ import {
   submitMemoryResultAction,
   submitQuizAction,
   spinWheelAction,
+  type ResumeParticipationResult,
+  type StoredGameResult,
 } from "@/features/play/actions";
 import type { GameActionResponse, ParticipationRef, PublicLeadFormDefinition } from "@/features/play/types";
 import {
@@ -141,6 +144,21 @@ class GameBlockedError extends Error {
   }
 }
 
+/**
+ * Regista o início do jogo no servidor, com novas tentativas: numa rede móvel
+ * instável um só pedido perde-se, e o relógio do servidor fica por começar.
+ */
+async function beginGame(ref: ParticipationRef): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if ((await beginGameAction(ref)).ok) return;
+    } catch {
+      // Rede: tenta de novo.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+  }
+}
+
 export function PublicGameFlow(props: PublicGameFlowProps) {
   const [currentStage, setCurrentStage] = useState<Stage>("start");
   const [participationId, setParticipationId] = useState<string | null>(null);
@@ -186,6 +204,9 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   // Retoma de uma roda com o resultado retido ("Antes de revelar o
   // resultado"): o prémio só é pedido depois do formulário.
   const [revealAfterLead, setRevealAfterLead] = useState(false);
+  // Resultado da memória ou do quiz numa participação retomada: o jogo já não
+  // aparece, por isso o ecrã final mostra-o.
+  const [storedResult, setStoredResult] = useState<StoredGameResult | null>(null);
   const gameContainerRef = useRef<HTMLDivElement>(null);
 
   const stage = blockedReason ? "blocked" : currentStage;
@@ -208,22 +229,40 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     const storedRef = stored?.participationId ? { participationId: stored.participationId, token: stored.token } : null;
 
     (async () => {
-      const result = storedRef
-        ? await resumeParticipationAction({ campaignId: props.campaignId, ref: storedRef, testRequested: props.isTestMode })
-        : await Promise.resolve(null);
+      let result: ResumeParticipationResult | null = null;
+      if (storedRef) {
+        try {
+          result = await resumeParticipationAction({
+            campaignId: props.campaignId,
+            ref: storedRef,
+            testRequested: props.isTestMode,
+          });
+        } catch (error) {
+          // Rede: não se sabe se a participação continua válida. Fica guardada.
+          console.error("[play] Falha ao retomar a participação:", error);
+          result = { ok: false, reason: "retry" };
+        }
+      } else {
+        await Promise.resolve();
+      }
       if (cancelled || !stored) return;
-      setIdempotencyKey(stored.token);
-      setSessionId(stored.sessionId);
-      // Sem id, a página recarregou a meio do início: o próximo "Jogar" usa a
-      // mesma chave e o servidor devolve a participação já criada.
-      if (!storedRef || !result) return;
-      if (!result.ok) {
-        // Terminada há muito, noutra campanha ou já indisponível: tentativa nova.
-        clearStoredParticipation(props.campaignId, props.isTestMode);
-        setIdempotencyKey(crypto.randomUUID());
-        setSessionId(crypto.randomUUID());
+      // Sem id, a página recarregou a meio do início; sem resposta definitiva,
+      // a retoma falhou por agora. Nos dois casos o próximo "Jogar" usa a
+      // mesma chave e o servidor devolve a participação já criada, em vez de
+      // criar outra (ou esbarrar no limite).
+      if (!storedRef || !result || (!result.ok && result.reason === "retry")) {
+        setIdempotencyKey(stored.token);
+        setSessionId(stored.sessionId);
         return;
       }
+      if (!result.ok) {
+        // Terminada há muito, noutra campanha ou já indisponível: tentativa
+        // nova, com as chaves novas do estado inicial.
+        clearStoredParticipation(props.campaignId, props.isTestMode);
+        return;
+      }
+      setIdempotencyKey(stored.token);
+      setSessionId(stored.sessionId);
       setParticipationId(result.participationId);
       setLeadForm(result.leadForm);
       setLeadSubmitted(result.leadSubmitted);
@@ -239,6 +278,11 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
           if (cancelled) return;
           if (spin.status === "revealed") applySpin(spin.result);
           else if (spin.status === "lead_required") setRevealAfterLead(true);
+        } else {
+          const saved = await getStoredResultAction(storedRef);
+          if (cancelled) return;
+          if (saved.status === "revealed") setStoredResult(saved.result);
+          else if (saved.status === "lead_required") setRevealAfterLead(true);
         }
         setCurrentStage(leadStillNeeded ? "lead-after" : "final");
       }
@@ -270,7 +314,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     if (stage !== "game" || !ref || props.campaignType === "WHEEL") return;
     if (begunRef.current === ref.participationId) return;
     begunRef.current = ref.participationId;
-    void beginGameAction(ref).catch(() => undefined);
+    void beginGame(ref);
   }, [stage, ref, props.campaignType]);
 
   async function handleStart() {
@@ -362,7 +406,19 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       return result;
     }
 
-    if (prizePending || revealAfterLead) {
+    if (revealAfterLead && props.campaignType !== "WHEEL") {
+      // Memória ou quiz retomados com o resultado retido: agora o servidor
+      // já o envia, para o ecrã final.
+      try {
+        const revealed = await getStoredResultAction(ref);
+        if (revealed.status !== "revealed") return { ok: false, reason: "result_unavailable" };
+        setRevealAfterLead(false);
+        setStoredResult(revealed.result);
+      } catch (error) {
+        console.error("[play] Falha ao obter o resultado:", error);
+        return { ok: false, reason: "result_unavailable" };
+      }
+    } else if (prizePending || revealAfterLead) {
       // O formulário foi aceite: agora o servidor já envia o prémio (ou o
       // código). Sem ele não se avança — o ecrã final ficava sem prémio e sem
       // forma de o recuperar. Repetir o envio é seguro: o formulário já
@@ -523,6 +579,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
               stock esgotou.
             </p>
           )}
+          {storedResult && <StoredResultCard stored={storedResult} />}
           {wheelPrize && (
             <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
               <p className="text-sm">O seu prémio</p>
@@ -546,10 +603,19 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             </a>
           )}
           <div className="mt-4 flex justify-center gap-4 text-sm">
-            {props.final.allowReplay && (
+            {props.final.allowReplay ? (
               <button type="button" onClick={handleReplay} className="text-caetano-deep-blue underline">
                 Jogar novamente
               </button>
+            ) : (
+              resumed && (
+                // Recarregar retoma a participação; num dispositivo partilhado
+                // (quiosque, tablet num evento) é assim que se passa à pessoa
+                // seguinte. Os limites de participação aplicam-se na mesma.
+                <button type="button" onClick={handleReplay} className="text-caetano-deep-blue underline">
+                  Começar uma nova participação
+                </button>
+              )
             )}
             {props.final.allowShare && typeof navigator !== "undefined" && (
               <button
@@ -583,6 +649,42 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             <p className="mt-2 whitespace-pre-line rounded-lg bg-caetano-medium-gray-20 p-3 text-left text-xs text-caetano-anthracite-80">
               {props.regulationText}
             </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StoredResultCard({ stored }: { stored: StoredGameResult }) {
+  if (stored.kind === "MEMORY") {
+    return (
+      <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
+        <p className="text-lg font-bold">{stored.result.completed ? "Jogo concluído!" : "Tempo esgotado"}</p>
+        <p className="mt-1 text-sm">Pontuação: {stored.result.score}</p>
+      </div>
+    );
+  }
+  const { result } = stored;
+  return (
+    <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
+      <p className="text-lg font-bold">
+        {result.percentage.toFixed(0)}% ({result.totalScore}/{result.maxPossibleScore} pontos)
+      </p>
+      {result.passed != null && <p className="mt-1 text-sm">{result.passed ? "Aprovado" : "Não aprovado"}</p>}
+      {result.resultProfile && (
+        <div className="mt-3">
+          <p className="font-medium">{result.resultProfile.title}</p>
+          {result.resultProfile.description && (
+            <p className="mt-1 text-sm text-caetano-anthracite-80">{result.resultProfile.description}</p>
+          )}
+          {result.resultProfile.ctaLabel && result.resultProfile.ctaUrl && (
+            <a
+              href={result.resultProfile.ctaUrl}
+              className="mt-3 inline-block rounded-lg bg-caetano-deep-blue px-4 py-2 text-sm text-white"
+            >
+              {result.resultProfile.ctaLabel}
+            </a>
           )}
         </div>
       )}

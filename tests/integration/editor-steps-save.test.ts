@@ -36,6 +36,7 @@ const { utcToZonedDateTimeLocal } = await import("@/lib/dates/timezone");
 const { updateProjectInfoAction } = await import("@/features/campaigns/steps/project-info-actions");
 const { updateScheduleAction } = await import("@/features/campaigns/steps/schedule-actions");
 const { updateParticipationRulesAction } = await import("@/features/campaigns/steps/participation-actions");
+const { LIVE_MIN_AGE_NEEDS_BIRTH_DATE_MESSAGE } = await import("@/features/publishing/age-check");
 
 const NOT_FOUND = { digest: expect.stringContaining("404") };
 
@@ -625,6 +626,51 @@ describe("Regras de participação", () => {
     const cleared = await updateParticipationRulesAction(IDLE, rulesForm("ONE_PER_HOUR", undefined, "", campaign.id));
     expect(cleared.status).toBe("success");
     expect((await reload(campaign.id)).minAge).toBeNull();
+  });
+
+  it("idade 0 é recusada: não restringe ninguém", async () => {
+    const campaign = await createCampaign(org);
+    session.current = org.editor;
+
+    const result = await updateParticipationRulesAction(IDLE, rulesForm("ONE_TOTAL", undefined, "0", campaign.id));
+
+    expect(result.status === "error" && result.fieldErrors).toEqual({ minAge: "Idade mínima: mínimo 1." });
+    expect((await reload(campaign.id)).minAge).toBe(18);
+  });
+
+  it("numa campanha publicada sem data de nascimento, a idade mínima é recusada e o limite grava", async () => {
+    const campaign = await createCampaign(org, { status: "PUBLISHED", minAge: null });
+    await prisma.leadForm.create({
+      data: {
+        campaignId: campaign.id,
+        position: "BEFORE_GAME",
+        fields: { create: [{ type: "EMAIL", internalKey: "email", label: "E-mail", order: 0 }] },
+      },
+    });
+    session.current = org.editor;
+
+    const refused = await updateParticipationRulesAction(IDLE, rulesForm("ONE_PER_DAY", undefined, "18", campaign.id));
+
+    expect(refused).toMatchObject({
+      status: "error",
+      message: PARTIAL_SAVE_MESSAGE,
+      fieldErrors: { minAge: LIVE_MIN_AGE_NEEDS_BIRTH_DATE_MESSAGE },
+    });
+    expect(await reload(campaign.id)).toMatchObject({ participationLimitType: "ONE_PER_DAY", minAge: null });
+
+    // Com a data de nascimento no formulário, já grava.
+    await prisma.leadFormField.create({
+      data: {
+        leadForm: { connect: { campaignId: campaign.id } },
+        type: "BIRTH_DATE",
+        internalKey: "nascimento",
+        label: "Nascimento",
+        order: 1,
+      },
+    });
+    const saved = await updateParticipationRulesAction(IDLE, rulesForm("ONE_PER_DAY", undefined, "18", campaign.id));
+    expect(saved.status).toBe("success");
+    expect((await reload(campaign.id)).minAge).toBe(18);
   });
 
   it("tipo desconhecido é recusado com mensagem em português", async () => {

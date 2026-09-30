@@ -152,7 +152,7 @@ export const participationLimitTypeSchema = z.enum([
 export const PARTICIPATION_LIMITS = {
   customMaxMin: 1,
   customMaxMax: 1_000_000,
-  minAgeMin: 0,
+  minAgeMin: 1,
   minAgeMax: 120,
 } as const;
 

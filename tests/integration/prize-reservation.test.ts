@@ -21,6 +21,8 @@ vi.mock("@/lib/security/rate-limit", () => ({
 vi.mock("@/lib/security/request-ip", () => ({ getRequestIp: async () => null }));
 
 const { spinWheelAction, submitLeadFormAction } = await import("@/features/play/actions");
+const { EXPIRED_RELEASE_BATCH } = await import("@/features/prizes/reservation");
+const { getCampaignStats } = await import("@/features/analytics/campaign-stats");
 
 interface Options {
   position: LeadFormPosition | null;
@@ -138,7 +140,15 @@ async function createFixture(options: Options) {
     await prisma.organization.delete({ where: { id: organization.id } });
   });
 
-  return { campaignId: campaign.id, prizeId: prize.id, winSegmentId, leadFormId, participate, lead };
+  return {
+    organizationId: organization.id,
+    campaignId: campaign.id,
+    prizeId: prize.id,
+    winSegmentId,
+    leadFormId,
+    participate,
+    lead,
+  };
 }
 
 const award = (participationId: string) =>
@@ -297,6 +307,103 @@ describe("reserva do prémio até à lead", () => {
     const ref = await fixture.participate(true);
     revealed(await spinWheelAction(ref));
     expect(await prisma.prizeAward.count({ where: { participationId: ref.participationId } })).toBe(0);
+  });
+});
+
+describe("libertação de reservas expiradas", () => {
+  /** Reservas expiradas já gravadas, sem passar pelo sorteio (a mais antiga primeiro). */
+  async function expiredReservations(
+    fixture: Awaited<ReturnType<typeof createFixture>>,
+    count: number,
+    expiredMsAgo: number,
+  ): Promise<string[]> {
+    const ids: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const ref = await fixture.participate();
+      const created = await prisma.prizeAward.create({
+        data: {
+          participationId: ref.participationId,
+          prizeId: fixture.prizeId,
+          status: "RESERVED",
+          reservationExpiresAt: new Date(Date.now() - expiredMsAgo + i * 1000),
+        },
+      });
+      ids.push(created.id);
+    }
+    return ids;
+  }
+
+  it("a unidade devolvida nunca passa o total do segmento, mesmo que o limite tenha mudado depois do sorteio", async () => {
+    // Segmento sem limite no sorteio: a reserva não tirou nenhuma unidade.
+    const fixture = await createFixture({ position: "AFTER_GAME" });
+    const ref = await fixture.participate();
+    revealed(await spinWheelAction(ref));
+    await prisma.wheelSegment.update({
+      where: { id: fixture.winSegmentId },
+      data: { totalQuantity: 1, remainingQuantity: 1 },
+    });
+
+    expect(await fixture.lead(ref, "bot@example.pt", { honeypot: "http://spam" })).toEqual({ ok: true });
+
+    expect((await award(ref.participationId)).status).toBe("RELEASED");
+    const segment = await prisma.wheelSegment.findUniqueOrThrow({ where: { id: fixture.winSegmentId } });
+    expect(segment.remainingQuantity).toBe(1);
+  });
+
+  it("cada sorteio liberta no máximo um lote, as mais antigas primeiro", async () => {
+    const fixture = await createFixture({ position: "AFTER_GAME", prize: { totalQuantity: null }, codes: 0 });
+    const ids = await expiredReservations(fixture, EXPIRED_RELEASE_BATCH + 3, 3_600_000);
+
+    revealed(await spinWheelAction(await fixture.participate()));
+
+    const released = await prisma.prizeAward.findMany({ where: { id: { in: ids }, status: "RELEASED" } });
+    expect(released.map((row) => row.id).sort()).toEqual(ids.slice(0, EXPIRED_RELEASE_BATCH).sort());
+    expect(released.every((row) => row.releaseReason === "EXPIRED")).toBe(true);
+
+    // O sorteio seguinte continua o trabalho.
+    revealed(await spinWheelAction(await fixture.participate()));
+    expect(await prisma.prizeAward.count({ where: { id: { in: ids }, status: "RESERVED" } })).toBe(0);
+  });
+
+  it("sem códigos livres, liberta as reservas expiradas do prémio antes de o atribuir sem código", async () => {
+    const fixture = await createFixture({ position: "AFTER_GAME", prize: { totalQuantity: null }, codes: 1 });
+    const holder = await fixture.participate();
+    revealed(await spinWheelAction(holder));
+    const held = await award(holder.participationId);
+    expect(held.prizeCode?.status).toBe("RESERVED");
+    await prisma.prizeAward.update({
+      where: { id: held.id },
+      data: { reservationExpiresAt: new Date(Date.now() - 1000) },
+    });
+    // Um lote inteiro de reservas mais antigas, sem código: o lote do
+    // sorteio não chega à que tem o código.
+    await expiredReservations(fixture, EXPIRED_RELEASE_BATCH, 3_600_000);
+
+    const next = await fixture.participate();
+    revealed(await spinWheelAction(next));
+
+    expect((await award(holder.participationId)).status).toBe("RELEASED");
+    const taken = await award(next.participationId);
+    expect(taken.prizeCodeId).toBe(held.prizeCodeId);
+    expect(taken.prizeCode?.status).toBe("RESERVED");
+  });
+
+  it("as estatísticas contam como não reclamada uma reserva expirada ainda por libertar", async () => {
+    const fixture = await createFixture({ position: "AFTER_GAME", codes: 2 });
+    const expired = await fixture.participate();
+    revealed(await spinWheelAction(expired));
+    await prisma.prizeAward.update({
+      where: { participationId: expired.participationId },
+      data: { reservationExpiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const stats = await getCampaignStats(
+      fixture.organizationId,
+      { preset: "all", from: new Date(0), to: new Date(Date.now() + 60_000) },
+      { campaignId: fixture.campaignId },
+    );
+
+    expect(stats.wheel).toMatchObject({ winners: 1, prizesAwarded: 0, prizesReserved: 0, prizesUnclaimed: 1 });
   });
 });
 

@@ -1,5 +1,5 @@
 import type { CampaignForEditor } from "@/features/campaigns/queries";
-import { effectiveLeadFormPosition } from "@/features/play/reveal";
+import { AGE_UNVERIFIABLE_ISSUE, isAgeVerifiable } from "@/features/publishing/age-check";
 
 export interface PublishReadiness {
   ready: boolean;
@@ -49,20 +49,15 @@ export function getPublishReadiness(campaign: CampaignForEditor): PublishReadine
     issues.push("A campanha precisa de ter um formulário de leads configurado.");
   }
 
-  // A idade mínima só se verifica com a data de nascimento no formulário;
-  // sem ela o jogo público recusa todas as participações (falha fechado).
-  const position = effectiveLeadFormPosition(
-    campaign.leadForm
-      ? {
-          position: campaign.leadForm.position,
-          fieldCount: campaign.leadForm.fields.length,
-          consentCount: campaign.leadForm.consentDefinitions.length,
-        }
-      : null,
-  );
-  const hasBirthDate = campaign.leadForm?.fields.some((field) => field.type === "BIRTH_DATE") ?? false;
-  if (campaign.minAge != null && (position === "NONE" || !hasBirthDate)) {
-    issues.push("A idade mínima exige um campo de data de nascimento no formulário de leads.");
+  const ageForm = campaign.leadForm
+    ? {
+        position: campaign.leadForm.position,
+        fields: campaign.leadForm.fields,
+        consentCount: campaign.leadForm.consentDefinitions.length,
+      }
+    : null;
+  if (!isAgeVerifiable(campaign.minAge, ageForm)) {
+    issues.push(AGE_UNVERIFIABLE_ISSUE);
   }
 
   return { ready: issues.length === 0, issues };

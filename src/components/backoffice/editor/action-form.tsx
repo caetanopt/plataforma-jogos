@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, startTransition, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, startTransition, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { FormAction } from "@/lib/forms/action-result";
 import {
   FormActionContext,
@@ -49,10 +49,24 @@ export function ActionForm({
 
   useFieldErrorAria(formRef, result, idPrefix);
 
+  // O reset remonta os campos e o botão que tinha o foco: sem isto o foco
+  // caía no <body> e quem usa o teclado recomeçava no topo da página
+  // (WCAG 2.4.3). Volta ao primeiro campo, pronto para o item seguinte.
+  const focusAfterResetRef = useRef(false);
+  useEffect(() => {
+    if (!focusAfterResetRef.current) return;
+    focusAfterResetRef.current = false;
+    const first = formRef.current?.querySelector<HTMLElement>(
+      "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])",
+    );
+    first?.focus();
+  }, [resetKey]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     // Um envio durante o upload levava o id antigo (ou nenhum).
     if (uploading || isPending) return;
+    focusAfterResetRef.current = resetOnSuccess && event.currentTarget.contains(document.activeElement);
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const formData = new FormData(event.currentTarget, submitter);
     startTransition(() => dispatch(formData));
