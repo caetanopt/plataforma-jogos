@@ -127,7 +127,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
   return (
     <div>
       {previewing && (
-        <p className="mb-3 text-center text-sm text-caetano-anthracite-80" aria-live="polite">
+        <p className="mb-3 text-center text-sm text-game-muted" aria-live="polite">
           Memorize as cartas…
         </p>
       )}
@@ -158,9 +158,9 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
                 faceUp ? tile.alt ?? tile.text ?? "revelada" : "virada para baixo"
               }${isMatched ? ", par encontrado" : ""}`}
               className={cn(
-                "flex aspect-square cursor-pointer touch-manipulation items-center justify-center overflow-hidden rounded-lg border border-caetano-medium-gray-40 bg-white p-1",
+                "flex aspect-square cursor-pointer touch-manipulation items-center justify-center overflow-hidden rounded-game border border-game-border bg-game-surface p-1",
                 "transition-[transform,border-color] duration-150",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2",
                 !locked && "motion-safe:active:scale-[0.96]",
                 // Tom oficial em vez de opacidade, que deixa de ser cor da
                 // paleta assim que o fundo não é branco.
@@ -173,7 +173,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={tile.mediaUrl} alt={tile.alt ?? ""} className="h-full w-full object-contain" />
                 ) : (
-                  <span className="text-center text-sm font-medium text-caetano-anthracite">
+                  <span className="text-center text-sm font-medium text-game-text">
                     {tile.text}
                   </span>
                 )
@@ -181,14 +181,14 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={config.cardBackUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="h-full w-full rounded-lg bg-caetano-deep-blue" />
+                <span className="h-full w-full rounded-game bg-game-primary" />
               )}
             </button>
           );
         })}
       </div>
 
-      <div className="mt-4 flex justify-center gap-6 text-sm text-caetano-anthracite-80">
+      <div className="mt-4 flex justify-center gap-6 text-sm text-game-muted">
         {/*
           O tempo muda a cada segundo: dentro de um aria-live fazia o leitor de
           ecrã falar sem parar. Fica fora; o que é anunciado são as tentativas

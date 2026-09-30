@@ -4,6 +4,7 @@ import type { OrgContext } from "@/server/auth/session";
 export type PermissionAction =
   | "workspace:manage"
   | "user:manage"
+  | "organization:manage"
   | "brand:manage"
   | "campaign:create"
   | "campaign:edit"
@@ -19,6 +20,8 @@ const ROLE_ACTIONS: Record<MembershipRole, PermissionAction[]> = {
   ORG_ADMIN: [
     "workspace:manage",
     "user:manage",
+    // Configurações da organização (contacto de privacidade, §24).
+    "organization:manage",
     "brand:manage",
     "campaign:create",
     "campaign:edit",

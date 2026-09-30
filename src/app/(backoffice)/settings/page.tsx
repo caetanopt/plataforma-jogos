@@ -1,5 +1,10 @@
 import { requirePagePermission } from "@/server/auth/page-guard";
+import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
+import { updatePrivacySettingsAction } from "@/features/organizations/actions";
+import { ORGANIZATION_LIMITS } from "@/lib/validation/organization";
+import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,15 +58,51 @@ export default async function SettingsPage({
   ]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const canManageOrganization = can(context, "organization:manage");
+  const organization = canManageOrganization
+    ? await prisma.organization.findUnique({
+        where: { id: context.organizationId },
+        select: { privacyContactEmail: true },
+      })
+    : null;
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-bold text-caetano-anthracite">Configurações</h1>
+
+      {organization && (
+        <section
+          aria-labelledby="privacy-heading"
+          className="mt-6 max-w-2xl rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+        >
+          <h2 id="privacy-heading" className="text-lg font-bold text-caetano-anthracite">
+            Privacidade
+          </h2>
+          <AutoSaveForm action={updatePrivacySettingsAction} className="mt-3 space-y-1">
+            <Label htmlFor="privacyContactEmail">Contacto de privacidade (e-mail)</Label>
+            <Input
+              id="privacyContactEmail"
+              name="privacyContactEmail"
+              type="email"
+              autoComplete="off"
+              maxLength={ORGANIZATION_LIMITS.privacyContactEmail}
+              defaultValue={organization.privacyContactEmail ?? ""}
+              aria-describedby="privacyContactEmail-help"
+            />
+            <p id="privacyContactEmail-help" className="text-xs text-caetano-anthracite-80">
+              Aparece no jogo, junto ao formulário de leads e no rodapé, para os participantes pedirem acesso,
+              correção ou eliminação dos seus dados (RGPD).
+            </p>
+          </AutoSaveForm>
+        </section>
+      )}
+
+      <h2 className="mt-8 text-lg font-bold text-caetano-anthracite">Auditoria</h2>
       <p className="mt-1 text-caetano-anthracite-80">
-        Auditoria de ações relevantes {context.isSuperAdmin ? "em todas as organizações" : "nesta organização"}.
+        Ações relevantes {context.isSuperAdmin ? "em todas as organizações" : "nesta organização"}.
       </p>
 
-      <form method="get" className="mt-6 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+      <form method="get" className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <div>
           <Label htmlFor="action">Ação</Label>
           <select id="action" name="action" defaultValue={params.action ?? ""} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm">

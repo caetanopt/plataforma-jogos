@@ -91,7 +91,7 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
       */}
       <div className="relative aspect-square w-full max-w-72">
         <div
-          className="absolute inset-0 rounded-full border-4 border-caetano-deep-blue"
+          className="absolute inset-0 rounded-full border-4 border-game-primary"
           style={{
             transform: `rotate(${rotation}deg)`,
             transition:
@@ -104,7 +104,7 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
           aria-label={`Roda com ${segments.length} segmentos: ${segments.map((s) => s.name).join(", ")}`}
         />
         <div
-          className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-caetano-anthracite"
+          className="absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-game-text"
           aria-hidden="true"
         />
       </div>
@@ -116,10 +116,10 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
           disabled={spinning}
           aria-busy={spinning || undefined}
           className={cn(
-            "cursor-pointer touch-manipulation select-none rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white",
+            "cursor-pointer touch-manipulation select-none rounded-game bg-game-button px-8 py-3 font-bold text-game-button-text",
             "transition-[background-color,transform] duration-150 motion-safe:active:scale-[0.97]",
-            "hover:bg-caetano-deep-blue-80 active:bg-caetano-deep-blue",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2",
+            "hover:bg-game-button-hover active:bg-game-button",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2",
             "disabled:cursor-progress disabled:opacity-60",
           )}
         >
@@ -139,25 +139,25 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
       */}
       <div aria-live="polite" className="w-full">
         {result && (
-          <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
-            <p className="text-lg font-bold text-caetano-anthracite">
+          <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
+            <p className="text-lg font-bold text-game-text">
               {result.outcome === "WIN" ? "Parabéns, ganhou!" : "Não foi desta vez"}
             </p>
-            {result.prize && <p className="mt-1 text-caetano-anthracite-80">{result.prize.publicName}</p>}
+            {result.prize && <p className="mt-1 text-game-muted">{result.prize.publicName}</p>}
             {result.prize?.code && <p className="mt-1 font-mono text-sm">{result.prize.code}</p>}
             {result.prizePending && (
-              <p className="mt-1 text-caetano-anthracite-80">
+              <p className="mt-1 text-game-muted">
                 {result.prize
                   ? "Preencha os seus dados a seguir para receber o código."
                   : "Preencha os seus dados a seguir para receber o prémio."}
               </p>
             )}
             {result.prizeUnavailable && (
-              <p className="mt-1 text-caetano-anthracite-80">
+              <p className="mt-1 text-game-muted">
                 O prémio já não pode ser atribuído a esta participação.
               </p>
             )}
-            {result.message && <p className="mt-2 text-sm text-caetano-anthracite-80">{result.message}</p>}
+            {result.message && <p className="mt-2 text-sm text-game-muted">{result.message}</p>}
           </div>
         )}
       </div>

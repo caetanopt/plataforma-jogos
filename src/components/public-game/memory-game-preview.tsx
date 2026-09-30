@@ -19,7 +19,7 @@ export function MemoryGamePreview({
 
   if (pairs.length === 0) {
     return (
-      <p className="text-sm text-caetano-anthracite-80">
+      <p className="text-sm text-game-muted">
         Adicione pelo menos um par de cartas para pré-visualizar o jogo.
       </p>
     );
@@ -34,17 +34,17 @@ export function MemoryGamePreview({
       config: scoringConfig,
     });
     return (
-      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
-        <p className="text-lg font-bold text-caetano-anthracite">
+      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
+        <p className="text-lg font-bold text-game-text">
           {score.completed ? "Jogo concluído!" : "Simulação terminada"}
         </p>
-        <p className="mt-2 text-caetano-anthracite-80">
+        <p className="mt-2 text-game-muted">
           Pontuação: {score.score} · Tentativas: {result.attempts} · Tempo: {result.timeSeconds}s
         </p>
         <button
           type="button"
           onClick={() => setResult(null)}
-          className="mt-4 rounded-lg border border-caetano-medium-gray px-4 py-2 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20"
+          className="mt-4 rounded-game border border-game-border-strong px-4 py-2 text-sm text-game-text hover:bg-game-subtle"
         >
           Jogar novamente
         </button>

@@ -44,7 +44,7 @@ export function PublicQuizGame({
         <button
           type="button"
           onClick={onContinue}
-          className="w-full rounded-lg bg-caetano-deep-blue px-4 py-2.5 font-medium text-white"
+          className="w-full rounded-game bg-game-button px-4 py-2.5 font-medium text-game-button-text"
         >
           Continuar
         </button>

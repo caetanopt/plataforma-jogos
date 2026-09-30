@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { Redis } from "ioredis";
+import { Client } from "pg";
 import { E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD } from "./global-setup.mts";
 import { rateLimitRedisKey } from "../../src/lib/security/rate-limit-key";
 
@@ -40,7 +41,27 @@ export async function createCampaign(
   await page.waitForURL(/\/apps\/[^/]+\/informacoes/, { timeout: 15_000 });
   const match = page.url().match(/apps\/([^/]+)\//);
   if (!match) throw new Error("Não foi possível extrair o ID da campanha criada.");
+  await setLegalText(match[1], E2E_LEGAL_TEXT);
   return match[1];
+}
+
+export const E2E_LEGAL_TEXT = "Os dados recolhidos servem apenas para gerir esta campanha de teste.";
+
+/**
+ * Um formulário que pede dados pessoais só se publica com o aviso de
+ * privacidade (texto legal ou política de privacidade, ver readiness.ts):
+ * cada campanha dos testes nasce com um texto legal, como uma real teria.
+ * Direto na base de dados (pg): este ficheiro corre como CommonJS e não
+ * pode carregar o cliente Prisma gerado (ver db.mts).
+ */
+export async function setLegalText(campaignId: string, legalText: string | null): Promise<void> {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query('UPDATE "Campaign" SET "legalText" = $1 WHERE "id" = $2', [legalText, campaignId]);
+  } finally {
+    await client.end();
+  }
 }
 
 export async function publishCampaign(page: Page, campaignId: string): Promise<string> {

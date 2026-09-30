@@ -482,8 +482,21 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
   // com elas os prémios atribuídos, os consentimentos e as respostas. O FOR
   // UPDATE faz esperar as participações que comecem entretanto (a inserção
   // precisa da campanha), em vez de uma delas travar a eliminação a meio.
-  const [, participations] = await prisma.$transaction([
+  //
+  // O Participant liga-se só à organização: sem isto, o nome, o e-mail e o
+  // telefone gravados nele (antes de a identidade passar para a participação)
+  // sobreviviam à eliminação que o aviso diz apagar tudo (§24). Saem os que
+  // só participaram nesta campanha; quem jogou também noutra fica (o
+  // identificador do browser serve os limites de participação de lá). Antes
+  // das participações: a FK é SET NULL e, depois de elas saírem, já não se
+  // sabia quem só tinha jogado aqui.
+  const [, participantsDeleted, participations] = await prisma.$transaction([
     prisma.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR UPDATE`,
+    prisma.$executeRaw`
+      DELETE FROM "Participant" p
+      WHERE p."organizationId" = ${context.organizationId}
+        AND EXISTS (SELECT 1 FROM "Participation" x WHERE x."participantId" = p."id" AND x."campaignId" = ${campaign.id})
+        AND NOT EXISTS (SELECT 1 FROM "Participation" y WHERE y."participantId" = p."id" AND y."campaignId" <> ${campaign.id})`,
     prisma.participation.deleteMany({ where: { campaignId: campaign.id } }),
     prisma.campaignVersion.deleteMany({ where: { campaignId: campaign.id } }),
     prisma.campaign.delete({ where: { id: campaign.id } }),
@@ -496,8 +509,21 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
     entityType: "Campaign",
     entityId: campaign.id,
     result: "SUCCESS",
-    metadata: { participationsDeleted: participations.count },
+    metadata: { participationsDeleted: participations.count, participantsDeleted },
   });
+  // A eliminação dos dados pessoais também fica como operação de privacidade
+  // (§26), só com as contagens.
+  if (participations.count > 0 || participantsDeleted > 0) {
+    await logAudit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      action: "PRIVACY_OPERATION",
+      entityType: "Campaign",
+      entityId: campaign.id,
+      result: "SUCCESS",
+      metadata: { operation: "campaign_delete", participationsDeleted: participations.count, participantsDeleted },
+    });
+  }
 
   revalidatePath("/apps");
   // A contagem de aplicações por pasta aparece na página inicial.

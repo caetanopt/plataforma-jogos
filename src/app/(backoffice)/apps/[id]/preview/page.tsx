@@ -4,6 +4,7 @@ import { prisma } from "@/server/db/client";
 import { MemoryGamePreview } from "@/components/public-game/memory-game-preview";
 import { WheelGamePreview } from "@/components/public-game/wheel-game-preview";
 import { QuizGamePreview } from "@/components/public-game/quiz-game-preview";
+import { GameThemeShell } from "@/components/public-game/game-theme-shell";
 
 export default async function CampaignPreviewPage({
   params,
@@ -25,6 +26,7 @@ export default async function CampaignPreviewPage({
         },
       },
       prizes: true,
+      theme: true,
     },
   });
   if (!campaign) notFound();
@@ -47,6 +49,8 @@ export default async function CampaignPreviewPage({
       ),
     );
   }
+  // O tema da campanha, como no jogo público.
+  if (campaign.theme?.backgroundImageMediaId) mediaIdsToFetch.push(campaign.theme.backgroundImageMediaId);
   if (mediaIdsToFetch.length) {
     const mediaAssets = await prisma.mediaAsset.findMany({ where: { id: { in: mediaIdsToFetch }, organizationId: context.organizationId } });
     mediaById = new Map(mediaAssets.map((m) => [m.id, m]));
@@ -60,89 +64,97 @@ export default async function CampaignPreviewPage({
         Pré-visualização — simulação local, não afeta estatísticas nem participações.
       </div>
 
-      {campaign.type === "MEMORY" && campaign.memoryConfig ? (
-        <MemoryGamePreview
-          pairs={campaign.memoryConfig.pairs.map((pair) => ({
-            id: pair.id,
-            cardAMediaUrl: pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined,
-            cardAText: pair.cardAText,
-            cardAAlt: pair.cardAAltText,
-            cardBMediaUrl: pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined,
-            cardBText: pair.cardBText,
-            cardBAlt: pair.cardBAltText,
-          }))}
-          config={{
-            columns: campaign.memoryConfig.columns,
-            randomizeOrder: campaign.memoryConfig.randomizeOrder,
-            cardGapPx: campaign.memoryConfig.cardGapPx,
-            timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
-            maxAttempts: campaign.memoryConfig.maxAttempts,
-            previewSeconds: campaign.memoryConfig.previewSeconds,
-            cardBackUrl: campaign.memoryConfig.cardBackMediaId
-              ? mediaById.get(campaign.memoryConfig.cardBackMediaId)?.url
-              : undefined,
-          }}
-          scoringConfig={{
-            pointsPerPair: campaign.memoryConfig.pointsPerPair,
-            penaltyPerMistake: campaign.memoryConfig.penaltyPerMistake,
-            speedBonusEnabled: campaign.memoryConfig.speedBonusEnabled,
-            timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
-            maxAttempts: campaign.memoryConfig.maxAttempts,
-          }}
-        />
-      ) : campaign.type === "WHEEL" && campaign.wheelConfig ? (
-        <WheelGamePreview
-          segments={campaign.wheelConfig.segments
-            .filter((segment) => segment.isActive)
-            .map((segment) => ({
-              id: segment.id,
-              name: segment.name,
-              colorHex: segment.colorHex,
-              weight: segment.weight,
-              outcome: segment.outcome,
-              message: segment.message,
-              prizeName: segment.prizeId ? (prizeById.get(segment.prizeId)?.publicName ?? null) : null,
+      <GameThemeShell
+        theme={campaign.theme}
+        backgroundImageUrl={
+          campaign.theme?.backgroundImageMediaId ? mediaById.get(campaign.theme.backgroundImageMediaId)?.url : undefined
+        }
+        className="rounded-xl p-4"
+      >
+        {campaign.type === "MEMORY" && campaign.memoryConfig ? (
+          <MemoryGamePreview
+            pairs={campaign.memoryConfig.pairs.map((pair) => ({
+              id: pair.id,
+              cardAMediaUrl: pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined,
+              cardAText: pair.cardAText,
+              cardAAlt: pair.cardAAltText,
+              cardBMediaUrl: pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined,
+              cardBText: pair.cardBText,
+              cardBAlt: pair.cardBAltText,
             }))}
-        />
-      ) : campaign.type === "QUIZ" && campaign.quizConfig ? (
-        <QuizGamePreview
-          questions={campaign.quizConfig.questions.map((question) => ({
-            id: question.id,
-            type: question.type,
-            title: question.title,
-            supportText: question.supportText,
-            imageUrl: question.imageMediaId ? mediaById.get(question.imageMediaId)?.url : undefined,
-            points: question.points,
-            correctAnswerIds: question.answers.filter((a) => a.isCorrect).map((a) => a.id),
-            answers: question.answers.map((answer) => ({
-              id: answer.id,
-              text: answer.text,
-              imageUrl: answer.imageMediaId ? mediaById.get(answer.imageMediaId)?.url : undefined,
-            })),
-          }))}
-          resultProfiles={campaign.quizConfig.resultProfiles.map((profile) => ({
-            id: profile.id,
-            minPercentage: profile.minPercentage,
-            maxPercentage: profile.maxPercentage,
-            title: profile.title,
-            description: profile.description,
-            ctaLabel: profile.ctaLabel,
-            ctaUrl: profile.ctaUrl,
-          }))}
-          config={{
-            allowGoBack: campaign.quizConfig.allowGoBack,
-            showProgress: campaign.quizConfig.showProgress,
-            totalTimeLimitSeconds: campaign.quizConfig.totalTimeLimitSeconds,
-            penaltyPerWrong: campaign.quizConfig.penaltyPerWrong,
-            speedBonusEnabled: campaign.quizConfig.speedBonusEnabled,
-            minPassPercentage: campaign.quizConfig.minPassPercentage,
-          }}
-        />
-      ) : (
-        <p className="text-center text-sm text-caetano-anthracite-80">
-          Pré-visualização ainda não disponível para este tipo de jogo.
-        </p>
-      )}
+            config={{
+              columns: campaign.memoryConfig.columns,
+              randomizeOrder: campaign.memoryConfig.randomizeOrder,
+              cardGapPx: campaign.memoryConfig.cardGapPx,
+              timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
+              maxAttempts: campaign.memoryConfig.maxAttempts,
+              previewSeconds: campaign.memoryConfig.previewSeconds,
+              cardBackUrl: campaign.memoryConfig.cardBackMediaId
+                ? mediaById.get(campaign.memoryConfig.cardBackMediaId)?.url
+                : undefined,
+            }}
+            scoringConfig={{
+              pointsPerPair: campaign.memoryConfig.pointsPerPair,
+              penaltyPerMistake: campaign.memoryConfig.penaltyPerMistake,
+              speedBonusEnabled: campaign.memoryConfig.speedBonusEnabled,
+              timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
+              maxAttempts: campaign.memoryConfig.maxAttempts,
+            }}
+          />
+        ) : campaign.type === "WHEEL" && campaign.wheelConfig ? (
+          <WheelGamePreview
+            segments={campaign.wheelConfig.segments
+              .filter((segment) => segment.isActive)
+              .map((segment) => ({
+                id: segment.id,
+                name: segment.name,
+                colorHex: segment.colorHex,
+                weight: segment.weight,
+                outcome: segment.outcome,
+                message: segment.message,
+                prizeName: segment.prizeId ? (prizeById.get(segment.prizeId)?.publicName ?? null) : null,
+              }))}
+          />
+        ) : campaign.type === "QUIZ" && campaign.quizConfig ? (
+          <QuizGamePreview
+            questions={campaign.quizConfig.questions.map((question) => ({
+              id: question.id,
+              type: question.type,
+              title: question.title,
+              supportText: question.supportText,
+              imageUrl: question.imageMediaId ? mediaById.get(question.imageMediaId)?.url : undefined,
+              points: question.points,
+              correctAnswerIds: question.answers.filter((a) => a.isCorrect).map((a) => a.id),
+              answers: question.answers.map((answer) => ({
+                id: answer.id,
+                text: answer.text,
+                imageUrl: answer.imageMediaId ? mediaById.get(answer.imageMediaId)?.url : undefined,
+              })),
+            }))}
+            resultProfiles={campaign.quizConfig.resultProfiles.map((profile) => ({
+              id: profile.id,
+              minPercentage: profile.minPercentage,
+              maxPercentage: profile.maxPercentage,
+              title: profile.title,
+              description: profile.description,
+              ctaLabel: profile.ctaLabel,
+              ctaUrl: profile.ctaUrl,
+            }))}
+            config={{
+              allowGoBack: campaign.quizConfig.allowGoBack,
+              showProgress: campaign.quizConfig.showProgress,
+              totalTimeLimitSeconds: campaign.quizConfig.totalTimeLimitSeconds,
+              penaltyPerWrong: campaign.quizConfig.penaltyPerWrong,
+              speedBonusEnabled: campaign.quizConfig.speedBonusEnabled,
+              minPassPercentage: campaign.quizConfig.minPassPercentage,
+            }}
+          />
+        ) : (
+          <p className="text-center text-sm text-game-muted">
+            Pré-visualização ainda não disponível para este tipo de jogo.
+          </p>
+        )}
+      </GameThemeShell>
     </div>
   );
 }

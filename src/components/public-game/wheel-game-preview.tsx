@@ -33,7 +33,7 @@ function simulateSpin(segments: PreviewSegment[]): WheelSpinResult {
 export function WheelGamePreview({ segments }: { segments: PreviewSegment[] }) {
   if (segments.length === 0) {
     return (
-      <p className="text-sm text-caetano-anthracite-80">
+      <p className="text-sm text-game-muted">
         Adicione pelo menos um segmento para pré-visualizar a roda.
       </p>
     );

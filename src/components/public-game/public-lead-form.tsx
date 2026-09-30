@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { isPlausiblePhone } from "@/features/play/identity";
 import type { PublicConsentDefinition, PublicLeadField } from "@/features/play/types";
@@ -14,6 +14,8 @@ interface PublicLeadFormProps {
   submitLabel?: string;
   /** Frase de contexto no topo, ex.: porque é que o formulário aparece agora. */
   intro?: string;
+  /** Informação legal (RGPD) junto ao botão de envio. */
+  privacyNotice?: ReactNode;
   onSubmit: (
     values: Record<string, string>,
     consents: Record<string, boolean>,
@@ -49,6 +51,7 @@ export function PublicLeadForm({
   honeypotEnabled,
   submitLabel = "Continuar",
   intro,
+  privacyNotice,
   onSubmit,
 }: PublicLeadFormProps) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -109,9 +112,9 @@ export function PublicLeadForm({
       onSubmit={handleSubmit}
       tabIndex={-1}
       aria-label={intro ?? "Formulário de participação"}
-      className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-6 outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+      className="space-y-4 rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
     >
-      {intro && <p className="font-medium text-caetano-anthracite">{intro}</p>}
+      {intro && <p className="font-medium text-game-text">{intro}</p>}
       {honeypotEnabled && (
         <div className="absolute left-[-9999px]" aria-hidden="true">
           <label htmlFor="website">Não preencher</label>
@@ -129,7 +132,7 @@ export function PublicLeadForm({
 
       {fields.map((field) => (
         <div key={field.id}>
-          <label htmlFor={field.id} className="mb-1.5 block text-sm font-medium text-caetano-anthracite">
+          <label htmlFor={field.id} className="mb-1.5 block text-sm font-medium text-game-text">
             {field.label}
             {field.required && <span className="text-danger"> *</span>}
           </label>
@@ -140,7 +143,7 @@ export function PublicLeadForm({
               required={field.required}
               placeholder={field.placeholder ?? undefined}
               rows={3}
-              className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
+              className="w-full rounded-game border border-game-border-strong px-3 py-2 text-sm"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
@@ -150,7 +153,7 @@ export function PublicLeadForm({
               aria-required={field.required || undefined}
               aria-describedby={field.helpText ? `${field.id}-help` : undefined}
               required={field.required}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm"
+              className="h-10 w-full rounded-game border border-game-border-strong px-3 text-sm"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             >
@@ -168,7 +171,7 @@ export function PublicLeadForm({
               required={field.required}
               aria-required={field.required || undefined}
               aria-describedby={field.helpText ? `${field.id}-help` : undefined}
-              className="h-4 w-4 rounded border-caetano-medium-gray"
+              className="h-4 w-4 rounded border-game-border-strong"
               checked={values[field.internalKey] === "true"}
               onChange={(e) =>
                 setValues((prev) => ({ ...prev, [field.internalKey]: e.target.checked ? "true" : "false" }))
@@ -189,13 +192,13 @@ export function PublicLeadForm({
               inputMode={field.type === "PHONE" ? "tel" : undefined}
               autoComplete={field.type === "PHONE" ? "tel" : field.type === "EMAIL" ? "email" : undefined}
               placeholder={field.placeholder ?? undefined}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray px-3 text-sm focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+              className="h-10 w-full rounded-game border border-game-border-strong px-3 text-sm focus-visible:border-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
           )}
           {field.helpText && (
-            <p id={`${field.id}-help`} className="mt-1 text-xs text-caetano-anthracite-80">
+            <p id={`${field.id}-help`} className="mt-1 text-xs text-game-muted">
               {field.helpText}
             </p>
           )}
@@ -203,13 +206,13 @@ export function PublicLeadForm({
       ))}
 
       {consents.map((consent) => (
-        <label key={consent.id} className="flex items-start gap-2 text-sm text-caetano-anthracite">
+        <label key={consent.id} className="flex items-start gap-2 text-sm text-game-text">
           <input
             type="checkbox"
             required={consent.required}
             checked={consentValues[consent.id] ?? false}
             onChange={(e) => setConsentValues((prev) => ({ ...prev, [consent.id]: e.target.checked }))}
-            className="mt-0.5 h-4 w-4 rounded border-caetano-medium-gray"
+            className="mt-0.5 h-4 w-4 rounded border-game-border-strong"
           />
           <span>
             {consent.text}
@@ -217,6 +220,8 @@ export function PublicLeadForm({
           </span>
         </label>
       ))}
+
+      {privacyNotice}
 
       {error && (
         <p id="lead-form-error" role="alert" className="text-sm text-danger">
@@ -228,7 +233,7 @@ export function PublicLeadForm({
         type="submit"
         disabled={submitting}
         className={cn(
-          "w-full rounded-lg bg-caetano-deep-blue px-4 py-2.5 font-medium text-white disabled:opacity-60",
+          "w-full rounded-game bg-game-button px-4 py-2.5 font-medium text-game-button-text disabled:opacity-60",
         )}
       >
         {submitting ? "A enviar…" : submitLabel}

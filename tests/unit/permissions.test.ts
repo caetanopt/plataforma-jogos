@@ -6,6 +6,7 @@ import type { Membership, MembershipRole } from "@/generated/prisma/client";
 const ALL_ACTIONS: PermissionAction[] = [
   "workspace:manage",
   "user:manage",
+  "organization:manage",
   "brand:manage",
   "campaign:create",
   "campaign:edit",

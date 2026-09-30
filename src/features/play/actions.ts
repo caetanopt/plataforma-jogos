@@ -572,6 +572,8 @@ export async function submitLeadFormAction(
           status: input.consents[consent.id] ? ("GRANTED" as const) : ("DECLINED" as const),
           text: consent.text,
           version: consent.version,
+          // Origem do consentimento (§11): a página pública da campanha.
+          source: `play:${participation.campaign.slug}`,
         })),
       });
     }

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { checkboxField, intField, mediaIdField, requiredTextField } from "@/lib/validation/fields";
+import { checkboxField, httpUrlField, intField, mediaIdField, requiredTextField } from "@/lib/validation/fields";
+import { LEGAL_LINK_KEYS, LEGAL_LINK_LABELS, type LegalLinkKey } from "@/features/brand/legal-links";
 import { emptyToNull, readCheckbox, readOptional } from "@/lib/forms/form-data";
 import { parsePartial } from "@/lib/forms/parse-partial";
 
@@ -23,6 +24,9 @@ export const brandThemeShape = {
   fontFamily: requiredTextField("Tipografia", BRAND_THEME_LIMITS.fontFamily),
   borderRadiusPx: intField("Border radius", BRAND_THEME_LIMITS.borderRadiusMin, BRAND_THEME_LIMITS.borderRadiusMax),
   shadowEnabled: checkboxField,
+  privacyPolicyUrl: httpUrlField(LEGAL_LINK_LABELS.privacyPolicyUrl),
+  termsUrl: httpUrlField(LEGAL_LINK_LABELS.termsUrl),
+  cookiesUrl: httpUrlField(LEGAL_LINK_LABELS.cookiesUrl),
 };
 
 /**
@@ -47,8 +51,18 @@ export function parseThemeForm(formData: FormData, { includeName }: { includeNam
     fontFamily: readOptional(formData, "fontFamily"),
     borderRadiusPx: readOptional(formData, "borderRadiusPx"),
     shadowEnabled: readCheckbox(formData, "shadowEnabled"),
+    privacyPolicyUrl: readOptional(formData, "privacyPolicyUrl"),
+    termsUrl: readOptional(formData, "termsUrl"),
+    cookiesUrl: readOptional(formData, "cookiesUrl"),
   });
   const { data } = parse;
+
+  // Os links legais vivem num JSON: a ação junta-os ao gravado
+  // (mergeLegalLinks). "" apaga.
+  const legalLinkChanges: Partial<Record<LegalLinkKey, string | null>> = {};
+  for (const key of LEGAL_LINK_KEYS) {
+    if (data[key] !== undefined) legalLinkChanges[key] = emptyToNull(data[key]) ?? null;
+  }
 
   const update = {
     name: data.name,
@@ -68,10 +82,12 @@ export function parseThemeForm(formData: FormData, { includeName }: { includeNam
 
   return {
     update,
+    legalLinkChanges,
     fieldErrors: parse.fieldErrors,
     /** Para a verificação de pertença à organização. */
     mediaIds: [data.logoMediaId, data.faviconMediaId, data.backgroundImageMediaId],
-    savedSomething: Object.values(update).some((value) => value !== undefined),
+    savedSomething:
+      Object.values(update).some((value) => value !== undefined) || Object.keys(legalLinkChanges).length > 0,
   };
 }
 

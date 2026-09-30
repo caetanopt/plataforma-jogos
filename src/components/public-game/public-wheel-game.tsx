@@ -26,7 +26,7 @@ export function PublicWheelGame({
         <button
           type="button"
           onClick={onContinue}
-          className="w-full cursor-pointer touch-manipulation select-none rounded-lg bg-caetano-deep-blue px-4 py-2.5 font-medium text-white transition-[background-color,transform] duration-150 hover:bg-caetano-deep-blue-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2 active:bg-caetano-deep-blue motion-safe:active:scale-[0.99]"
+          className="w-full cursor-pointer touch-manipulation select-none rounded-game bg-game-button px-4 py-2.5 font-medium text-game-button-text transition-[background-color,transform] duration-150 hover:bg-game-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2 active:bg-game-button motion-safe:active:scale-[0.99]"
         >
           Continuar
         </button>

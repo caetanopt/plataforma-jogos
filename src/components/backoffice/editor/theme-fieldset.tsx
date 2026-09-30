@@ -2,7 +2,10 @@ import { MediaUploadField } from "@/components/backoffice/editor/media-upload-fi
 import { ThemeColorField } from "@/components/backoffice/editor/theme-color-field";
 import { SyncedInput, SyncedSelect } from "@/components/forms/synced-fields";
 import { Label } from "@/components/ui/label";
+import { Alert } from "@/components/ui/alert";
 import { BRAND_THEME_LIMITS } from "@/lib/validation/brand";
+import { LEGAL_LINK_KEYS, LEGAL_LINK_LABELS, readLegalLinks } from "@/features/brand/legal-links";
+import { themeContrastWarnings } from "@/features/brand/public-theme";
 import type { MediaAsset } from "@/generated/prisma/client";
 
 const FONT_OPTIONS = ["Montserrat", "Inter", "Roboto", "Open Sans", "Arial"];
@@ -23,6 +26,8 @@ export interface ThemeFieldsetValues {
   fontFamily: string;
   borderRadiusPx: number;
   shadowEnabled: boolean;
+  /** JSON gravado (ver legal-links.ts). */
+  legalLinks?: unknown;
 }
 
 const COLOR_FIELDS = [
@@ -59,6 +64,9 @@ export function ThemeFieldset({
   // Uma tipografia gravada fora da lista (kit antigo) continua escolhida: sem
   // a opção, o select mostrava a primeira e a gravação seguinte trocava-a.
   const fontOptions = FONT_OPTIONS.includes(theme.fontFamily) ? FONT_OPTIONS : [theme.fontFamily, ...FONT_OPTIONS];
+  const legalLinks = readLegalLinks(theme.legalLinks);
+  // Do tema gravado: a gravação automática volta a desenhar a página.
+  const contrastWarnings = themeContrastWarnings(theme);
 
   return (
     <>
@@ -92,6 +100,17 @@ export function ThemeFieldset({
           <ThemeColorField key={name} id={fieldId(name)} name={name} label={label} defaultValue={theme[name]} />
         ))}
       </div>
+
+      {contrastWarnings.length > 0 && (
+        <Alert variant="warning">
+          <p>Algumas cores não têm contraste suficiente para se lerem (WCAG 2.2 AA):</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {contrastWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -137,6 +156,29 @@ export function ThemeFieldset({
         />
         Aplicar sombras nos elementos
       </label>
+
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium text-caetano-anthracite">Links legais</legend>
+        <p id={fieldId("legalLinks-help")} className="text-xs text-caetano-anthracite-80">
+          Aparecem no jogo, junto ao formulário de leads e no rodapé. Endereços completos, a começar por https://.
+        </p>
+        {LEGAL_LINK_KEYS.map((key) => (
+          <div key={key}>
+            <Label htmlFor={fieldId(key)}>{LEGAL_LINK_LABELS[key]}</Label>
+            <SyncedInput
+              id={fieldId(key)}
+              name={key}
+              type="url"
+              inputMode="url"
+              maxLength={500}
+              placeholder="https://"
+              defaultValue={legalLinks[key] ?? ""}
+              aria-describedby={fieldId("legalLinks-help")}
+              className={FIELD_CLASS}
+            />
+          </div>
+        ))}
+      </fieldset>
     </>
   );
 }

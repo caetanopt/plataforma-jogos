@@ -109,23 +109,23 @@ export function QuizGamePlayer({
 
   if (result) {
     return (
-      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center" aria-live="polite">
-        <p className="text-lg font-bold text-caetano-anthracite">
+      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center" aria-live="polite">
+        <p className="text-lg font-bold text-game-text">
           {result.percentage.toFixed(0)}% ({result.totalScore}/{result.maxPossibleScore} pontos)
         </p>
         {result.passed != null && (
-          <p className="mt-1 text-caetano-anthracite-80">{result.passed ? "Aprovado" : "Não aprovado"}</p>
+          <p className="mt-1 text-game-muted">{result.passed ? "Aprovado" : "Não aprovado"}</p>
         )}
         {result.resultProfile && (
           <div className="mt-4">
-            <p className="font-medium text-caetano-anthracite">{result.resultProfile.title}</p>
+            <p className="font-medium text-game-text">{result.resultProfile.title}</p>
             {result.resultProfile.description && (
-              <p className="mt-1 text-sm text-caetano-anthracite-80">{result.resultProfile.description}</p>
+              <p className="mt-1 text-sm text-game-muted">{result.resultProfile.description}</p>
             )}
             {result.resultProfile.ctaLabel && result.resultProfile.ctaUrl && (
               <a
                 href={result.resultProfile.ctaUrl}
-                className="mt-3 inline-block rounded-lg bg-caetano-deep-blue px-4 py-2 text-sm text-white"
+                className="mt-3 inline-block rounded-game bg-game-button px-4 py-2 text-sm text-game-button-text"
               >
                 {result.resultProfile.ctaLabel}
               </a>
@@ -142,14 +142,14 @@ export function QuizGamePlayer({
   const hasAnswerImages = question.answers.some((answer) => Boolean(answer.imageUrl));
 
   return (
-    <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6">
+    <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6">
       {showProgress && (
         <div className="mb-4">
-          <p className="mb-1.5 text-xs text-caetano-anthracite-80">
+          <p className="mb-1.5 text-xs text-game-muted">
             Pergunta {index + 1} de {questions.length}
           </p>
           <div
-            className="h-1.5 overflow-hidden rounded-full bg-caetano-medium-gray-40"
+            className="h-1.5 overflow-hidden rounded-full bg-game-border"
             role="progressbar"
             aria-valuenow={index + 1}
             aria-valuemin={1}
@@ -157,21 +157,21 @@ export function QuizGamePlayer({
             aria-label="Progresso do quiz"
           >
             <div
-              className="h-full rounded-full bg-caetano-cyan transition-[width] duration-300"
+              className="h-full rounded-full bg-game-accent transition-[width] duration-300"
               style={{ width: `${((index + 1) / questions.length) * 100}%` }}
             />
           </div>
         </div>
       )}
 
-      <h3 className="text-lg font-bold text-caetano-anthracite">{question.title}</h3>
-      {question.supportText && <p className="mt-1 text-sm text-caetano-anthracite-80">{question.supportText}</p>}
+      <h3 className="text-lg font-bold text-game-text">{question.title}</h3>
+      {question.supportText && <p className="mt-1 text-sm text-game-muted">{question.supportText}</p>}
 
       {question.imageUrl && (
         <img
           src={question.imageUrl}
           alt=""
-          className="mt-3 max-h-64 w-full rounded-lg object-contain"
+          className="mt-3 max-h-64 w-full rounded-game object-contain"
         />
       )}
 
@@ -186,13 +186,13 @@ export function QuizGamePlayer({
               onClick={() => toggleAnswer(answer.id)}
               aria-pressed={isSelected}
               className={cn(
-                "w-full cursor-pointer touch-manipulation select-none rounded-lg border text-left text-sm",
+                "w-full cursor-pointer touch-manipulation select-none rounded-game border text-left text-sm",
                 "transition-[background-color,border-color,transform] duration-150 motion-safe:active:scale-[0.98]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-1",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-1",
                 hasAnswerImages ? "block p-2" : "block px-4 py-2",
                 isSelected
-                  ? "border-caetano-deep-blue bg-caetano-deep-blue-20 text-caetano-deep-blue"
-                  : "border-caetano-medium-gray-60 text-caetano-anthracite hover:bg-caetano-medium-gray-20 active:bg-caetano-medium-gray-40",
+                  ? "border-game-accent bg-game-accent-tint text-game-selected-text"
+                  : "border-game-border-strong text-game-text hover:bg-game-subtle active:bg-game-border",
               )}
             >
               {answer.imageUrl && (
@@ -221,7 +221,7 @@ export function QuizGamePlayer({
           <button
             type="button"
             onClick={() => setIndex((i) => i - 1)}
-            className="rounded-lg border border-caetano-medium-gray px-4 py-2 text-sm text-caetano-anthracite"
+            className="rounded-game border border-game-border-strong px-4 py-2 text-sm text-game-text"
           >
             Voltar
           </button>
@@ -234,7 +234,7 @@ export function QuizGamePlayer({
             type="button"
             onClick={() => setIndex((i) => i + 1)}
             disabled={selected.length === 0 && question.type !== "MULTIPLE_CHOICE"}
-            className="rounded-lg bg-caetano-deep-blue px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-game bg-game-button px-4 py-2 text-sm text-game-button-text disabled:opacity-50"
           >
             Seguinte
           </button>
@@ -243,7 +243,7 @@ export function QuizGamePlayer({
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="rounded-lg bg-caetano-deep-blue px-4 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded-game bg-game-button px-4 py-2 text-sm text-game-button-text disabled:opacity-50"
           >
             {submitting ? "A submeter…" : "Terminar"}
           </button>

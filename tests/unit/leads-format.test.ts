@@ -19,6 +19,7 @@ function participation(overrides: Partial<Participation> = {}): Participation {
     phone: null,
     resultSummary: { outcome: "WIN" },
     prizeAward: null,
+    consentRecords: [],
     ...overrides,
   } as Participation;
 }
@@ -70,8 +71,69 @@ describe("exportação CSV", () => {
     expect(csv.split("\n")[1]).toContain(",+351912345678,");
   });
 
-  it("acrescenta a coluna do estado do prémio no fim", () => {
+  it("acrescenta as colunas novas no fim, sem mudar a posição das antigas", () => {
     const header = leadsToCsv([]).split("\n")[0];
-    expect(header.endsWith(",Teste,Estado do prémio")).toBe(true);
+    expect(header.endsWith(",Teste,Estado do prémio,Consentimento de marketing,Consentimentos")).toBe(true);
+  });
+});
+
+describe("consentimentos na lista e na exportação", () => {
+  const T0 = new Date("2026-09-30T09:00:00Z");
+  function record(definitionId: string, status: "GRANTED" | "DECLINED" | "WITHDRAWN", isMarketing: boolean, extra = {}) {
+    return {
+      consentDefinitionId: definitionId,
+      status,
+      text: isMarketing ? "Aceito receber novidades por e-mail" : "Aceito o regulamento",
+      version: 2,
+      grantedAt: T0,
+      consentDefinition: { isMarketing, order: 0 },
+      ...extra,
+    };
+  }
+  const withConsents = (records: unknown[]) =>
+    toLeadRow(participation({ consentRecords: records as Participation["consentRecords"] }), now);
+
+  it("estado do marketing: concedido, recusado, parcial ou sem consentimento", () => {
+    expect(withConsents([record("r", "GRANTED", false)]).marketingConsent).toBe("");
+    expect(withConsents([record("m", "GRANTED", true)]).marketingConsent).toBe("Concedido");
+    expect(withConsents([record("m", "DECLINED", true)]).marketingConsent).toBe("Recusado");
+    expect(
+      withConsents([record("m1", "GRANTED", true), record("m2", "DECLINED", true)]).marketingConsent,
+    ).toBe("Parcial");
+  });
+
+  it("conta o registo mais recente de cada consentimento (uma retirada depois de aceitar)", () => {
+    const row = withConsents([
+      record("m", "GRANTED", true),
+      record("m", "WITHDRAWN", true, { grantedAt: new Date(T0.getTime() + 60_000) }),
+    ]);
+    expect(row.marketingConsent).toBe("Recusado");
+    expect(row.consentStatusByDefinition).toEqual({ m: "Retirado" });
+  });
+
+  it("o resumo leva o texto, a versão, o estado e a data", () => {
+    const row = withConsents([record("r", "GRANTED", false), record("m", "DECLINED", true)]);
+    expect(row.consents).toBe(
+      "«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z",
+    );
+  });
+
+  it("numa campanha, uma coluna por consentimento", () => {
+    const row = withConsents([record("r", "GRANTED", false), record("m", "DECLINED", true)]);
+    const csv = leadsToCsv(
+      [row],
+      [
+        { definitionId: "r", text: "Aceito o regulamento", version: 2 },
+        { definitionId: "m", text: "Aceito receber novidades por e-mail", version: 3 },
+        { definitionId: "novo", text: "Consentimento acrescentado depois", version: 1 },
+      ],
+    );
+    const [header, line] = csv.split("\n");
+    expect(header.endsWith(
+      ",Consentimentos,Consentimento: Aceito o regulamento (v2),Consentimento: Aceito receber novidades por e-mail (v3),Consentimento: Consentimento acrescentado depois (v1)",
+    )).toBe(true);
+    expect(line.endsWith(
+      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,Aceite,Recusado,",
+    )).toBe(true);
   });
 });

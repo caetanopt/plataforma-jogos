@@ -9,6 +9,7 @@ import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { runAction } from "@/server/actions/run-action";
 import { createBrandKitSchema, organizationLogoShape, parseThemeForm } from "@/lib/validation/brand";
+import { mergeLegalLinks } from "@/features/brand/legal-links";
 import { emptyToNull, getField, readOptional } from "@/lib/forms/form-data";
 import { parsePartial } from "@/lib/forms/parse-partial";
 import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
@@ -52,20 +53,30 @@ export async function updateBrandKitAction(_previous: ActionResult, formData: Fo
     const kitId = readOptional(formData, "kitId") ?? "";
     const kit = await prisma.campaignTheme.findFirst({
       where: { id: kitId, organizationId: context.organizationId, isBrandKit: true },
-      select: { id: true },
+      select: { id: true, legalLinks: true },
     });
     if (!kit) notFound();
 
     // Campo a campo: apagar o nome para escrever outro já não deita fora as
     // cores; o nome continua obrigatório e volta com o erro.
-    const { update, fieldErrors, mediaIds, savedSomething } = parseThemeForm(formData, { includeName: true });
+    const { update, legalLinkChanges, fieldErrors, mediaIds, savedSomething } = parseThemeForm(formData, {
+      includeName: true,
+    });
     // Só media da própria organização (ver mediaBelongsToOrganization).
     if (!(await mediaBelongsToOrganization(context.organizationId, mediaIds))) {
       return fail(MEDIA_UNAVAILABLE_MESSAGE);
     }
 
     if (savedSomething) {
-      await prisma.campaignTheme.update({ where: { id: kit.id }, data: update });
+      await prisma.campaignTheme.update({
+        where: { id: kit.id },
+        data: {
+          ...update,
+          ...(Object.keys(legalLinkChanges).length > 0
+            ? { legalLinks: mergeLegalLinks(kit.legalLinks, legalLinkChanges) }
+            : {}),
+        },
+      });
 
       await logAudit({
         organizationId: context.organizationId,

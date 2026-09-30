@@ -4,7 +4,7 @@ import { firstValues } from "@/lib/forms/search-params";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { resolveDateRange } from "@/lib/dates/range";
-import { listLeads } from "@/features/leads/queries";
+import { listLeads, parseMarketingConsentFilter } from "@/features/leads/queries";
 import { toLeadRow } from "@/features/leads/format";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
@@ -22,8 +22,15 @@ interface LeadsSearchParams {
   from?: string;
   to?: string;
   excludeTest?: string;
+  marketingConsent?: string;
   page?: string;
 }
+
+const MARKETING_TONES: Record<string, "success" | "neutral" | "warning"> = {
+  Concedido: "success",
+  Recusado: "neutral",
+  Parcial: "warning",
+};
 
 const STATUS_LABELS: Record<string, string> = {
   STARTED: "Iniciada",
@@ -42,6 +49,7 @@ export default async function LeadsPage({
   const range = resolveDateRange(params);
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const excludeTest = params.excludeTest !== "false";
+  const marketingConsent = parseMarketingConsentFilter(params.marketingConsent);
 
   const [campaigns, leads] = await Promise.all([
     prisma.campaign.findMany({
@@ -53,6 +61,7 @@ export default async function LeadsPage({
       campaignId: params.campaignId || undefined,
       search: params.search || undefined,
       excludeTest,
+      marketingConsent,
       page,
     }),
   ]);
@@ -66,6 +75,7 @@ export default async function LeadsPage({
     period: range.preset,
     ...(range.preset === "custom" ? { from: params.from ?? "", to: params.to ?? "" } : {}),
     excludeTest: String(excludeTest),
+    ...(marketingConsent ? { marketingConsent } : {}),
   }).toString();
 
   return (
@@ -122,6 +132,19 @@ export default async function LeadsPage({
           <Label htmlFor="to">Até</Label>
           <input id="to" type="date" name="to" defaultValue={params.to} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm" />
         </div>
+        <div>
+          <Label htmlFor="marketingConsent">Consentimento de marketing</Label>
+          <select
+            id="marketingConsent"
+            name="marketingConsent"
+            defaultValue={marketingConsent ?? ""}
+            className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm"
+          >
+            <option value="">Todos</option>
+            <option value="granted">Concedido</option>
+            <option value="not_granted">Não concedido</option>
+          </select>
+        </div>
         <label className="flex h-10 items-center gap-2 text-sm text-caetano-anthracite">
           <input type="checkbox" name="excludeTest" value="true" defaultChecked={excludeTest} className="h-4 w-4 rounded border-caetano-medium-gray" />
           Excluir participações de teste
@@ -148,13 +171,14 @@ export default async function LeadsPage({
               <th scope="col" className="px-4 py-3">Estado</th>
               <th scope="col" className="px-4 py-3">Resultado</th>
               <th scope="col" className="px-4 py-3">Prémio</th>
+              <th scope="col" className="px-4 py-3">Marketing</th>
               <th scope="col" className="px-4 py-3">Origem</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-caetano-medium-gray-20">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-caetano-anthracite-80">
+                <td colSpan={9} className="px-4 py-8 text-center text-caetano-anthracite-80">
                   Nenhuma participação encontrada para os filtros atuais.
                 </td>
               </tr>
@@ -194,6 +218,13 @@ export default async function LeadsPage({
                       <span className="block text-xs">{row.prizeStatus}</span>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    {row.marketingConsent ? (
+                      <Badge tone={MARKETING_TONES[row.marketingConsent] ?? "neutral"}>{row.marketingConsent}</Badge>
+                    ) : (
+                      <span className="text-caetano-anthracite-80">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-caetano-anthracite-80">{row.source || row.utmSource || "—"}</td>
                 </tr>
               ))
@@ -214,6 +245,7 @@ export default async function LeadsPage({
             period: range.preset,
             ...(range.preset === "custom" ? { from: params.from ?? "", to: params.to ?? "" } : {}),
             excludeTest: String(excludeTest),
+            ...(marketingConsent ? { marketingConsent } : {}),
             page: String(target),
           }).toString()}`
         }

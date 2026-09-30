@@ -368,6 +368,27 @@ describe("formulário vazio, idade mínima e posição fixada", () => {
   });
 });
 
+describe("consentimentos", () => {
+  it("cada registo guarda a origem: a página pública da campanha (§11)", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: "BEFORE_GAME", consents: true });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    const consentId = started.leadForm?.consents[0]?.id ?? "";
+
+    const ref = { participationId: started.participationId, token };
+    expect(
+      await submitLeadFormAction({ ref, values: { email: "ana@example.pt" }, consents: { [consentId]: true } }),
+    ).toEqual({ ok: true });
+
+    const { slug } = await prisma.campaign.findUniqueOrThrow({ where: { id: fixture.campaignId } });
+    const records = await prisma.consentRecord.findMany({ where: { participationId: ref.participationId } });
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ status: "GRANTED", source: `play:${slug}` });
+  });
+});
+
 describe("telefone", () => {
   it("recusa telefones que não são números e deteta duplicados escritos de outra forma", async () => {
     const fixture = await createFixture({

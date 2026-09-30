@@ -158,12 +158,30 @@ function intermediateForm(
   });
 }
 
+/** As props do PublicGameFlow na árvore devolvida pela página (dentro do tema). */
+function findFlowProps(node: unknown): PublicGameFlowProps | null {
+  if (!node || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findFlowProps(child);
+      if (found) return found;
+    }
+    return null;
+  }
+  const props = (node as { props?: Record<string, unknown> }).props;
+  if (!props) return null;
+  if ("campaignId" in props && "legal" in props) return props as unknown as PublicGameFlowProps;
+  return findFlowProps(props.children);
+}
+
 async function publicFlowProps(slug: string): Promise<PublicGameFlowProps> {
   const element = await PublicPlayPage({
     params: Promise.resolve({ slug }),
     searchParams: Promise.resolve({}),
   });
-  return (element.props as { children: { props: PublicGameFlowProps } }).children.props;
+  const props = findFlowProps(element);
+  if (!props) throw new Error("PublicGameFlow não encontrado na página.");
+  return props;
 }
 
 let f: Fixture;
@@ -494,13 +512,74 @@ describe("eliminar campanha", () => {
     expect(await prisma.leadForm.count({ where: { campaignId: campaign.id } })).toBe(0);
     expect(await prisma.campaignScreen.count({ where: { campaignId: campaign.id } })).toBe(0);
     expect(await prisma.analyticsEvent.count({ where: { campaignId: campaign.id } })).toBe(0);
-    // O participante é da organização (pode ter jogado noutras campanhas).
-    expect(await prisma.participant.findUnique({ where: { id: participant.id } })).not.toBeNull();
+    // Só tinha jogado aqui: sai com a campanha (e com os dados que tivesse).
+    expect(await prisma.participant.findUnique({ where: { id: participant.id } })).toBeNull();
 
     const audit = await prisma.auditLog.findFirst({
       where: { organizationId: f.organizationId, action: "DELETE", entityId: campaign.id },
     });
-    expect(audit?.metadata).toMatchObject({ participationsDeleted: 1 });
+    expect(audit?.metadata).toMatchObject({ participationsDeleted: 1, participantsDeleted: 1 });
+    const privacy = await prisma.auditLog.findFirst({
+      where: { organizationId: f.organizationId, action: "PRIVACY_OPERATION", entityId: campaign.id },
+    });
+    expect(privacy?.metadata).toEqual({ operation: "campaign_delete", participationsDeleted: 1, participantsDeleted: 1 });
+  });
+
+  it("apaga os dados pessoais de quem só jogou nesta campanha; quem jogou noutra fica", async () => {
+    const campaign = await createCampaign(f);
+    const other = await createCampaign(f);
+    const [version, otherVersion] = await Promise.all(
+      [campaign, other].map((c) =>
+        prisma.campaignVersion.create({ data: { campaignId: c.id, versionNumber: 1, snapshot: {}, publishedById: f.userId } }),
+      ),
+    );
+    // Identidade gravada no Participant, como antes de passar para a participação.
+    const onlyHere = await prisma.participant.create({
+      data: { organizationId: f.organizationId, cookieId: `so-${randomUUID()}`, email: "so@example.pt", firstName: "Só" },
+    });
+    const both = await prisma.participant.create({
+      data: { organizationId: f.organizationId, cookieId: `ambas-${randomUUID()}`, email: "ambas@example.pt" },
+    });
+    const untouched = await prisma.participant.create({
+      data: { organizationId: f.organizationId, cookieId: `nunca-${randomUUID()}` },
+    });
+    const participate = (campaignId: string, campaignVersionId: string, participantId: string) =>
+      prisma.participation.create({ data: { campaignId, campaignVersionId, participantId, idempotencyKey: randomUUID() } });
+    await participate(campaign.id, version.id, onlyHere.id);
+    await participate(campaign.id, version.id, onlyHere.id);
+    await participate(campaign.id, version.id, both.id);
+    await participate(other.id, otherVersion.id, both.id);
+
+    await deleteCampaignAction(form({ campaignId: campaign.id }));
+
+    expect(await prisma.participant.findUnique({ where: { id: onlyHere.id } })).toBeNull();
+    expect(await prisma.participant.findUnique({ where: { id: both.id } })).not.toBeNull();
+    // Sem participações nesta campanha: não é tocado.
+    expect(await prisma.participant.findUnique({ where: { id: untouched.id } })).not.toBeNull();
+    expect(await prisma.participation.count({ where: { campaignId: other.id, participantId: both.id } })).toBe(1);
+    const audit = await prisma.auditLog.findFirst({
+      where: { organizationId: f.organizationId, action: "DELETE", entityId: campaign.id },
+    });
+    expect(audit?.metadata).toMatchObject({ participationsDeleted: 3, participantsDeleted: 1 });
+  });
+
+  it("não apaga participantes de outra organização com o mesmo identificador", async () => {
+    const campaign = await createCampaign(f);
+    const version = await prisma.campaignVersion.create({
+      data: { campaignId: campaign.id, versionNumber: 1, snapshot: {}, publishedById: f.userId },
+    });
+    const foreign = await createFixture();
+    const cookieId = `partilhado-${randomUUID()}`;
+    const mine = await prisma.participant.create({ data: { organizationId: f.organizationId, cookieId } });
+    const theirs = await prisma.participant.create({ data: { organizationId: foreign.organizationId, cookieId } });
+    await prisma.participation.create({
+      data: { campaignId: campaign.id, campaignVersionId: version.id, participantId: mine.id, idempotencyKey: randomUUID() },
+    });
+
+    await deleteCampaignAction(form({ campaignId: campaign.id }));
+
+    expect(await prisma.participant.findUnique({ where: { id: mine.id } })).toBeNull();
+    expect(await prisma.participant.findUnique({ where: { id: theirs.id } })).not.toBeNull();
   });
 
   it("participações a começar durante a eliminação não a fazem falhar", async () => {

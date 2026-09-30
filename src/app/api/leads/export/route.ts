@@ -3,7 +3,11 @@ import { resolveOrgContext } from "@/server/auth/session";
 import { can } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { resolveDateRange } from "@/lib/dates/range";
-import { listLeadsForExport } from "@/features/leads/queries";
+import {
+  listCampaignConsentDefinitions,
+  listLeadsForExport,
+  parseMarketingConsentFilter,
+} from "@/features/leads/queries";
 import { leadsToCsv, toLeadRow } from "@/features/leads/format";
 
 export async function GET(request: Request) {
@@ -32,13 +36,26 @@ export async function GET(request: Request) {
   const params = Object.fromEntries(url.searchParams.entries());
   const range = resolveDateRange(params);
 
+  const marketingConsent = parseMarketingConsentFilter(params.marketingConsent);
   const participations = await listLeadsForExport(context.organizationId, range, {
     campaignId: params.campaignId || undefined,
     search: params.search || undefined,
     excludeTest: params.excludeTest !== "false",
+    marketingConsent,
   });
 
-  const csv = leadsToCsv(participations.map((participation) => toLeadRow(participation)));
+  // Uma campanha: uma coluna por consentimento do formulário, além do resumo.
+  const consentColumns = params.campaignId
+    ? (await listCampaignConsentDefinitions(context.organizationId, params.campaignId)).map((definition) => ({
+        definitionId: definition.id,
+        text: definition.text,
+        version: definition.version,
+      }))
+    : [];
+  const csv = leadsToCsv(
+    participations.map((participation) => toLeadRow(participation)),
+    consentColumns,
+  );
 
   await logAudit({
     organizationId: context.organizationId,
@@ -57,6 +74,7 @@ export async function GET(request: Request) {
       filters: {
         campaignId: params.campaignId ?? null,
         excludeTest: params.excludeTest,
+        marketingConsent: marketingConsent ?? null,
         preset: range.preset,
         from: range.from.toISOString(),
         to: range.to.toISOString(),

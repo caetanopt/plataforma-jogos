@@ -2,13 +2,42 @@ import { prisma } from "@/server/db/client";
 import { Prisma } from "@/generated/prisma/client";
 import type { DateRange } from "@/lib/dates/range";
 
+export type MarketingConsentFilter = "granted" | "not_granted";
+
 export interface LeadsFilters {
   campaignId?: string;
   search?: string;
   excludeTest?: boolean;
+  /** Com (ou sem) pelo menos um consentimento de marketing aceite (§21, §24). */
+  marketingConsent?: MarketingConsentFilter;
   page?: number;
   pageSize?: number;
 }
+
+export function parseMarketingConsentFilter(value: string | undefined): MarketingConsentFilter | undefined {
+  return value === "granted" || value === "not_granted" ? value : undefined;
+}
+
+const MARKETING_GRANTED: Prisma.ParticipationWhereInput = {
+  consentRecords: { some: { status: "GRANTED", consentDefinition: { isMarketing: true } } },
+};
+
+/**
+ * Os consentimentos de cada participação, pela ordem do formulário. Sem
+ * eles, a exportação para uma newsletter levava também quem recusou o
+ * marketing (§21: consentimentos na lista e na exportação).
+ */
+export const leadConsentRecords = {
+  select: {
+    consentDefinitionId: true,
+    status: true,
+    text: true,
+    version: true,
+    grantedAt: true,
+    consentDefinition: { select: { isMarketing: true, order: true } },
+  },
+  orderBy: [{ consentDefinition: { order: "asc" } }, { grantedAt: "asc" }],
+} satisfies Prisma.Participation$consentRecordsArgs;
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -26,6 +55,8 @@ function buildWhere(
     ...(filters.campaignId ? { campaignId: filters.campaignId } : {}),
     ...(filters.excludeTest !== false ? { isTest: false } : {}),
     createdAt: { gte: range.from, lte: range.to },
+    ...(filters.marketingConsent === "granted" ? MARKETING_GRANTED : {}),
+    ...(filters.marketingConsent === "not_granted" ? { NOT: MARKETING_GRANTED } : {}),
     ...(filters.search
       ? {
           // A identidade de cada lead é a da participação (ver identity.ts).
@@ -55,6 +86,7 @@ export async function listLeads(organizationId: string, range: DateRange, filter
       include: {
         campaign: { select: { id: true, internalName: true, type: true } },
         prizeAward: { include: { prize: true, prizeCode: true } },
+        consentRecords: leadConsentRecords,
       },
     }),
     prisma.participation.count({ where }),
@@ -71,6 +103,19 @@ export async function listLeadsForExport(organizationId: string, range: DateRang
     include: {
       campaign: { select: { internalName: true, type: true } },
       prizeAward: { include: { prize: true, prizeCode: true } },
+      consentRecords: leadConsentRecords,
     },
+  });
+}
+
+/**
+ * Consentimentos do formulário de uma campanha, para as colunas por
+ * consentimento da exportação de uma só campanha.
+ */
+export function listCampaignConsentDefinitions(organizationId: string, campaignId: string) {
+  return prisma.consentDefinition.findMany({
+    where: { leadForm: { campaign: { id: campaignId, organizationId } } },
+    select: { id: true, text: true, version: true, isMarketing: true },
+    orderBy: { order: "asc" },
   });
 }

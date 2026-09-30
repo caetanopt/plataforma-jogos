@@ -1,9 +1,36 @@
 import type { CampaignForEditor } from "@/features/campaigns/queries";
 import { AGE_UNVERIFIABLE_ISSUE, isAgeVerifiable } from "@/features/publishing/age-check";
+import { effectiveLeadFormPosition } from "@/features/play/reveal";
+import { readLegalLinks } from "@/features/brand/legal-links";
 
 export interface PublishReadiness {
   ready: boolean;
   issues: string[];
+}
+
+export const PRIVACY_NOTICE_ISSUE =
+  "O formulário de leads recolhe dados pessoais: indique o texto legal (Ecrã inicial) ou o link da política de privacidade (Marca e design).";
+
+/**
+ * Um formulário que pede dados pessoais tem de dizer como são tratados
+ * (art. 13.º do RGPD, §24): pelo texto legal ou pela política de
+ * privacidade. Antes publicava-se sem nada, e o jogo recolhia nome, e-mail e
+ * telefone sem aviso. Um formulário que não entra no fluxo (vazio ou "Sem
+ * formulário") ou só com campos ocultos não pede nada ao participante.
+ */
+export function hasPrivacyNotice(
+  campaign: Pick<CampaignForEditor, "legalText" | "leadForm"> & { theme: { legalLinks: unknown } | null },
+): boolean {
+  const form = campaign.leadForm;
+  if (!form) return true;
+  const position = effectiveLeadFormPosition({
+    position: form.position,
+    fieldCount: form.fields.length,
+    consentCount: form.consentDefinitions.length,
+  });
+  const asksPersonalData = position !== "NONE" && form.fields.some((field) => field.type !== "HIDDEN");
+  if (!asksPersonalData) return true;
+  return Boolean(campaign.legalText?.trim()) || readLegalLinks(campaign.theme?.legalLinks).privacyPolicyUrl !== null;
 }
 
 export function getPublishReadiness(campaign: CampaignForEditor): PublishReadiness {
@@ -58,6 +85,10 @@ export function getPublishReadiness(campaign: CampaignForEditor): PublishReadine
     : null;
   if (!isAgeVerifiable(campaign.minAge, ageForm)) {
     issues.push(AGE_UNVERIFIABLE_ISSUE);
+  }
+
+  if (!hasPrivacyNotice(campaign)) {
+    issues.push(PRIVACY_NOTICE_ISSUE);
   }
 
   return { ready: issues.length === 0, issues };

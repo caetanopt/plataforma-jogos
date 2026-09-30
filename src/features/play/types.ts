@@ -74,3 +74,20 @@ export type GameActionResponse<T> =
   | { status: "revealed"; result: T }
   | { status: "lead_required" }
   | { status: "blocked"; reason: GameBlockedReason };
+
+/**
+ * Informação legal mostrada no jogo (§9, §24): o texto legal do ecrã
+ * inicial, os links legais do tema e o contacto de privacidade da
+ * organização. Aparece no ecrã inicial, junto ao formulário e no rodapé.
+ */
+export interface PublicLegalLink {
+  key: "privacyPolicyUrl" | "termsUrl" | "cookiesUrl";
+  label: string;
+  url: string;
+}
+
+export interface PublicLegalInfo {
+  legalText: string | null;
+  links: PublicLegalLink[];
+  privacyContactEmail: string | null;
+}

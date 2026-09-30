@@ -9,6 +9,7 @@ import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { runAction } from "@/server/actions/run-action";
 import { parseThemeForm, saveAsBrandKitSchema } from "@/lib/validation/brand";
+import { mergeLegalLinks } from "@/features/brand/legal-links";
 import { getField, readOptional } from "@/lib/forms/form-data";
 import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
 
@@ -32,14 +33,24 @@ export async function updateCampaignThemeAction(_previous: ActionResult, formDat
 
     // Campo a campo: uma cor inválida já não deita fora o resto do tema. O
     // nome do tema da campanha não se edita nesta etapa.
-    const { update, fieldErrors, mediaIds, savedSomething } = parseThemeForm(formData, { includeName: false });
+    const { update, legalLinkChanges, fieldErrors, mediaIds, savedSomething } = parseThemeForm(formData, {
+      includeName: false,
+    });
     // Só media da própria organização (ver mediaBelongsToOrganization).
     if (!(await mediaBelongsToOrganization(context.organizationId, mediaIds))) {
       return fail(MEDIA_UNAVAILABLE_MESSAGE);
     }
 
     if (savedSomething) {
-      await prisma.campaignTheme.update({ where: { id: campaign.theme.id }, data: update });
+      await prisma.campaignTheme.update({
+        where: { id: campaign.theme.id },
+        data: {
+          ...update,
+          ...(Object.keys(legalLinkChanges).length > 0
+            ? { legalLinks: mergeLegalLinks(campaign.theme.legalLinks, legalLinkChanges) }
+            : {}),
+        },
+      });
 
       await logAudit({
         organizationId: context.organizationId,

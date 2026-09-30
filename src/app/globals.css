@@ -128,6 +128,28 @@
   --color-danger: var(--color-danger);
   --color-danger-strong: var(--color-danger-strong);
   --color-danger-surface: var(--color-danger-surface);
+
+  /*
+    Jogo público: as cores do tema da campanha (Marca e design), definidas no
+    contentor pelo GameThemeShell (src/features/brand/public-theme.ts). Sem
+    tema, os valores por omissão são os da Caetano — o aspeto de sempre.
+  */
+  --color-game-surface: var(--game-surface, #ffffff);
+  --color-game-text: var(--game-text, #2e3a46);
+  --color-game-muted: var(--game-muted, #58616b);
+  --color-game-border: var(--game-border, #d7dfe3);
+  --color-game-border-strong: var(--game-border-strong, #9caeb8);
+  --color-game-subtle: var(--game-subtle, #ebeff1);
+  --color-game-primary: var(--game-primary, #002e5d);
+  --color-game-accent: var(--game-accent, #002e5d);
+  --color-game-accent-tint: var(--game-accent-tint, #ccd5df);
+  --color-game-selected-text: var(--game-selected-text, #002e5d);
+  --color-game-highlight: var(--game-highlight, #cceffc);
+  --color-game-button: var(--game-button, #002e5d);
+  --color-game-button-hover: var(--game-button-hover, #33587d);
+  --color-game-button-text: var(--game-button-text, #ffffff);
+  --radius-game: var(--game-radius, 8px);
+  --radius-game-lg: var(--game-radius-lg, 12px);
 }
 
 body {

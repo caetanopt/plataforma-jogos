@@ -21,7 +21,13 @@ import {
   type ResumeParticipationResult,
   type StoredGameResult,
 } from "@/features/play/actions";
-import type { GameActionResponse, ParticipationRef, PublicLeadFormDefinition } from "@/features/play/types";
+import type {
+  GameActionResponse,
+  ParticipationRef,
+  PublicLeadFormDefinition,
+  PublicLegalInfo,
+} from "@/features/play/types";
+import { LegalFooter, PrivacyNotice } from "@/components/public-game/legal-notice";
 import {
   clearStoredParticipation,
   readStoredParticipation,
@@ -51,6 +57,7 @@ export interface PublicGameFlowProps {
     prizeInfo: string | null;
   };
   regulationText: string | null;
+  legal: PublicLegalInfo;
   intermediateBefore: ScreenData | null;
   intermediateAfter: ScreenData | null;
   final: {
@@ -169,7 +176,6 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
   const [resumed, setResumed] = useState(false);
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  const [showRegulation, setShowRegulation] = useState(false);
   const viewedRef = useRef(false);
   const begunRef = useRef<string | null>(null);
 
@@ -449,7 +455,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 
   if (stage === "blocked") {
     return (
-      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center text-caetano-anthracite">
+      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center text-game-text">
         {BLOCKED_MESSAGES[blockedReason ?? ""] ?? "Não foi possível continuar."}
       </div>
     );
@@ -471,25 +477,25 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       {props.isTestMode && <div aria-hidden="true" className="h-9" />}
 
       {stage === "start" && (
-        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
+        <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
           {props.start.logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={props.start.logoUrl} alt="" className="mx-auto mb-4 h-12 object-contain" />
           )}
-          {props.start.title && <h1 className="text-2xl font-bold text-caetano-anthracite">{props.start.title}</h1>}
-          {props.start.subtitle && <p className="mt-1 text-caetano-anthracite-80">{props.start.subtitle}</p>}
+          {props.start.title && <h1 className="text-2xl font-bold text-game-text">{props.start.title}</h1>}
+          {props.start.subtitle && <p className="mt-1 text-game-muted">{props.start.subtitle}</p>}
           {props.start.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={props.start.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />
+            <img src={props.start.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-game object-contain" />
           )}
-          {props.start.introText && <p className="mt-4 text-sm text-caetano-anthracite-80">{props.start.introText}</p>}
-          {props.start.prizeInfo && <p className="mt-2 text-sm font-medium text-caetano-deep-blue">{props.start.prizeInfo}</p>}
+          {props.start.introText && <p className="mt-4 text-sm text-game-muted">{props.start.introText}</p>}
+          {props.start.prizeInfo && <p className="mt-2 text-sm font-medium text-game-accent">{props.start.prizeInfo}</p>}
           <button
             type="button"
             onClick={handleStart}
             disabled={starting || resuming}
             aria-busy={starting || resuming || undefined}
-            className="mt-6 cursor-pointer touch-manipulation select-none rounded-full bg-caetano-deep-blue px-8 py-3 font-bold text-white transition-[background-color,transform] duration-150 hover:bg-caetano-deep-blue-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan focus-visible:ring-offset-2 active:bg-caetano-deep-blue disabled:cursor-progress disabled:opacity-60 motion-safe:active:scale-[0.97]"
+            className="mt-6 cursor-pointer touch-manipulation select-none rounded-game bg-game-button px-8 py-3 font-bold text-game-button-text transition-[background-color,transform] duration-150 hover:bg-game-button-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2 active:bg-game-button disabled:cursor-progress disabled:opacity-60 motion-safe:active:scale-[0.97]"
           >
             {starting ? "A preparar…" : resuming ? "A carregar…" : props.start.buttonLabel || "Jogar"}
           </button>
@@ -498,11 +504,14 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
               {startError}
             </p>
           )}
+          {props.legal.legalText && (
+            <p className="mt-6 whitespace-pre-line text-left text-xs text-game-muted">{props.legal.legalText}</p>
+          )}
         </div>
       )}
 
       {resumed && stage !== "start" && (
-        <p role="status" className="rounded-lg bg-caetano-cyan-20 px-4 py-2 text-sm text-caetano-anthracite">
+        <p role="status" className="rounded-game bg-game-highlight px-4 py-2 text-sm text-game-text">
           Retomámos a sua participação.
         </p>
       )}
@@ -524,6 +533,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
                   : undefined
           }
           submitLabel={awaitingLead ? "Ver o resultado" : undefined}
+          privacyNotice={<PrivacyNotice legal={props.legal} />}
           onSubmit={handleLeadSubmit}
         />
       )}
@@ -570,41 +580,41 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       )}
 
       {stage === "final" && (
-        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
-          {props.final.title && <h2 className="text-xl font-bold text-caetano-anthracite">{props.final.title}</h2>}
-          {props.final.message && <p className="mt-2 text-caetano-anthracite-80">{props.final.message}</p>}
+        <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
+          {props.final.title && <h2 className="text-xl font-bold text-game-text">{props.final.title}</h2>}
+          {props.final.message && <p className="mt-2 text-game-muted">{props.final.message}</p>}
           {prizeUnavailable && !wheelPrize && (
-            <p className="mt-4 rounded-lg bg-caetano-medium-gray-20 p-4 text-sm text-caetano-anthracite">
+            <p className="mt-4 rounded-game bg-game-subtle p-4 text-sm text-game-text">
               O prémio já não pode ser atribuído a esta participação: o prazo para o reclamar terminou ou o
               stock esgotou.
             </p>
           )}
           {storedResult && <StoredResultCard stored={storedResult} />}
           {wheelPrize && (
-            <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
+            <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-text">
               <p className="text-sm">O seu prémio</p>
               <p className="text-lg font-bold">{wheelPrize.publicName}</p>
               {wheelPrize.code && <p className="mt-1 font-mono">{wheelPrize.code}</p>}
               {wheelPrize.instructions && (
-                <p className="mt-2 whitespace-pre-line text-sm text-caetano-anthracite-80">{wheelPrize.instructions}</p>
+                <p className="mt-2 whitespace-pre-line text-sm text-game-muted">{wheelPrize.instructions}</p>
               )}
             </div>
           )}
           {props.final.mediaUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={props.final.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />
+            <img src={props.final.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-game object-contain" />
           )}
           {props.final.ctaLabel && props.final.ctaUrl && (
             <a
               href={props.final.ctaUrl}
-              className="mt-4 inline-block rounded-lg bg-caetano-deep-blue px-6 py-2.5 font-medium text-white"
+              className="mt-4 inline-block rounded-game bg-game-button px-6 py-2.5 font-medium text-game-button-text"
             >
               {props.final.ctaLabel}
             </a>
           )}
           <div className="mt-4 flex justify-center gap-4 text-sm">
             {props.final.allowReplay ? (
-              <button type="button" onClick={handleReplay} className="text-caetano-deep-blue underline">
+              <button type="button" onClick={handleReplay} className="text-game-accent underline">
                 Jogar novamente
               </button>
             ) : (
@@ -612,7 +622,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
                 // Recarregar retoma a participação; num dispositivo partilhado
                 // (quiosque, tablet num evento) é assim que se passa à pessoa
                 // seguinte. Os limites de participação aplicam-se na mesma.
-                <button type="button" onClick={handleReplay} className="text-caetano-deep-blue underline">
+                <button type="button" onClick={handleReplay} className="text-game-accent underline">
                   Começar uma nova participação
                 </button>
               )
@@ -627,7 +637,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
                     void navigator.clipboard.writeText(window.location.href);
                   }
                 }}
-                className="text-caetano-deep-blue underline"
+                className="text-game-accent underline"
               >
                 Partilhar
               </button>
@@ -636,22 +646,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         </div>
       )}
 
-      {props.regulationText && (
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={() => setShowRegulation((v) => !v)}
-            className="text-xs text-caetano-anthracite-80 underline"
-          >
-            Regulamento
-          </button>
-          {showRegulation && (
-            <p className="mt-2 whitespace-pre-line rounded-lg bg-caetano-medium-gray-20 p-3 text-left text-xs text-caetano-anthracite-80">
-              {props.regulationText}
-            </p>
-          )}
-        </div>
-      )}
+      <LegalFooter legal={props.legal} regulationText={props.regulationText} />
     </div>
   );
 }
@@ -659,7 +654,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 function StoredResultCard({ stored }: { stored: StoredGameResult }) {
   if (stored.kind === "MEMORY") {
     return (
-      <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
+      <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-text">
         <p className="text-lg font-bold">{stored.result.completed ? "Jogo concluído!" : "Tempo esgotado"}</p>
         <p className="mt-1 text-sm">Pontuação: {stored.result.score}</p>
       </div>
@@ -667,7 +662,7 @@ function StoredResultCard({ stored }: { stored: StoredGameResult }) {
   }
   const { result } = stored;
   return (
-    <div className="mt-4 rounded-lg bg-caetano-cyan-20 p-4 text-caetano-anthracite">
+    <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-text">
       <p className="text-lg font-bold">
         {result.percentage.toFixed(0)}% ({result.totalScore}/{result.maxPossibleScore} pontos)
       </p>
@@ -676,12 +671,12 @@ function StoredResultCard({ stored }: { stored: StoredGameResult }) {
         <div className="mt-3">
           <p className="font-medium">{result.resultProfile.title}</p>
           {result.resultProfile.description && (
-            <p className="mt-1 text-sm text-caetano-anthracite-80">{result.resultProfile.description}</p>
+            <p className="mt-1 text-sm text-game-muted">{result.resultProfile.description}</p>
           )}
           {result.resultProfile.ctaLabel && result.resultProfile.ctaUrl && (
             <a
               href={result.resultProfile.ctaUrl}
-              className="mt-3 inline-block rounded-lg bg-caetano-deep-blue px-4 py-2 text-sm text-white"
+              className="mt-3 inline-block rounded-game bg-game-button px-4 py-2 text-sm text-game-button-text"
             >
               {result.resultProfile.ctaLabel}
             </a>
@@ -695,22 +690,22 @@ function StoredResultCard({ stored }: { stored: StoredGameResult }) {
 function IntermediateScreen({ screen, onContinue }: { screen: ScreenData | null; onContinue: () => void }) {
   if (!screen) return null;
   return (
-    <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-6 text-center">
-      {screen.title && <h2 className="text-lg font-bold text-caetano-anthracite">{screen.title}</h2>}
-      {screen.text && <p className="mt-2 text-caetano-anthracite-80">{screen.text}</p>}
+    <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
+      {screen.title && <h2 className="text-lg font-bold text-game-text">{screen.title}</h2>}
+      {screen.text && <p className="mt-2 text-game-muted">{screen.text}</p>}
       {screen.mediaUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={screen.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-lg object-contain" />
+        <img src={screen.mediaUrl} alt="" className="mx-auto mt-4 max-h-64 rounded-game object-contain" />
       )}
       {screen.ctaLabel && screen.ctaUrl && (
-        <a href={screen.ctaUrl} className="mt-4 inline-block text-caetano-deep-blue underline">
+        <a href={screen.ctaUrl} className="mt-4 inline-block text-game-accent underline">
           {screen.ctaLabel}
         </a>
       )}
       <button
         type="button"
         onClick={onContinue}
-        className="mt-4 rounded-lg bg-caetano-deep-blue px-6 py-2.5 font-medium text-white"
+        className="mt-4 rounded-game bg-game-button px-6 py-2.5 font-medium text-game-button-text"
       >
         {screen.continueButtonLabel || "Continuar"}
       </button>

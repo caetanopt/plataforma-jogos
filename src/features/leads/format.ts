@@ -4,8 +4,20 @@ type LeadParticipation = Prisma.ParticipationGetPayload<{
   include: {
     campaign: { select: { internalName: true; type: true } };
     prizeAward: { include: { prize: true; prizeCode: true } };
+    consentRecords: {
+      select: {
+        consentDefinitionId: true;
+        status: true;
+        text: true;
+        version: true;
+        grantedAt: true;
+        consentDefinition: { select: { isMarketing: true; order: true } };
+      };
+    };
   };
 }>;
+
+type LeadConsentRecord = LeadParticipation["consentRecords"][number];
 
 export interface LeadRow {
   id: string;
@@ -33,6 +45,57 @@ export interface LeadRow {
   browser: string;
   os: string;
   sessionId: string;
+  /** "Concedido", "Recusado" ou "Parcial" (vários de marketing); vazio sem nenhum. */
+  marketingConsent: string;
+  /** Cada consentimento com o texto, a versão, o estado e a data. */
+  consents: string;
+  /** Estado do último registo de cada consentimento (colunas por consentimento). */
+  consentStatusByDefinition: Record<string, string>;
+}
+
+export const CONSENT_STATUS_LABELS: Record<string, string> = {
+  GRANTED: "Aceite",
+  DECLINED: "Recusado",
+  WITHDRAWN: "Retirado",
+};
+
+function truncate(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** O registo mais recente de cada consentimento (uma retirada vem depois). */
+function latestByDefinition(records: readonly LeadConsentRecord[]): Map<string, LeadConsentRecord> {
+  const latest = new Map<string, LeadConsentRecord>();
+  for (const record of records) {
+    const current = latest.get(record.consentDefinitionId);
+    if (!current || record.grantedAt >= current.grantedAt) latest.set(record.consentDefinitionId, record);
+  }
+  return latest;
+}
+
+function consentColumns(records: readonly LeadConsentRecord[]): Pick<
+  LeadRow,
+  "marketingConsent" | "consents" | "consentStatusByDefinition"
+> {
+  const latest = [...latestByDefinition(records).values()];
+  const marketing = latest.filter((record) => record.consentDefinition.isMarketing);
+  const granted = marketing.filter((record) => record.status === "GRANTED").length;
+  const marketingConsent =
+    marketing.length === 0 ? "" : granted === marketing.length ? "Concedido" : granted === 0 ? "Recusado" : "Parcial";
+
+  return {
+    marketingConsent,
+    consents: latest
+      .map(
+        (record) =>
+          `«${truncate(record.text, 80)}» (v${record.version}): ${CONSENT_STATUS_LABELS[record.status] ?? record.status} em ${record.grantedAt.toISOString()}`,
+      )
+      .join(" | "),
+    consentStatusByDefinition: Object.fromEntries(
+      latest.map((record) => [record.consentDefinitionId, CONSENT_STATUS_LABELS[record.status] ?? record.status]),
+    ),
+  };
 }
 
 /**
@@ -121,10 +184,13 @@ export function toLeadRow(p: LeadParticipation, now: Date = new Date()): LeadRow
     browser: p.browser ?? "",
     os: p.os ?? "",
     sessionId: p.sessionId ?? "",
+    ...consentColumns(p.consentRecords),
   };
 }
 
-const CSV_COLUMNS: Array<[keyof LeadRow, string]> = [
+type CsvColumnKey = Exclude<keyof LeadRow, "consentStatusByDefinition">;
+
+const CSV_COLUMNS: Array<[CsvColumnKey, string]> = [
   ["id", "ID"],
   ["createdAt", "Data"],
   ["status", "Estado"],
@@ -147,7 +213,20 @@ const CSV_COLUMNS: Array<[keyof LeadRow, string]> = [
   ["isTest", "Teste"],
   // No fim, para não mudar a posição das colunas que já existiam.
   ["prizeStatus", "Estado do prémio"],
+  ["marketingConsent", "Consentimento de marketing"],
+  ["consents", "Consentimentos"],
 ];
+
+/** Uma coluna por consentimento do formulário (exportação de uma campanha). */
+export interface ConsentCsvColumn {
+  definitionId: string;
+  text: string;
+  version: number;
+}
+
+function consentHeader(column: ConsentCsvColumn): string {
+  return `Consentimento: ${truncate(column.text, 60)} (v${column.version})`;
+}
 
 /**
  * Um valor que comece por =, +, -, @, tab ou CR é interpretado como fórmula
@@ -170,8 +249,20 @@ function escapeCsvValue(value: unknown): string {
   return str;
 }
 
-export function leadsToCsv(rows: LeadRow[]): string {
-  const header = CSV_COLUMNS.map(([, label]) => escapeCsvValue(label)).join(",");
-  const lines = rows.map((row) => CSV_COLUMNS.map(([key]) => escapeCsvValue(row[key])).join(","));
+export function leadsToCsv(rows: LeadRow[], consentColumns: readonly ConsentCsvColumn[] = []): string {
+  const header = [
+    ...CSV_COLUMNS.map(([, label]) => label),
+    ...consentColumns.map((column) => consentHeader(column)),
+  ]
+    .map(escapeCsvValue)
+    .join(",");
+  const lines = rows.map((row) =>
+    [
+      ...CSV_COLUMNS.map(([key]) => row[key]),
+      ...consentColumns.map((column) => row.consentStatusByDefinition[column.definitionId] ?? ""),
+    ]
+      .map(escapeCsvValue)
+      .join(","),
+  );
   return [header, ...lines].join("\n");
 }
