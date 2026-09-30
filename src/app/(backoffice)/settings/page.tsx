@@ -4,8 +4,13 @@ import { prisma } from "@/server/db/client";
 import { updatePrivacySettingsAction } from "@/features/organizations/actions";
 import { updateOrganizationRetentionAction } from "@/features/privacy/actions";
 import { lastRetentionRun } from "@/features/privacy/retention-job";
-import { isRetentionJobStale, retentionOutlook } from "@/features/privacy/retention-queries";
-import { RETENTION_DAY_OPTIONS, RETENTION_WARNING_DAYS } from "@/features/privacy/retention-policy";
+import { retentionJobStatus, retentionOutlook } from "@/features/privacy/retention-queries";
+import {
+  describeRetention,
+  effectiveRetention,
+  RETENTION_DAY_OPTIONS,
+  RETENTION_WARNING_DAYS,
+} from "@/features/privacy/retention-policy";
 import { Alert } from "@/components/ui/alert";
 import { ORGANIZATION_LIMITS } from "@/lib/validation/organization";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
@@ -69,7 +74,7 @@ export default async function SettingsPage({
   const organization = canManageOrganization
     ? await prisma.organization.findUnique({
         where: { id: context.organizationId },
-        select: { privacyContactEmail: true, dataRetentionDays: true, defaultTimezone: true },
+        select: { privacyContactEmail: true, dataRetentionDays: true, dataRetentionChangedAt: true, defaultTimezone: true },
       })
     : null;
   // A tarefa diária aplica os prazos: se deixou de correr, os dados ficam
@@ -80,7 +85,7 @@ export default async function SettingsPage({
     ? await Promise.all([lastRetentionRun(), retentionOutlook(context.organizationId)])
     : [null, []];
   const overdue = outlook.reduce((sum, campaign) => sum + campaign.overdue, 0);
-  const retentionStale = isRetentionJobStale(outlook, lastRun);
+  const jobStatus = retentionJobStatus(outlook, lastRun);
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -128,10 +133,22 @@ export default async function SettingsPage({
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-caetano-anthracite">
+                Em vigor:{" "}
+                {describeRetention(
+                  effectiveRetention({
+                    campaign: { dataRetentionDays: null, dataRetentionUntil: null },
+                    organizationDays: organization.dataRetentionDays,
+                    organizationChangedAt: organization.dataRetentionChangedAt,
+                  }),
+                  organization.defaultTimezone,
+                )}
+              </p>
               <p id="dataRetentionDays-help" className="text-xs text-caetano-anthracite-80">
                 Contado a partir de cada participação. Ao fim do prazo, os dados pessoais (nome, e-mail, telefone,
                 respostas ao formulário, IP) são anonimizados; ficam o resultado, o prémio e as estatísticas. Vale
-                para as campanhas sem prazo próprio (etapa Formulário de leads). A lista de leads avisa com{" "}
+                para as campanhas sem prazo próprio (etapa Formulário de leads). Um prazo novo ou alterado só
+                começa a anonimizar {RETENTION_WARNING_DAYS} dias depois, e a lista de leads avisa com{" "}
                 {RETENTION_WARNING_DAYS} dias de antecedência.
               </p>
             </AutoSaveForm>
@@ -141,17 +158,28 @@ export default async function SettingsPage({
             <p className="mt-3 text-xs text-caetano-anthracite-80">
               Tarefa diária de anonimização:{" "}
               {lastRun
-                ? `última execução a ${lastRun.at.toLocaleString("pt-PT", { timeZone: organization.defaultTimezone })}${lastRun.result === "FAILURE" ? " (com falhas)" : ""}.`
+                ? `última execução a ${lastRun.at.toLocaleString("pt-PT", { timeZone: organization.defaultTimezone })}.`
                 : "ainda não correu."}
             </p>
           )}
-          {canManagePrivacy && retentionStale && (
+          {canManagePrivacy && jobStatus !== "ok" && (
             <div className="mt-2">
-              <Alert variant="warning">
-                A tarefa diária que aplica os prazos de conservação não está a correr
-                {overdue > 0 ? ` (${overdue === 1 ? "1 lead passou" : `${overdue} leads passaram`} o prazo há mais de dois dias)` : ""}:
-                as leads ficam guardadas para lá do prazo. Peça a quem gere o alojamento para confirmar a tarefa
-                agendada e a variável CRON_SECRET (ver o README).
+              <Alert variant="warning" live={false}>
+                {jobStatus === "stopped" ? (
+                  <>
+                    A tarefa diária que aplica os prazos de conservação não está a correr
+                    {overdue > 0
+                      ? ` (${overdue === 1 ? "1 lead passou" : `${overdue} leads passaram`} o prazo há mais de dois dias)`
+                      : ""}
+                    : as leads ficam guardadas para lá do prazo. Peça a quem gere o alojamento para confirmar a
+                    tarefa agendada e a variável CRON_SECRET (ver o README).
+                  </>
+                ) : (
+                  <>
+                    A tarefa diária corre, mas ainda não chegou a todas as leads fora do prazo ({overdue}): muitas de
+                    uma vez, ou em uso. O resto sai nas próximas execuções.
+                  </>
+                )}
               </Alert>
             </div>
           )}

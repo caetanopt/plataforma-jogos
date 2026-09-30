@@ -76,10 +76,50 @@ function buildWhere(
 }
 
 /** Quantas das participações que os filtros apanham ainda têm os dados. */
-export function countLeadsToAnonymize(organizationId: string, range: DateRange, filters: LeadsFilters) {
-  return prisma.participation.count({
-    where: { AND: [buildWhere(organizationId, range, filters), { anonymizedAt: null }] },
-  });
+export function countLeadsToAnonymize(
+  organizationId: string,
+  range: DateRange,
+  filters: LeadsFilters,
+  createdUpTo?: Date,
+) {
+  return prisma.participation.count({ where: toAnonymizeWhere(organizationId, range, filters, createdUpTo) });
+}
+
+export type SubjectIdentifier = { kind: "email"; email: string } | { kind: "phone"; phone: string; digits: string };
+
+/**
+ * As participações de um titular (pedido de eliminação, §24), por igualdade
+ * exata do e-mail ou do telefone — nunca por "contém", que apanhava a joana
+ * quando o pedido era da ana. Procura também nas respostas ao formulário:
+ * um segundo campo de e-mail, ou dados antigos que não passaram para as
+ * colunas de identidade. Em todas as campanhas e períodos, reais e de teste.
+ */
+export function findSubjectParticipations(organizationId: string, subject: SubjectIdentifier) {
+  const matches =
+    subject.kind === "email"
+      ? Prisma.sql`(
+          p."email" = ${subject.email}
+          OR EXISTS (
+            SELECT 1 FROM jsonb_each_text(
+              CASE WHEN jsonb_typeof(p."leadFormResponse") = 'object' THEN p."leadFormResponse" ELSE '{}'::jsonb END
+            ) AS kv
+            WHERE lower(btrim(kv.value)) = ${subject.email}
+          )
+        )`
+      : Prisma.sql`(
+          p."phone" = ${subject.phone}
+          OR EXISTS (
+            SELECT 1 FROM jsonb_each_text(
+              CASE WHEN jsonb_typeof(p."leadFormResponse") = 'object' THEN p."leadFormResponse" ELSE '{}'::jsonb END
+            ) AS kv
+            WHERE regexp_replace(kv.value, '[^0-9]', '', 'g') = ${subject.digits}
+          )
+        )`;
+  return prisma.$queryRaw<Array<{ id: string; campaignId: string }>>`
+    SELECT p."id", p."campaignId"
+    FROM "Participation" p
+    JOIN "Campaign" c ON c."id" = p."campaignId"
+    WHERE c."organizationId" = ${organizationId} AND p."anonymizedAt" IS NULL AND ${matches}`;
 }
 
 export async function listLeads(organizationId: string, range: DateRange, filters: LeadsFilters) {
@@ -164,13 +204,31 @@ export async function* iterateLeadsForExport(
  * id, de lote em lote: uma participação saltada (a ser gravada agora) não
  * volta a ser lida no mesmo pedido.
  */
+function toAnonymizeWhere(
+  organizationId: string,
+  range: DateRange,
+  filters: LeadsFilters,
+  createdUpTo?: Date,
+): Prisma.ParticipationWhereInput {
+  return {
+    AND: [
+      buildWhere(organizationId, range, filters),
+      { anonymizedAt: null },
+      // As que existiam quando a página foi mostrada: uma lead que chegue
+      // entretanto não entra numa confirmação feita antes dela.
+      ...(createdUpTo ? [{ createdAt: { lte: createdUpTo } }] : []),
+    ],
+  };
+}
+
 export async function* iterateLeadIdsToAnonymize(
   organizationId: string,
   range: DateRange,
   filters: LeadsFilters,
-  batchSize = EXPORT_BATCH_SIZE,
+  options: { createdUpTo?: Date; batchSize?: number } = {},
 ) {
-  const where: Prisma.ParticipationWhereInput = { AND: [buildWhere(organizationId, range, filters), { anonymizedAt: null }] };
+  const batchSize = options.batchSize ?? EXPORT_BATCH_SIZE;
+  const where = toAnonymizeWhere(organizationId, range, filters, options.createdUpTo);
   let lastId: string | undefined;
   for (;;) {
     const batch = await prisma.participation.findMany({

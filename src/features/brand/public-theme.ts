@@ -227,5 +227,18 @@ export function themeContrastWarnings(source: PublicThemeSource): string[] {
       `A resposta escolhida no quiz não se lê na cor primária: sai em ${v["--game-selected-text"]}.`,
     );
   }
+  if (v["--game-subtle-text"] !== v["--game-text"]) {
+    warnings.push(
+      `O texto não se lê sobre o tom de fundo das caixas de regulamento e avisos: nessas caixas sai em ${v["--game-subtle-text"]}.`,
+    );
+  }
+  if (v["--game-success-text"] !== v["--game-text"]) {
+    warnings.push(`O texto não se lê sobre o verde das cartas encontradas na memória: sai em ${v["--game-success-text"]}.`);
+  }
+  if (!(DANGER_CANDIDATES as readonly string[]).includes(v["--game-danger"])) {
+    warnings.push(
+      `Nenhum vermelho se lê sobre a cor de fundo: os erros e os campos obrigatórios deixam de sair a vermelho e saem em ${v["--game-danger"]}.`,
+    );
+  }
   return warnings;
 }

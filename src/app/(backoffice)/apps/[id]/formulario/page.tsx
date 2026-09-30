@@ -57,7 +57,7 @@ export default async function LeadFormStepPage({
     where: { id, organizationId: context.organizationId },
     include: {
       theme: { select: { legalLinks: true } },
-      organization: { select: { dataRetentionDays: true } },
+      organization: { select: { dataRetentionDays: true, dataRetentionChangedAt: true } },
       leadForm: {
         include: {
           fields: { orderBy: { order: "asc" } },
@@ -72,7 +72,11 @@ export default async function LeadFormStepPage({
   const privacyNoticeMissing = isLiveStatus(campaign.status) && !hasPrivacyNotice(campaign);
 
   const canManagePrivacy = can(context, "privacy:manage");
-  const retention = effectiveRetention({ campaign, organizationDays: campaign.organization.dataRetentionDays });
+  const retention = effectiveRetention({
+    campaign,
+    organizationDays: campaign.organization.dataRetentionDays,
+    organizationChangedAt: campaign.organization.dataRetentionChangedAt,
+  });
   const [retentionSoon, anonymizedCount] = await Promise.all([
     retentionOutlook(context.organizationId, { campaignId: campaign.id }).then((outlook) => outlook[0] ?? null),
     prisma.participation.count({ where: { campaignId: campaign.id, anonymizedAt: { not: null } } }),
@@ -89,7 +93,11 @@ export default async function LeadFormStepPage({
     (
       await prisma.consentRecord.groupBy({
         by: ["consentDefinitionId"],
-        where: { consentDefinitionId: { in: leadForm.consentDefinitions.map((consent) => consent.id) } },
+        // As respostas de teste não contam (removê-lo apaga-as também).
+        where: {
+          consentDefinitionId: { in: leadForm.consentDefinitions.map((consent) => consent.id) },
+          participation: { isTest: false },
+        },
       })
     ).map((row) => row.consentDefinitionId),
   );
@@ -103,7 +111,7 @@ export default async function LeadFormStepPage({
         </p>
       </div>
 
-      {privacyNoticeMissing ? <Alert variant="warning">{LIVE_PRIVACY_NOTICE_MISSING_WARNING}</Alert> : null}
+      {privacyNoticeMissing ? <Alert variant="warning" live={false}>{LIVE_PRIVACY_NOTICE_MISSING_WARNING}</Alert> : null}
 
       <AutoSaveForm action={updateLeadFormSettingsAction} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <input type="hidden" name="campaignId" value={campaign.id} />
@@ -177,8 +185,13 @@ export default async function LeadFormStepPage({
                     <span className="font-medium text-caetano-anthracite">{field.label}</span>
                     <span className="ml-2 text-xs text-caetano-anthracite-80">
                       {LEAD_FIELD_TYPE_LABELS[field.type]}
-                      {field.required ? " · obrigatório" : ""}
+                      {field.required && field.type !== "HIDDEN" ? " · obrigatório" : ""}
                     </span>
+                    {field.type === "HIDDEN" && !field.defaultValue && (
+                      <span className="mt-1 block text-xs text-danger">
+                        Sem valor predefinido: este campo não grava nada. Indique-o em «Editar campo».
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     {/* Sem reset: remontar o botão tirava-lhe o foco a meio de uma reordenação. */}
@@ -224,8 +237,9 @@ export default async function LeadFormStepPage({
                   <summary className={SUMMARY_CLASS}>
                     Editar campo<span className="sr-only"> {field.label}</span>
                   </summary>
-                  {/* Sem expressão de validação nem valor predefinido: não vão
-                      no envio e ficam como estão. */}
+                  {/* Sem expressão de validação: não vai no envio e fica como
+                      está. O valor predefinido só nos campos ocultos, onde é
+                      o único valor que o campo grava. */}
                   <AutoSaveForm action={updateLeadFieldAction} className="mt-2 space-y-2">
                     <input type="hidden" name="campaignId" value={campaign.id} />
                     <input type="hidden" name="fieldId" value={field.id} />
@@ -283,9 +297,26 @@ export default async function LeadFormStepPage({
                         defaultValue={field.exportMapping ?? ""}
                       />
                     </div>
-                    <CheckboxField name="required" defaultChecked={field.required}>
-                      Obrigatório
-                    </CheckboxField>
+                    {field.type === "HIDDEN" ? (
+                      <div>
+                        <Label htmlFor={`defaultValue-${field.id}`}>Valor predefinido</Label>
+                        <Input
+                          id={`defaultValue-${field.id}`}
+                          name="defaultValue"
+                          maxLength={LEAD_FIELD_LIMITS.defaultValue}
+                          defaultValue={field.defaultValue ?? ""}
+                          aria-describedby={`defaultValue-help-${field.id}`}
+                        />
+                        <p id={`defaultValue-help-${field.id}`} className="mt-1 text-xs text-caetano-anthracite-80">
+                          O participante não vê este campo: cada lead grava este valor (por exemplo, a origem da
+                          campanha).
+                        </p>
+                      </div>
+                    ) : (
+                      <CheckboxField name="required" defaultChecked={field.required}>
+                        Obrigatório
+                      </CheckboxField>
+                    )}
                   </AutoSaveForm>
                 </details>
               </li>
@@ -479,10 +510,15 @@ export default async function LeadFormStepPage({
                 className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm aria-invalid:border-danger"
               />
               <p id="retentionUntil-help" className="mt-1 text-xs text-caetano-anthracite-80">
-                A partir das 00:00 desse dia ({campaign.timezone}), todas as participações da campanha são
-                anonimizadas, e as que chegarem depois também, um dia depois de criadas.
+                Pelo menos {RETENTION_WARNING_DAYS} dias depois de hoje. A partir das 00:00 desse dia (
+                {campaign.timezone}), todas as participações da campanha são anonimizadas, e as que chegarem depois
+                também, um dia depois de criadas.
               </p>
             </div>
+            <p className="text-xs text-caetano-anthracite-80">
+              Em vigor: {describeRetention(retention, campaign.timezone)} Um prazo novo ou alterado só começa a
+              anonimizar {RETENTION_WARNING_DAYS} dias depois da alteração.
+            </p>
           </AutoSaveForm>
         ) : (
           <p className="text-sm text-caetano-anthracite">
@@ -492,14 +528,16 @@ export default async function LeadFormStepPage({
         )}
 
         {retentionSoon && (
-          <Alert variant="warning">
+          <Alert variant="warning" live={false}>
             {retentionSoon.upcoming === 1
               ? "1 participação vai ser anonimizada"
               : `${retentionSoon.upcoming} participações vão ser anonimizadas`}{" "}
             nos próximos {RETENTION_WARNING_DAYS} dias
-            {retentionSoon.nextAt
-              ? ` (a primeira a ${retentionSoon.nextAt.toLocaleDateString("pt-PT", { timeZone: campaign.timezone })})`
-              : ""}
+            {retentionSoon.dueNow
+              ? " (a primeira já passou o prazo e sai na próxima execução da tarefa diária)"
+              : retentionSoon.nextAt
+                ? ` (a primeira a ${retentionSoon.nextAt.toLocaleDateString("pt-PT", { timeZone: campaign.timezone })})`
+                : ""}
             . Exporte antes as leads de que precisar.
           </Alert>
         )}

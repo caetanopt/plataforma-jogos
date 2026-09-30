@@ -11,7 +11,7 @@ import { runAction } from "@/server/actions/run-action";
 import { parseThemeForm, saveAsBrandKitSchema } from "@/lib/validation/brand";
 import { mergeLegalLinks } from "@/features/brand/legal-links";
 import { editRemovesLivePrivacyNotice, LIVE_PRIVACY_NOTICE_MESSAGE } from "@/features/publishing/readiness";
-import { loadPrivacyNoticeState } from "@/features/publishing/privacy-guard";
+import { withPrivacyNoticeLock } from "@/features/publishing/privacy-guard";
 import { getField, readOptional } from "@/lib/forms/form-data";
 import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
 
@@ -43,29 +43,38 @@ export async function updateCampaignThemeAction(_previous: ActionResult, formDat
       return fail(MEDIA_UNAVAILABLE_MESSAGE);
     }
 
-    // Numa campanha publicada, tirar a política de privacidade não pode
-    // deixar o formulário a pedir dados sem aviso.
-    if (legalLinkChanges.privacyPolicyUrl !== undefined) {
-      const { status, state } = await loadPrivacyNoticeState(campaign.id);
-      const after = { ...state, theme: { legalLinks: mergeLegalLinks(campaign.theme.legalLinks, legalLinkChanges) } };
-      if (editRemovesLivePrivacyNotice(status, state, after)) {
-        delete legalLinkChanges.privacyPolicyUrl;
-        fieldErrors.privacyPolicyUrl = LIVE_PRIVACY_NOTICE_MESSAGE;
+    // Verificar e gravar juntos, com a campanha bloqueada (ver
+    // withPrivacyNoticeLock): numa campanha publicada, tirar a política de
+    // privacidade não pode deixar o formulário a pedir dados sem aviso. Os
+    // links juntam-se aos gravados lidos dentro do bloqueio.
+    const themeId = campaign.theme.id;
+    const saving = await withPrivacyNoticeLock(campaign.id, async (tx, { status, state }) => {
+      const storedLinks = state.theme?.legalLinks ?? null;
+      if (legalLinkChanges.privacyPolicyUrl !== undefined) {
+        const after = { ...state, theme: { legalLinks: mergeLegalLinks(storedLinks, legalLinkChanges) } };
+        if (editRemovesLivePrivacyNotice(status, state, after)) {
+          delete legalLinkChanges.privacyPolicyUrl;
+          fieldErrors.privacyPolicyUrl = LIVE_PRIVACY_NOTICE_MESSAGE;
+        }
       }
-    }
-    const saving = savedSomething && (Object.values(update).some((value) => value !== undefined) || Object.keys(legalLinkChanges).length > 0);
+      const changes =
+        savedSomething &&
+        (Object.values(update).some((value) => value !== undefined) || Object.keys(legalLinkChanges).length > 0);
+      if (changes) {
+        await tx.campaignTheme.update({
+          where: { id: themeId },
+          data: {
+            ...update,
+            ...(Object.keys(legalLinkChanges).length > 0
+              ? { legalLinks: mergeLegalLinks(storedLinks, legalLinkChanges) }
+              : {}),
+          },
+        });
+      }
+      return changes;
+    });
 
     if (saving) {
-      await prisma.campaignTheme.update({
-        where: { id: campaign.theme.id },
-        data: {
-          ...update,
-          ...(Object.keys(legalLinkChanges).length > 0
-            ? { legalLinks: mergeLegalLinks(campaign.theme.legalLinks, legalLinkChanges) }
-            : {}),
-        },
-      });
-
       await logAudit({
         organizationId: context.organizationId,
         userId: context.userId,
@@ -155,32 +164,35 @@ export async function applyBrandKitAction(_previous: ActionResult, formData: For
     if (!campaign || !campaign.theme || !brandKit) notFound();
 
     // Um kit sem política de privacidade não a tira a uma campanha publicada
-    // cujo formulário pede dados: os links legais da campanha ficam.
-    const { status, state } = await loadPrivacyNoticeState(campaign.id);
-    const keepLegalLinks =
-      brandKit.legalLinks != null &&
-      editRemovesLivePrivacyNotice(status, state, { ...state, theme: { legalLinks: brandKit.legalLinks } });
-
-    await prisma.campaignTheme.update({
-      where: { id: campaign.theme.id },
-      data: {
-        sourceBrandKitId: brandKit.id,
-        logoMediaId: brandKit.logoMediaId,
-        faviconMediaId: brandKit.faviconMediaId,
-        backgroundImageMediaId: brandKit.backgroundImageMediaId,
-        primaryColor: brandKit.primaryColor,
-        secondaryColor: brandKit.secondaryColor,
-        backgroundColor: brandKit.backgroundColor,
-        textColor: brandKit.textColor,
-        buttonColor: brandKit.buttonColor,
-        buttonTextColor: brandKit.buttonTextColor,
-        fontFamily: brandKit.fontFamily,
-        borderRadiusPx: brandKit.borderRadiusPx,
-        shadowEnabled: brandKit.shadowEnabled,
-        headerConfig: brandKit.headerConfig ?? undefined,
-        footerConfig: brandKit.footerConfig ?? undefined,
-        legalLinks: keepLegalLinks ? undefined : (brandKit.legalLinks ?? undefined),
-      },
+    // cujo formulário pede dados: os links legais da campanha ficam. Com a
+    // campanha bloqueada, como as outras edições do aviso.
+    const themeId = campaign.theme.id;
+    const keepLegalLinks = await withPrivacyNoticeLock(campaign.id, async (tx, { status, state }) => {
+      const keep =
+        brandKit.legalLinks != null &&
+        editRemovesLivePrivacyNotice(status, state, { ...state, theme: { legalLinks: brandKit.legalLinks } });
+      await tx.campaignTheme.update({
+        where: { id: themeId },
+        data: {
+          sourceBrandKitId: brandKit.id,
+          logoMediaId: brandKit.logoMediaId,
+          faviconMediaId: brandKit.faviconMediaId,
+          backgroundImageMediaId: brandKit.backgroundImageMediaId,
+          primaryColor: brandKit.primaryColor,
+          secondaryColor: brandKit.secondaryColor,
+          backgroundColor: brandKit.backgroundColor,
+          textColor: brandKit.textColor,
+          buttonColor: brandKit.buttonColor,
+          buttonTextColor: brandKit.buttonTextColor,
+          fontFamily: brandKit.fontFamily,
+          borderRadiusPx: brandKit.borderRadiusPx,
+          shadowEnabled: brandKit.shadowEnabled,
+          headerConfig: brandKit.headerConfig ?? undefined,
+          footerConfig: brandKit.footerConfig ?? undefined,
+          legalLinks: keep ? undefined : (brandKit.legalLinks ?? undefined),
+        },
+      });
+      return keep;
     });
 
     await logAudit({

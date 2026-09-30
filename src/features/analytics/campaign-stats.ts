@@ -88,6 +88,10 @@ export async function getCampaignStats(
         COUNT(*) FILTER (WHERE "type" = 'PARTICIPATION_BLOCKED')::int AS blocked
       FROM "AnalyticsEvent"
       WHERE "campaignId" IN (${Prisma.join(campaignIds)})
+        -- O tipo no WHERE, não só nos FILTER: sem ele, o índice
+        -- (campaignId, type, occurredAt) não limita a data e a query lia
+        -- todos os eventos da campanha (ou a tabela inteira).
+        AND "type" IN ('CAMPAIGN_VIEWED', 'START_CLICKED', 'PARTICIPATION_BLOCKED')
         AND "isTest" = false
         AND "occurredAt" >= ${range.from} AND "occurredAt" <= ${range.to}`,
     // Leads: com resposta ao formulário (nem NULL nem JSON null).

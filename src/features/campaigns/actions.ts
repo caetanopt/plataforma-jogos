@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/server/db/client";
+import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
+import { retryOnDeadlock } from "@/lib/db/transaction-retry";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -485,37 +486,63 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
   // dava P2003, e o ecrã de erro depois de confirmar. As participações levam
   // com elas os prémios atribuídos, os consentimentos e as respostas. O FOR
   // UPDATE faz esperar as participações que comecem entretanto (a inserção
-  // precisa da campanha), em vez de uma delas travar a eliminação a meio.
+  // precisa da campanha) e a anonimização (que bloqueia a campanha primeiro),
+  // em vez de uma delas travar a eliminação a meio.
   //
   // O Participant liga-se só à organização: sem isto, o nome, o e-mail e o
   // telefone gravados nele (antes de a identidade passar para a participação)
   // sobreviviam à eliminação que o aviso diz apagar tudo (§24). Saem os que
   // só participaram nesta campanha; quem jogou também noutra fica (o
-  // identificador do browser serve os limites de participação de lá). Antes
-  // das participações: a FK é SET NULL e, depois de elas saírem, já não se
-  // sabia quem só tinha jogado aqui.
+  // identificador do browser serve os limites de participação de lá).
   //
-  // Os candidatos ficam bloqueados (FOR UPDATE) antes do DELETE: uma
-  // participação a começar noutra campanha com o mesmo participante tem o
-  // registo ainda por confirmar, e o DELETE não a via — o participante saía
-  // e essa participação ficava sem ele (e fora do limite por browser). O
-  // bloqueio espera por ela, e o DELETE, uma instrução nova, já a vê.
-  const [, , participantsDeleted, participations] = await prisma.$transaction([
-    prisma.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR UPDATE`,
-    prisma.$queryRaw`
-      SELECT "id" FROM "Participant"
-      WHERE "organizationId" = ${context.organizationId}
-        AND "id" IN (SELECT "participantId" FROM "Participation" WHERE "campaignId" = ${campaign.id})
-      FOR UPDATE`,
-    prisma.$executeRaw`
-      DELETE FROM "Participant" p
-      WHERE p."organizationId" = ${context.organizationId}
-        AND EXISTS (SELECT 1 FROM "Participation" x WHERE x."participantId" = p."id" AND x."campaignId" = ${campaign.id})
-        AND NOT EXISTS (SELECT 1 FROM "Participation" y WHERE y."participantId" = p."id" AND y."campaignId" <> ${campaign.id})`,
-    prisma.participation.deleteMany({ where: { campaignId: campaign.id } }),
-    prisma.campaignVersion.deleteMany({ where: { campaignId: campaign.id } }),
-    prisma.campaign.delete({ where: { id: campaign.id } }),
-  ]);
+  // Os candidatos (quem jogou aqui) ficam registados e bloqueados antes de
+  // tudo, por ordem de id; depois saem as participações e, por fim, os
+  // candidatos que ficaram sem nenhuma. Apagar os participantes primeiro
+  // obrigava o SET NULL a reescrever cada participação antes de a apagar
+  // (numa campanha grande, segundos) e cruzava a ordem dos bloqueios com a
+  // de um sorteio a decorrer. O bloqueio espera por uma participação a
+  // começar noutra campanha com o mesmo participante, e o DELETE final, uma
+  // instrução nova, já a vê.
+  //
+  // Sem prazo explícito, o Prisma dava 5 s à transação inteira: uma campanha
+  // com 100 mil participações nunca se conseguia eliminar.
+  const { participantsDeleted, participations } = await retryOnDeadlock(() =>
+    prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR UPDATE`;
+        const candidates = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "Participant"
+          WHERE "organizationId" = ${context.organizationId}
+            AND "id" IN (SELECT "participantId" FROM "Participation" WHERE "campaignId" = ${campaign.id})
+          ORDER BY "id"
+          FOR UPDATE`;
+        const deletedParticipations = await tx.participation.deleteMany({ where: { campaignId: campaign.id } });
+        const candidateIds = candidates.map((row) => row.id);
+        const deletedParticipants =
+          candidateIds.length > 0
+            ? await tx.$executeRaw`
+                DELETE FROM "Participant" p
+                WHERE p."organizationId" = ${context.organizationId}
+                  AND p."id" = ANY(${candidateIds}::text[])
+                  AND NOT EXISTS (SELECT 1 FROM "Participation" x WHERE x."participantId" = p."id")`
+            : 0;
+        // Os que ficam (jogaram noutra campanha) perdem os dados pessoais
+        // antigos: podiam ser de quem jogou nesta.
+        if (candidateIds.length > 0) {
+          await tx.$executeRaw`
+            UPDATE "Participant"
+            SET "email" = NULL, "phone" = NULL, "firstName" = NULL, "lastName" = NULL, "anonymizedAt" = ${new Date()}
+            WHERE "organizationId" = ${context.organizationId}
+              AND "id" = ANY(${candidateIds}::text[])
+              AND ("email" IS NOT NULL OR "phone" IS NOT NULL OR "firstName" IS NOT NULL OR "lastName" IS NOT NULL)`;
+        }
+        await tx.campaignVersion.deleteMany({ where: { campaignId: campaign.id } });
+        await tx.campaign.delete({ where: { id: campaign.id } });
+        return { participantsDeleted: deletedParticipants, participations: deletedParticipations };
+      },
+      { maxWait: TRANSACTION_MAX_WAIT_MS, timeout: 120_000 },
+    ),
+  );
 
   await logAudit({
     organizationId: context.organizationId,

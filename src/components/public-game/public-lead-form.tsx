@@ -143,7 +143,7 @@ export function PublicLeadForm({
               required={field.required}
               placeholder={field.placeholder ?? undefined}
               rows={3}
-              className="w-full rounded-game border border-game-border-strong bg-game-surface px-3 py-2 text-sm"
+              className="w-full rounded-game border border-game-border-strong bg-game-surface px-3 py-2 text-sm placeholder:text-game-muted"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
@@ -192,7 +192,9 @@ export function PublicLeadForm({
               inputMode={field.type === "PHONE" ? "tel" : undefined}
               autoComplete={field.type === "PHONE" ? "tel" : field.type === "EMAIL" ? "email" : undefined}
               placeholder={field.placeholder ?? undefined}
-              className="h-10 w-full rounded-game border border-game-border-strong bg-game-surface px-3 text-sm focus-visible:border-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
+              // O placeholder do Tailwind é o texto a 50% de opacidade (2,7:1 no
+              // tema por omissão): uma cor do tema que se lê.
+              className="h-10 w-full rounded-game border border-game-border-strong bg-game-surface px-3 text-sm placeholder:text-game-muted focus-visible:border-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />

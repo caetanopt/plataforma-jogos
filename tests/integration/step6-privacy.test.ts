@@ -33,6 +33,14 @@ vi.mock("@/lib/security/rate-limit", () => ({
   checkRateLimit: async () => ({ allowed: true, remaining: 10 }),
 }));
 vi.mock("@/components/public-game/public-game-flow", () => ({ PublicGameFlow: () => null }));
+// O upload do QR code, com um gancho para simular uma edição durante ele.
+const qr = vi.hoisted(() => ({ duringUpload: null as null | (() => Promise<void>) }));
+vi.mock("@/features/publishing/qr", () => ({
+  generateAndStoreQrCodes: async () => {
+    await qr.duringUpload?.();
+    return { pngMediaId: null, svgMediaId: null };
+  },
+}));
 
 const { IDLE } = await import("@/lib/forms/action-result");
 const { updateCampaignThemeAction } = await import("@/features/campaigns/steps/brand-actions");
@@ -44,6 +52,8 @@ const { addConsentAction, addLeadFieldAction, updateConsentAction, updateLeadFor
 );
 const { LIVE_PRIVACY_NOTICE_MESSAGE } = await import("@/features/publishing/readiness");
 const { CONSENT_MARKETING_LOCKED_MESSAGE } = await import("@/lib/validation/lead-form");
+const { updateLeadFieldAction, removeConsentAction } = await import("@/features/campaigns/steps/lead-form-actions");
+const { publishCampaignAction } = await import("@/features/publishing/actions");
 const { updatePrivacySettingsAction } = await import("@/features/organizations/actions");
 const { default: PublicPlayPage, generateMetadata } = await import("@/app/play/[slug]/page");
 const { listLeads } = await import("@/features/leads/queries");
@@ -428,7 +438,105 @@ describe("aviso de privacidade numa campanha publicada", () => {
   });
 });
 
+describe("aviso de privacidade: edições ao mesmo tempo e publicação", () => {
+  it("duas edições ao mesmo tempo, cada uma permitida sozinha, não tiram juntas o aviso", async () => {
+    for (let round = 0; round < 5; round += 1) {
+      const { campaign, theme } = await createCampaign(a);
+      state.current = a.contexts.EDITOR;
+      const results = await Promise.all([
+        updateStartScreenAction(IDLE, form({ campaignId: campaign.id, legalText: "" })),
+        updateCampaignThemeAction(IDLE, form({ campaignId: campaign.id, privacyPolicyUrl: "", termsUrl: "https://marca.pt/termos" })),
+      ]);
+      // Uma das duas grava; a outra vê o que a primeira gravou e recusa.
+      expect(results.map((result) => result.status).sort()).toEqual(["error", "success"]);
+      const saved = await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id }, select: { legalText: true } });
+      const links = (await prisma.campaignTheme.findUniqueOrThrow({ where: { id: theme.id } })).legalLinks as {
+        privacyPolicyUrl?: string | null;
+      } | null;
+      expect(Boolean(saved.legalText) || Boolean(links?.privacyPolicyUrl)).toBe(true);
+    }
+  });
+
+  it("publicar volta a verificar o aviso: uma edição durante o upload do QR code não passa", async () => {
+    const { campaign, theme } = await createCampaign(a, { legalText: null });
+    await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "DRAFT" } });
+    const memoryConfig = await prisma.memoryGameConfig.findUniqueOrThrow({ where: { campaignId: campaign.id } });
+    await prisma.memoryCardPair.createMany({
+      data: [0, 1].map((order) => ({
+        memoryGameConfigId: memoryConfig.id,
+        order,
+        kind: "TEXT_TEXT" as const,
+        cardAText: `P${order}`,
+        cardBText: `P${order}`,
+      })),
+    });
+    state.current = a.contexts.ORG_ADMIN;
+    // Enquanto o QR code sobe, alguém tira a política de privacidade (o
+    // único aviso) — a campanha ainda é rascunho, a guarda do editor não se
+    // aplica.
+    qr.duringUpload = async () => {
+      await prisma.campaignTheme.update({ where: { id: theme.id }, data: { legalLinks: { termsUrl: "https://marca.pt/t" } } });
+    };
+    try {
+      await expect(publishCampaignAction(form({ campaignId: campaign.id }))).rejects.toMatchObject({
+        digest: expect.stringContaining("error=readiness"),
+      });
+    } finally {
+      qr.duringUpload = null;
+    }
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } })).status).toBe("DRAFT");
+  });
+});
+
+describe("campos ocultos no editor", () => {
+  it("grava o valor predefinido e nunca fica obrigatório", async () => {
+    const { campaign } = await createCampaign(a);
+    const leadForm = await prisma.leadForm.findUniqueOrThrow({ where: { campaignId: campaign.id } });
+    const hidden = await prisma.leadFormField.create({
+      data: { leadFormId: leadForm.id, type: "HIDDEN", internalKey: "origem", label: "Origem", order: 9 },
+    });
+    state.current = a.contexts.EDITOR;
+
+    const result = await updateLeadFieldAction(
+      IDLE,
+      form({ campaignId: campaign.id, fieldId: hidden.id, defaultValue: "newsletter", required: "on" }),
+    );
+
+    expect(result.status).toBe("success");
+    expect(await prisma.leadFormField.findUniqueOrThrow({ where: { id: hidden.id } })).toMatchObject({
+      defaultValue: "newsletter",
+      required: false,
+    });
+  });
+});
+
 describe("consentimento de marketing já respondido", () => {
+  it("respostas de teste não prendem o tipo nem impedem de o remover", async () => {
+    const { campaign, version, consents } = await createCampaign(a);
+    const [, marketing] = consents;
+    state.current = a.contexts.EDITOR;
+    const testPlay = await prisma.participation.create({
+      data: { campaignId: campaign.id, campaignVersionId: version.id, idempotencyKey: randomUUID(), isTest: true },
+    });
+    await prisma.consentRecord.create({
+      data: { participationId: testPlay.id, consentDefinitionId: marketing.id, status: "GRANTED", text: marketing.text, version: 3 },
+    });
+
+    // Só respostas de teste: o tipo muda, e as respostas de teste saem.
+    expect(
+      (await updateConsentAction(IDLE, form({ campaignId: campaign.id, consentId: marketing.id, isMarketing: "" }))).status,
+    ).toBe("success");
+    expect(await prisma.consentRecord.count({ where: { consentDefinitionId: marketing.id } })).toBe(0);
+
+    await prisma.consentRecord.create({
+      data: { participationId: testPlay.id, consentDefinitionId: marketing.id, status: "GRANTED", text: marketing.text, version: 3 },
+    });
+    expect((await removeConsentAction(IDLE, form({ campaignId: campaign.id, consentId: marketing.id }))).status).toBe(
+      "success",
+    );
+    expect(await prisma.consentDefinition.findUnique({ where: { id: marketing.id } })).toBeNull();
+  });
+
   it("não muda de tipo depois de haver respostas; antes, muda", async () => {
     const { campaign, version, consents } = await createCampaign(a);
     const [regulation, marketing] = consents;
@@ -565,11 +673,11 @@ describe("consentimentos nas leads", () => {
     expect(response.status).toBe(200);
     const [header, ...lines] = (await response.text()).split("\n");
     expect(header.endsWith(
-      ",Consentimento de marketing,Consentimentos,Anonimizada em,Consentimento: Aceito o regulamento (v1),Consentimento: Aceito receber novidades (v3)",
+      ",Consentimento de marketing,Consentimentos,Consentimento: Aceito o regulamento (v1),Consentimento: Aceito receber novidades (v3),Anonimizada em",
     )).toBe(true);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("sim@example.pt");
-    expect(lines[0].endsWith(",Aceite,Aceite")).toBe(true);
+    expect(lines[0].endsWith(",Aceite,Aceite,")).toBe(true);
     expect(lines[0]).toContain(",Concedido,");
 
     const audit = await prisma.auditLog.findFirstOrThrow({

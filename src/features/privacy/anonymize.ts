@@ -1,5 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/server/db/client";
+import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
+import { retryOnDeadlock } from "@/lib/db/transaction-retry";
+import type { SubjectIdentifier } from "@/features/leads/queries";
 
 /**
  * Anonimização de participações (§21, §24): o que se retira e o que fica.
@@ -10,14 +12,16 @@ import { prisma } from "@/server/db/client";
  *   participação continua a contar como lead nas estatísticas);
  * - IP, sessão e a ligação ao Participant (o cookie do browser);
  * - `utm_content` e `utm_term`, que as newsletters usam para identificar o
- *   destinatário.
+ *   destinatário, e o caminho e a query da origem (o URL de onde veio).
  *
  * Ficam o resultado, o prémio e o código (o stock tem de bater certo), os
  * consentimentos (texto, versão e estado, já sem ninguém a quem se liguem), a
  * origem, o dispositivo e o browser: o que alimenta as estatísticas.
  *
- * O Participant que fica sem participações é apagado, com os dados antigos
- * que ainda tivesse (antes de a identidade passar para a participação).
+ * O Participant que fica sem participações é apagado. O que continua (o
+ * mesmo browser jogou noutras participações) perde os dados pessoais antigos
+ * que ainda tivesse de antes de a identidade passar para a participação: o
+ * nome, o e-mail e o telefone de quem está a ser anonimizado podiam estar lá.
  *
  * Consequência: as participações anonimizadas deixam de contar para os
  * limites de participação por e-mail, telefone, IP, sessão ou browser.
@@ -31,7 +35,7 @@ export interface AnonymizationCounts {
 const BATCH_SIZE = 500;
 // Um lote de 500 com as cascatas cabe folgadamente; o valor por omissão do
 // Prisma (5 s) não.
-const TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 60_000 } as const;
+const TRANSACTION_OPTIONS = { maxWait: TRANSACTION_MAX_WAIT_MS, timeout: 60_000 } as const;
 
 interface LockedRow {
   id: string;
@@ -68,6 +72,10 @@ async function anonymizeLocked(
       "participantId" = NULL,
       "utmContent" = NULL,
       "utmTerm" = NULL,
+      "source" = CASE
+        WHEN "source" ~* '^https?://' THEN substring("source" from '^https?://([^/?#]+)')
+        ELSE "source"
+      END,
       "anonymizedAt" = ${now}
     WHERE "id" IN (${Prisma.join(rows.map((row) => row.id))}) AND "anonymizedAt" IS NULL`;
 
@@ -81,12 +89,20 @@ async function anonymizeLocked(
     await tx.$queryRaw`
       SELECT "id" FROM "Participant"
       WHERE "organizationId" = ${organizationId} AND "id" IN (${Prisma.join(candidates)})
+      ORDER BY "id"
       FOR UPDATE`;
     participantsDeleted = await tx.$executeRaw`
       DELETE FROM "Participant" p
       WHERE p."organizationId" = ${organizationId}
         AND p."id" IN (${Prisma.join(candidates)})
         AND NOT EXISTS (SELECT 1 FROM "Participation" x WHERE x."participantId" = p."id")`;
+    // Os que ficam (jogaram noutras participações) só guardam o cookie.
+    await tx.$executeRaw`
+      UPDATE "Participant"
+      SET "email" = NULL, "phone" = NULL, "firstName" = NULL, "lastName" = NULL, "anonymizedAt" = ${now}
+      WHERE "organizationId" = ${organizationId}
+        AND "id" IN (${Prisma.join(candidates)})
+        AND ("email" IS NOT NULL OR "phone" IS NOT NULL OR "firstName" IS NOT NULL OR "lastName" IS NOT NULL)`;
   }
 
   return { participationsAnonymized, participantsDeleted };
@@ -106,11 +122,22 @@ export async function anonymizeParticipationsByIds(
   organizationId: string,
   participationIds: readonly string[],
   now: Date = new Date(),
+  /** Vai sendo somado a cada lote confirmado (ver anonymizeCampaignBefore). */
+  progress?: AnonymizationCounts,
 ): Promise<AnonymizationCounts & { skipped: number }> {
   const total: AnonymizationCounts = { participationsAnonymized: 0, participantsDeleted: 0 };
   let eligible = 0;
   for (const ids of chunk([...new Set(participationIds)], BATCH_SIZE)) {
-    const { counts, found } = await prisma.$transaction(async (tx) => {
+    const { counts, found } = await retryOnDeadlock(() => prisma.$transaction(async (tx) => {
+      // As campanhas primeiro, como a eliminação de uma campanha (que as
+      // bloqueia FOR UPDATE antes das participações e dos participantes):
+      // pela ordem inversa, as duas bloqueavam-se uma à outra (deadlock).
+      await tx.$queryRaw`
+        SELECT c."id" FROM "Campaign" c
+        WHERE c."organizationId" = ${organizationId}
+          AND c."id" IN (SELECT p."campaignId" FROM "Participation" p WHERE p."id" IN (${Prisma.join(ids)}))
+        ORDER BY c."id"
+        FOR KEY SHARE`;
       // Das pedidas, as da organização que ainda não foram anonimizadas.
       const pending = await tx.$queryRaw<Array<{ count: number }>>`
         SELECT COUNT(*)::int AS count
@@ -122,9 +149,10 @@ export async function anonymizeParticipationsByIds(
         WHERE c."organizationId" = ${organizationId} AND p."id" IN (${Prisma.join(ids)}) AND p."anonymizedAt" IS NULL
         FOR UPDATE OF p SKIP LOCKED`;
       return { counts: await anonymizeLocked(tx, organizationId, rows, now), found: pending[0]?.count ?? 0 };
-    }, TRANSACTION_OPTIONS);
+    }, TRANSACTION_OPTIONS));
     eligible += found;
     add(total, counts);
+    if (progress) add(progress, counts);
   }
   return { ...total, skipped: Math.max(0, eligible - total.participationsAnonymized) };
 }
@@ -138,12 +166,20 @@ export async function anonymizeParticipationsByIds(
 export async function anonymizeCampaignBefore(
   campaign: { id: string; organizationId: string },
   cutoff: Date,
-  options: { now: Date; deadline: number; batchSize?: number },
+  options: {
+    now: Date;
+    deadline: number;
+    batchSize?: number;
+    /** Vai sendo somado a cada lote confirmado: com uma falha a meio, diz o que já saiu. */
+    progress?: AnonymizationCounts;
+  },
 ): Promise<AnonymizationCounts & { timedOut: boolean }> {
   const batchSize = options.batchSize ?? BATCH_SIZE;
-  const total: AnonymizationCounts = { participationsAnonymized: 0, participantsDeleted: 0 };
+  const total: AnonymizationCounts = options.progress ?? { participationsAnonymized: 0, participantsDeleted: 0 };
   for (;;) {
-    const { counts, read } = await prisma.$transaction(async (tx) => {
+    const { counts, read } = await retryOnDeadlock(() => prisma.$transaction(async (tx) => {
+      // A campanha primeiro (ver anonymizeParticipationsByIds).
+      await tx.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR KEY SHARE`;
       const rows = await tx.$queryRaw<LockedRow[]>`
         SELECT "id", "participantId"
         FROM "Participation"
@@ -152,9 +188,29 @@ export async function anonymizeCampaignBefore(
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED`;
       return { counts: await anonymizeLocked(tx, campaign.organizationId, rows, options.now), read: rows.length };
-    }, TRANSACTION_OPTIONS);
+    }, TRANSACTION_OPTIONS));
     add(total, counts);
     if (read < batchSize) return { ...total, timedOut: false };
     if (Date.now() >= options.deadline) return { ...total, timedOut: true };
   }
+}
+
+/**
+ * Pedido de um titular: os dados pessoais antigos que ainda estejam num
+ * Participant da organização com o mesmo e-mail ou telefone (de antes de a
+ * identidade passar para a participação) também saem.
+ */
+export async function clearSubjectFromParticipants(
+  organizationId: string,
+  subject: SubjectIdentifier,
+  now: Date = new Date(),
+): Promise<number> {
+  const matches =
+    subject.kind === "email"
+      ? Prisma.sql`lower(btrim("email")) = ${subject.email}`
+      : Prisma.sql`regexp_replace(coalesce("phone", ''), '[^0-9]', '', 'g') = ${subject.digits}`;
+  return prisma.$executeRaw`
+    UPDATE "Participant"
+    SET "email" = NULL, "phone" = NULL, "firstName" = NULL, "lastName" = NULL, "anonymizedAt" = ${now}
+    WHERE "organizationId" = ${organizationId} AND ${matches}`;
 }

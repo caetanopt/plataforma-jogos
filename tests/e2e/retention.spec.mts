@@ -39,10 +39,14 @@ test.describe("conservação e anonimização dos dados", () => {
     await expect(row).toHaveCount(1);
     await expect(row.getByText(email)).toBeVisible();
 
+    // Sem nada selecionado, o botão não abre o diálogo.
+    await expect(page.getByRole("button", { name: /^Anonimizar selecionadas/ })).toBeDisabled();
     await row.getByRole("checkbox", { name: /Selecionar a lead de/ }).check();
-    await page.getByRole("button", { name: "Anonimizar selecionadas" }).click();
-    const dialog = page.getByRole("dialog", { name: "Anonimizar as leads selecionadas?" });
+    await page.getByRole("button", { name: "Anonimizar selecionadas (1)" }).click();
+    const dialog = page.getByRole("dialog", { name: "Anonimizar 1 lead?" });
     await expect(dialog.getByText("Não é possível desfazer.", { exact: false })).toBeVisible();
+    // Numa ação destrutiva, o foco começa em Cancelar.
+    await expect(dialog.getByRole("button", { name: "Cancelar" })).toBeFocused();
     await dialog.getByRole("button", { name: "Anonimizar", exact: true }).click();
 
     await expect(page.getByText("1 lead anonimizada.")).toBeVisible({ timeout: 10_000 });
@@ -68,7 +72,9 @@ test.describe("conservação e anonimização dos dados", () => {
     originalRetention = (await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } })).dataRetentionDays;
 
     await page.getByLabel("Prazo de conservação das leads").selectOption("365");
-    await expect(page.getByText("Alterações guardadas").first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("A anonimização por este prazo começa daqui a 7 dias").first()).toBeVisible({
+      timeout: 10_000,
+    });
     await expect
       .poll(async () => (await prisma.organization.findUniqueOrThrow({ where: { id: organizationId! } })).dataRetentionDays)
       .toBe(365);

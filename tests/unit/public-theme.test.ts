@@ -154,6 +154,41 @@ describe("tema na página pública", () => {
     }
   });
 
+  it("cada cor que a página troca tem um aviso no editor (temas aleatórios)", () => {
+    // Pseudoaleatório com semente: o mesmo conjunto de temas em cada execução.
+    let seed = 42;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31;
+      return seed / 2 ** 31;
+    };
+    const hex = () => `#${Math.floor(random() * 0xffffff).toString(16).padStart(6, "0").toUpperCase()}`;
+    const DANGER = ["#B3261E", "#8C1D18", "#F2B8B5"];
+    for (let index = 0; index < 500; index += 1) {
+      const theme: PublicThemeSource = {
+        ...SCHEMA_DEFAULT,
+        backgroundColor: hex(),
+        textColor: hex(),
+        primaryColor: hex(),
+        secondaryColor: hex(),
+        buttonColor: hex(),
+        buttonTextColor: hex(),
+      };
+      const { variables: v } = resolvePublicTheme(theme);
+      const warnings = themeContrastWarnings(theme).join("\n");
+      const expectWarning = (condition: boolean, fragment: string) => {
+        if (condition) expect(warnings, `${fragment} em ${JSON.stringify(theme)}`).toContain(fragment);
+      };
+      expectWarning(v["--game-text"] !== theme.textColor.toUpperCase(), "A cor do texto");
+      expectWarning(v["--game-button-text"] !== theme.buttonTextColor.toUpperCase(), "O texto dos botões");
+      expectWarning(v["--game-accent"] !== theme.primaryColor.toUpperCase(), "A cor primária sobre");
+      expectWarning(v["--game-highlight-text"] !== v["--game-text"], "caixas de destaque");
+      expectWarning(v["--game-selected-text"] !== v["--game-accent"], "resposta escolhida");
+      expectWarning(v["--game-subtle-text"] !== v["--game-text"], "regulamento e avisos");
+      expectWarning(v["--game-success-text"] !== v["--game-text"], "cartas encontradas");
+      expectWarning(!DANGER.includes(v["--game-danger"]), "vermelho");
+    }
+  });
+
   it("num tema escuro os controlos nativos também são escuros", () => {
     expect(resolvePublicTheme(SCHEMA_DEFAULT).colorScheme).toBe("light");
     expect(resolvePublicTheme({ ...SCHEMA_DEFAULT, backgroundColor: "#111111", textColor: "#FFFFFF" }).colorScheme).toBe("dark");

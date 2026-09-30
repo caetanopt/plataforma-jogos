@@ -11,7 +11,8 @@ import { retentionOutlook } from "@/features/privacy/retention-queries";
 import { RETENTION_WARNING_DAYS } from "@/features/privacy/retention-policy";
 import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
-import { SelectAllCheckbox } from "@/components/backoffice/leads/select-all-checkbox";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { AnonymizeSelectionButton, SelectAllCheckbox } from "@/components/backoffice/leads/selection";
 import { Alert } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
@@ -21,6 +22,9 @@ import { Badge } from "@/components/ui/badge";
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/labels";
 
 export const metadata = { title: "Leads" };
+
+// As ações da página (anonimizar pelos filtros, por lotes) podem demorar.
+export const maxDuration = 300;
 
 interface LeadsSearchParams {
   campaignId?: string;
@@ -39,6 +43,20 @@ const MAX_OUTLOOK_CAMPAIGNS = 5;
 
 const ANONYMIZE_WARNING =
   "Os dados pessoais (nome, e-mail, telefone, respostas ao formulário, IP) são apagados para sempre. Ficam o resultado, o prémio e as estatísticas. Não é possível desfazer.";
+
+const PERIOD_LABELS: Record<string, string> = {
+  today: "hoje",
+  "7d": "últimos 7 dias",
+  "30d": "últimos 30 dias",
+  "90d": "últimos 90 dias",
+  all: "todo o período",
+  custom: "período personalizado",
+};
+
+/** O instante em que a página foi mostrada: a anonimização pelos filtros não passa dele. */
+function renderedAt(): string {
+  return new Date().toISOString();
+}
 
 const MARKETING_TONES: Record<string, "success" | "neutral" | "warning"> = {
   Concedido: "success",
@@ -86,6 +104,21 @@ export default async function LeadsPage({
   const exportQuery = new URLSearchParams(filterParams).toString();
   const upcomingTotal = outlook.reduce((sum, campaign) => sum + campaign.upcoming, 0);
   const campaignTimezone = new Map(campaigns.map((campaign) => [campaign.id, campaign.timezone]));
+  const asOf = renderedAt();
+  // O que o diálogo da anonimização pelos filtros diz que vai apanhar.
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === filters.campaignId);
+  const filterSummary = [
+    selectedCampaign ? `campanha «${selectedCampaign.internalName}»` : "todas as campanhas",
+    PERIOD_LABELS[range.preset] ?? range.preset,
+    excludeTest ? "sem as de teste" : "incluindo as de teste",
+    marketingConsent === "granted"
+      ? "com consentimento de marketing aceite"
+      : marketingConsent === "not_granted"
+        ? "sem consentimento de marketing aceite"
+        : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -103,10 +136,11 @@ export default async function LeadsPage({
 
       {upcomingTotal > 0 && (
         <div className="mb-6">
-          <Alert variant="warning">
+          <Alert variant="warning" live={false}>
             <p>
               {upcomingTotal === 1 ? "1 lead vai ser anonimizada" : `${upcomingTotal} leads vão ser anonimizadas`} nos
-              próximos {RETENTION_WARNING_DAYS} dias, por fim do prazo de conservação. Exporte antes as que precisar.
+              próximos {RETENTION_WARNING_DAYS} dias, por fim do prazo de conservação.
+              {canExport ? " Exporte antes as de que precisar." : ""}
             </p>
             <ul className="mt-2 list-disc space-y-0.5 pl-5">
               {outlook.slice(0, MAX_OUTLOOK_CAMPAIGNS).map((campaign) => (
@@ -122,8 +156,8 @@ export default async function LeadsPage({
             )}
             {outlook.some((campaign) => campaign.overdue > 0) && (
               <p className="mt-1">
-                Algumas já passaram o prazo há mais de dois dias: a tarefa diária de anonimização não está a correr
-                (ver Configurações &gt; Privacidade).
+                Algumas já passaram o prazo há mais de dois dias e continuam com os dados
+                {canManagePrivacy ? " (ver Configurações > Privacidade)" : ""}.
               </p>
             )}
           </Alert>
@@ -188,6 +222,9 @@ export default async function LeadsPage({
           <input type="checkbox" name="excludeTest" value="true" defaultChecked={excludeTest} className="h-4 w-4 rounded border-caetano-medium-gray" />
           Excluir participações de teste
         </label>
+        {/* Desmarcada, a caixa não vai no pedido e o filtro voltava a ligado:
+            este "false" chega em segundo lugar e só conta quando ela não vai. */}
+        <input type="hidden" name="excludeTest" value="false" />
         <label className="flex h-10 items-center gap-2 text-sm text-caetano-anthracite">
           <input
             type="checkbox"
@@ -204,42 +241,82 @@ export default async function LeadsPage({
       </form>
 
       {canManagePrivacy && (
-        <div className="mb-3 flex flex-wrap items-start gap-3">
-          {/* As caixas de cada linha pertencem a este formulário (form="…"). */}
-          <ActionForm
-            id={SELECTION_FORM_ID}
-            action={anonymizeLeadsAction}
-            resetOnSuccess={false}
-            className="flex flex-col gap-1"
-            messageClassName="max-w-md"
-          >
-            <input type="hidden" name="scope" value="selection" />
-            <ConfirmSubmitButton
-              confirmTitle="Anonimizar as leads selecionadas?"
-              confirmMessage={ANONYMIZE_WARNING}
-              confirmLabel="Anonimizar"
-              variant="outline"
+        <section
+          aria-labelledby="privacy-actions-heading"
+          className="mb-3 space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+        >
+          <h2 id="privacy-actions-heading" className="text-sm font-bold text-caetano-anthracite">
+            Anonimizar dados pessoais
+          </h2>
+          <div className="flex flex-wrap items-start gap-3">
+            {/* As caixas de cada linha pertencem a este formulário (form="…"). */}
+            <ActionForm
+              id={SELECTION_FORM_ID}
+              action={anonymizeLeadsAction}
+              resetOnSuccess={false}
+              className="flex flex-col gap-1"
+              messageClassName="max-w-md"
             >
-              Anonimizar selecionadas
-            </ConfirmSubmitButton>
-          </ActionForm>
-          {toAnonymize > 0 && (
+              <input type="hidden" name="scope" value="selection" />
+              <AnonymizeSelectionButton formId={SELECTION_FORM_ID} name="participationId" message={ANONYMIZE_WARNING} />
+            </ActionForm>
+            {/* Sempre montado: a resposta fica visível mesmo quando já não
+                sobra nenhuma lead por anonimizar. */}
             <ActionForm action={anonymizeLeadsAction} resetOnSuccess={false} className="flex flex-col gap-1" messageClassName="max-w-md">
               <input type="hidden" name="scope" value="filters" />
               {Object.entries(filterParams).map(([name, value]) => (
                 <input key={name} type="hidden" name={name} value={value} />
               ))}
+              <input type="hidden" name="asOf" value={asOf} />
+              <input type="hidden" name="expected" value={toAnonymize} />
               <ConfirmSubmitButton
+                disabled={toAnonymize === 0 || Boolean(filters.search)}
                 confirmTitle={toAnonymize === 1 ? "Anonimizar 1 lead?" : `Anonimizar ${toAnonymize} leads?`}
-                confirmMessage={`Todas as leads que os filtros atuais mostram, em todas as páginas (${toAnonymize}). ${ANONYMIZE_WARNING}`}
+                confirmMessage={`Todas as leads dos filtros aplicados, em todas as páginas: ${filterSummary}. ${ANONYMIZE_WARNING}`}
                 confirmLabel="Anonimizar"
                 variant="outline"
               >
                 {toAnonymize === 1 ? "Anonimizar a lead dos filtros" : `Anonimizar as ${toAnonymize} leads dos filtros`}
               </ConfirmSubmitButton>
+              {filters.search && (
+                <p className="max-w-md text-xs text-caetano-anthracite-80">
+                  A pesquisa procura partes do texto e apanharia outras pessoas: para um titular, use o pedido abaixo.
+                </p>
+              )}
             </ActionForm>
-          )}
-        </div>
+          </div>
+          <ActionForm action={anonymizeLeadsAction} resetOnSuccess={false} className="flex flex-wrap items-end gap-2" messageClassName="basis-full">
+            <input type="hidden" name="scope" value="subject" />
+            <div className="min-w-0 flex-1 sm:max-w-sm">
+              <Label htmlFor="subject">Pedido de um titular: e-mail ou telefone</Label>
+              <Input
+                id="subject"
+                name="subject"
+                autoComplete="off"
+                maxLength={254}
+                aria-describedby="subject-help"
+                required
+              />
+            </div>
+            <SubmitButton variant="outline" name="intent" value="preview">
+              Procurar
+            </SubmitButton>
+            <ConfirmSubmitButton
+              name="intent"
+              value="anonymize"
+              confirmTitle="Anonimizar os dados deste titular?"
+              confirmMessage={`Todas as participações com este e-mail ou telefone exatos, em todas as campanhas e períodos (também nas respostas ao formulário). ${ANONYMIZE_WARNING}`}
+              confirmLabel="Anonimizar"
+              variant="outline"
+            >
+              Anonimizar os dados do titular
+            </ConfirmSubmitButton>
+            <p id="subject-help" className="basis-full text-xs text-caetano-anthracite-80">
+              Só o e-mail ou o telefone exatos (não partes do texto), em todas as campanhas: «Procurar» diz
+              quantas participações encontra, sem apagar nada.
+            </p>
+          </ActionForm>
+        </section>
       )}
 
       <div
@@ -309,7 +386,9 @@ export default async function LeadsPage({
                       <span className="whitespace-nowrap">
                         <Badge tone="neutral">Anonimizada</Badge>
                         <span className="block text-xs text-caetano-anthracite-80">
-                          {new Date(row.anonymizedAt).toLocaleDateString("pt-PT")}
+                          {new Date(row.anonymizedAt).toLocaleDateString("pt-PT", {
+                            timeZone: campaignTimezone.get(row.campaignId),
+                          })}
                         </span>
                       </span>
                     ) : (

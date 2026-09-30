@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { RETENTION_DAY_OPTIONS } from "@/features/privacy/retention-policy";
+import { isPlausiblePhone, normalizeEmail, normalizePhone } from "@/features/play/identity";
+import type { SubjectIdentifier } from "@/features/leads/queries";
 
 const DAY_VALUES = RETENTION_DAY_OPTIONS.map(String) as [string, ...string[]];
 
@@ -36,3 +38,18 @@ export const anonymizeSelectionSchema = z
   .array(z.string().min(1).max(64))
   .min(1, "Selecione pelo menos uma lead.")
   .max(ANONYMIZE_SELECTION_MAX, `No máximo ${ANONYMIZE_SELECTION_MAX} leads de cada vez.`);
+
+/**
+ * O e-mail ou o telefone de um pedido de um titular, normalizados como estão
+ * gravados nas participações. Null: nem um e-mail nem um telefone completo.
+ */
+export function parseSubjectIdentifier(value: string): SubjectIdentifier | null {
+  const trimmed = value.trim();
+  if (trimmed.includes("@")) {
+    const email = normalizeEmail(trimmed);
+    return email && z.email().safeParse(email).success ? { kind: "email", email } : null;
+  }
+  if (!isPlausiblePhone(trimmed)) return null;
+  const phone = normalizePhone(trimmed)!;
+  return { kind: "phone", phone, digits: phone.replace("+", "") };
+}

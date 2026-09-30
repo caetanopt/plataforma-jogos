@@ -48,7 +48,8 @@ export async function retentionOutlook(
       internalName: true,
       dataRetentionDays: true,
       dataRetentionUntil: true,
-      organization: { select: { dataRetentionDays: true } },
+      dataRetentionChangedAt: true,
+      organization: { select: { dataRetentionDays: true, dataRetentionChangedAt: true } },
     },
   });
 
@@ -56,7 +57,11 @@ export async function retentionOutlook(
   const stale = new Date(now.getTime() - RETENTION_STALE_MS);
   const windows = campaigns
     .map((campaign) => {
-      const retention = effectiveRetention({ campaign, organizationDays: campaign.organization.dataRetentionDays });
+      const retention = effectiveRetention({
+        campaign,
+        organizationDays: campaign.organization.dataRetentionDays,
+        organizationChangedAt: campaign.organization.dataRetentionChangedAt,
+      });
       return { campaign, retention, upcomingBefore: retentionCutoff(retention, soon), overdueBefore: retentionCutoff(retention, stale) };
     })
     .filter((window) => window.upcomingBefore !== null);
@@ -77,6 +82,8 @@ export async function retentionOutlook(
     )}) AS w("campaignId", "upcomingBefore", "overdueBefore")
     JOIN "Participation" p
       ON p."campaignId" = w."campaignId" AND p."anonymizedAt" IS NULL AND p."createdAt" < w."upcomingBefore"
+      -- As de teste também saem, mas não são leads: não entram no aviso.
+      AND p."isTest" = false
     GROUP BY w."campaignId"`;
 
   const byCampaign = new Map(rows.map((row) => [row.campaignId, row]));
@@ -98,15 +105,24 @@ export async function retentionOutlook(
     .sort((a, b) => (a.nextAt?.getTime() ?? 0) - (b.nextAt?.getTime() ?? 0));
 }
 
+export type RetentionJobStatus = "ok" | "stopped" | "behind";
+
 /**
- * A tarefa diária deixou de correr: há leads que passaram o prazo há mais
- * de dois dias, ou a última execução é antiga e há leads a sair em breve.
+ * O estado da tarefa diária para o backoffice avisar:
+ * - "stopped": deixou de correr (há leads que passaram o prazo há mais de
+ *   dois dias e não houve execução nesse tempo, ou a última é antiga);
+ * - "behind": corre, mas não chegou a tudo (muitas leads de uma vez, ou
+ *   linhas ocupadas): o resto sai nas próximas execuções;
+ * - "ok".
+ * Um prazo acabado de mudar não conta: só anonimiza 7 dias depois.
  */
-export function isRetentionJobStale(
+export function retentionJobStatus(
   outlook: readonly CampaignRetentionOutlook[],
   lastRun: { at: Date } | null,
   now: Date = new Date(),
-): boolean {
-  if (outlook.some((campaign) => campaign.overdue > 0)) return true;
-  return outlook.length > 0 && lastRun !== null && now.getTime() - lastRun.at.getTime() > RETENTION_STALE_MS;
+): RetentionJobStatus {
+  const ranRecently = lastRun !== null && now.getTime() - lastRun.at.getTime() <= RETENTION_STALE_MS;
+  if (outlook.some((campaign) => campaign.overdue > 0)) return ranRecently ? "behind" : "stopped";
+  if (outlook.length > 0 && lastRun !== null && !ranRecently) return "stopped";
+  return "ok";
 }

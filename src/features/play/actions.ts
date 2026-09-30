@@ -38,7 +38,8 @@ import { getEffectivePublicState } from "@/features/publishing/public-status";
 import { isAgeVerifiable } from "@/features/publishing/age-check";
 import { computeMemoryScore } from "@/features/memory-game/scoring";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
-import { drawAndAwardPrize, NoEligibleSegmentsError } from "@/features/wheel-game/draw";
+import { referrerSource } from "@/features/play/source";
+import { drawAndAwardPrize, NoEligibleSegmentsError, ParticipationAnonymizedError } from "@/features/wheel-game/draw";
 import type {
   QuizPlayerResult,
   QuizPlayerSubmission,
@@ -250,7 +251,10 @@ export async function startParticipationAction(
     cookieId,
     ip,
     sessionId: input.sessionId,
-    source: input.source,
+    // Só o endereço do site de onde veio, não o URL inteiro: a query de um
+    // referrer traz identificadores (newsletters, contas) — dados pessoais que
+    // nem a anonimização apanhava.
+    source: referrerSource(input.source),
     utm: input.utm,
     deviceType,
     browser,
@@ -743,8 +747,9 @@ export async function submitMemoryResultAction(
         completed: result.completed,
       },
     }),
-    prisma.participation.update({
-      where: { id: gate.participationId },
+    // Não numa participação anonimizada entretanto.
+    prisma.participation.updateMany({
+      where: { id: gate.participationId, anonymizedAt: null },
       data: {
         status: "COMPLETED",
         completedAt: now,
@@ -797,6 +802,7 @@ export async function spinWheelAction(
     // e tudo o que esta ação devolve chega ao browser tal como está.
     return { status: "revealed", result: projectWheelOutcome(result, gate.policy) };
   } catch (error) {
+    if (error instanceof ParticipationAnonymizedError) return { status: "blocked", reason: "not_found" };
     if (error instanceof NoEligibleSegmentsError) {
       // Sem nada que possa sair agora (prémios esgotados ou fora do período,
       // sem segmento de recurso): uma resposta que o ecrã sabe mostrar, em
@@ -895,8 +901,9 @@ export async function submitQuizAction(
         timeSeconds: effectiveSeconds,
       },
     }),
-    prisma.participation.update({
-      where: { id: gate.participationId },
+    // Não numa participação anonimizada entretanto.
+    prisma.participation.updateMany({
+      where: { id: gate.participationId, anonymizedAt: null },
       data: {
         status: "COMPLETED",
         completedAt: now,

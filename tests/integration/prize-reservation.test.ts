@@ -23,6 +23,8 @@ vi.mock("@/lib/security/request-ip", () => ({ getRequestIp: async () => null }))
 const { spinWheelAction, submitLeadFormAction } = await import("@/features/play/actions");
 const { EXPIRED_RELEASE_BATCH } = await import("@/features/prizes/reservation");
 const { getCampaignStats } = await import("@/features/analytics/campaign-stats");
+const { drawAndAwardPrize, ParticipationAnonymizedError } = await import("@/features/wheel-game/draw");
+const { anonymizeParticipationsByIds } = await import("@/features/privacy/anonymize");
 
 interface Options {
   position: LeadFormPosition | null;
@@ -460,5 +462,19 @@ describe("elegibilidade do prémio no sorteio", () => {
   it("sem nenhum segmento elegível, a resposta diz porquê em vez de lançar um erro", async () => {
     const fixture = await createFixture({ position: null, prize: { isActive: false } });
     expect(await spinWheelAction(await fixture.participate())).toEqual({ status: "blocked", reason: "no_segments" });
+  });
+});
+
+describe("participação anonimizada a meio", () => {
+  it("anonimizada depois da verificação do jogo: o sorteio não corre nem atribui prémio", async () => {
+    const fixture = await createFixture({ position: null });
+    const ref = await fixture.participate();
+    await anonymizeParticipationsByIds(fixture.organizationId, [ref.participationId]);
+
+    await expect(drawAndAwardPrize(ref.participationId, new Date())).rejects.toBeInstanceOf(ParticipationAnonymizedError);
+    expect(await prisma.prizeAward.count({ where: { participationId: ref.participationId } })).toBe(0);
+    expect((await prizeRow(fixture.prizeId)).awardedQuantity).toBe(0);
+    // Pela ação pública: bloqueada, sem erro.
+    expect(await spinWheelAction(ref)).toEqual({ status: "blocked", reason: "not_found" });
   });
 });

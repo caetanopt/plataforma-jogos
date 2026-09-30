@@ -44,7 +44,7 @@ export function MemoryGamePreview({
         <button
           type="button"
           onClick={() => setResult(null)}
-          className="mt-4 rounded-game border border-game-border-strong px-4 py-2 text-sm text-game-text hover:bg-game-subtle"
+          className="mt-4 rounded-game border border-game-border-strong px-4 py-2 text-sm text-game-text hover:bg-game-subtle hover:text-game-subtle-text"
         >
           Jogar novamente
         </button>

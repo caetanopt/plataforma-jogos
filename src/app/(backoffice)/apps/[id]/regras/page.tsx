@@ -53,7 +53,7 @@ export default async function ParticipationRulesStepPage({
         de iniciar o jogo.
       </Alert>
 
-      {ageBlocked ? <Alert variant="warning">{LIVE_AGE_BLOCKED_WARNING}</Alert> : null}
+      {ageBlocked ? <Alert variant="warning" live={false}>{LIVE_AGE_BLOCKED_WARNING}</Alert> : null}
 
       <AutoSaveForm
         action={updateParticipationRulesAction}

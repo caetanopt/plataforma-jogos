@@ -7,7 +7,9 @@ import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { getCampaignForEditor } from "@/features/campaigns/queries";
-import { getPublishReadiness } from "@/features/publishing/readiness";
+import { getPublishReadiness, hasPrivacyNotice } from "@/features/publishing/readiness";
+import { isAgeVerifiable } from "@/features/publishing/age-check";
+import { loadPrivacyNoticeState } from "@/features/publishing/privacy-guard";
 import { generateAndStoreQrCodes } from "@/features/publishing/qr";
 
 function publicPlayUrl(slug: string): string {
@@ -51,7 +53,20 @@ export async function publishCampaignAction(formData: FormData): Promise<void> {
   const url = publicPlayUrl(campaign.slug);
   const { pngMediaId, svgMediaId } = await generateAndStoreQrCodes(context.organizationId, context.userId, url);
 
-  await prisma.$transaction(async (tx) => {
+  const published = await prisma.$transaction(async (tx) => {
+    // A verificação acima leu antes do upload do QR code: um autosave
+    // entretanto (a campanha ainda é rascunho, a guarda do editor não se
+    // aplica) podia tirar o único aviso de privacidade ou a data de
+    // nascimento. Com a campanha bloqueada, as edições do aviso esperam, e
+    // o que decide a publicação volta a ler-se aqui.
+    await tx.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaignId} FOR NO KEY UPDATE`;
+    const { state } = await loadPrivacyNoticeState(campaignId, tx);
+    const { minAge } = await tx.campaign.findUniqueOrThrow({ where: { id: campaignId }, select: { minAge: true } });
+    const ageForm = state.leadForm
+      ? { position: state.leadForm.position, fields: state.leadForm.fields, consentCount: state.leadForm.consentDefinitions.length }
+      : null;
+    if (!hasPrivacyNotice(state) || !isAgeVerifiable(minAge, ageForm as Parameters<typeof isAgeVerifiable>[1])) return false;
+
     const version = await tx.campaignVersion.create({
       data: {
         campaignId,
@@ -74,7 +89,9 @@ export async function publishCampaignAction(formData: FormData): Promise<void> {
       where: { id: campaignId },
       data: { status: nextStatus, publishedAt: now },
     });
+    return true;
   });
+  if (!published) redirect(`/apps/${campaignId}/publicar?error=readiness`);
 
   await logAudit({
     organizationId: context.organizationId,

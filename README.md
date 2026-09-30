@@ -158,20 +158,23 @@ para "desmarcada" se distinguir de "ausente".
   publica (ou republica) com texto legal ou com o link da política de privacidade. Numa campanha
   já publicada, o editor recusa a edição que tiraria o único aviso (apagar o texto legal, tirar
   o link, aplicar um brand kit sem ele, acrescentar o primeiro campo ou consentimento, sair de
-  "Sem formulário"); o resto do envio grava-se. As que já estão publicadas sem aviso têm um
-  alerta na etapa Formulário de leads.
-- Os campos ocultos não aparecem no jogo: o servidor grava neles o valor predefinido e ignora o
-  que o browser mandar.
+  "Sem formulário"); o resto do envio grava-se. Duas edições ao mesmo tempo (dois editores, dois
+  separadores) passam uma de cada vez, e a publicação volta a verificar o aviso no momento de
+  publicar. As que já estão publicadas sem aviso têm um alerta na etapa Formulário de leads.
+- Os campos ocultos não aparecem no jogo: o servidor grava neles o valor predefinido (em «Editar
+  campo») e ignora o que o browser mandar. Um campo oculto não pode ser obrigatório, e sem valor
+  predefinido o editor avisa que não grava nada.
 - A lista de leads mostra o consentimento de marketing e filtra por ele ("com" inclui quem
   aceitou pelo menos um); a exportação respeita o filtro. O CSV tem duas colunas novas no fim
   ("Consentimento de marketing" e "Consentimentos"). Ao exportar uma só campanha, vem também uma
   coluna por consentimento do formulário, na versão atual; uma resposta a outra versão leva-a
   indicada, por exemplo "Recusado (v2)".
-- Um consentimento que já tem respostas não pode passar a ser (nem deixar de ser) de marketing:
-  mudava o que as respostas querem dizer. O texto pode mudar (versão nova).
+- Um consentimento que já tem respostas reais não pode passar a ser (nem deixar de ser) de
+  marketing: mudava o que as respostas querem dizer. O texto pode mudar (versão nova). As
+  respostas do modo de teste não contam: saem ao mudar o tipo ou ao remover o consentimento.
 - Eliminar uma campanha apaga também os participantes que só jogaram nessa campanha, com os
-  dados pessoais antigos que tivessem. A operação fica na auditoria como operação de
-  privacidade.
+  dados pessoais antigos que tivessem; os que jogaram também noutra ficam, sem esses dados. A
+  operação fica na auditoria como operação de privacidade.
 
 ### Performance e resiliência
 
@@ -183,7 +186,11 @@ para "desmarcada" se distinguir de "ausente".
 - O Redis (rate limit e locks) falha aberto e depressa: cada comando espera no máximo 1 s. Um
   lock cujo pedido excedeu esse tempo é libertado assim que o pedido chega ao Redis.
 - O pool de ligações à base de dados tem 10 ligações (`DATABASE_POOL_MAX`), e um pedido espera
-  no máximo 30 s por uma livre (`DATABASE_CONNECTION_TIMEOUT_MS`); antes esperava sem fim.
+  no máximo 10 s por uma livre (`DATABASE_CONNECTION_TIMEOUT_MS`); antes esperava sem fim. As
+  transações esperam sempre mais 5 s do que o pool: se desistissem primeiro, a ligação chegava
+  depois com uma transação aberta e as escritas seguintes nela perdiam-se.
+- Eliminar uma campanha grande (centenas de milhares de participações) tem até 2 minutos, e
+  repete sozinho se a base de dados a abortar por deadlock (com um jogo a decorrer).
 - O clique em "Jogar" conta-se no servidor, com o limite dos eventos (600 por hora e por IP), e
   não trava o jogo se não se gravar.
 - Um quiz submetido com a mesma pergunta ou a mesma resposta repetidas é recusado: a pontuação e
@@ -199,26 +206,43 @@ para "desmarcada" se distinguir de "ausente".
 - Os dias contam-se a partir de cada participação: com 90 dias, as leads vão sendo anonimizadas à
   medida que chegam aos 90 dias, não todas no fim da campanha. Uma participação com menos de um
   dia nunca é anonimizada automaticamente (pode estar a meio do jogo).
+- **Um prazo novo ou alterado só começa a anonimizar 7 dias depois da alteração**, e os avisos
+  aparecem logo: escolher "30 dias" numa organização com leads de um ano dá uma semana para as
+  exportar. Uma data de anonimização tem de ser pelo menos 7 dias depois de hoje. O editor e as
+  Configurações mostram o prazo em vigor e, nesses 7 dias, quando começa.
 - **Anonimizar** retira o nome, o e-mail, o telefone, as respostas ao formulário, o IP, a sessão,
-  a ligação ao browser (cookie), `utm_content` e `utm_term`. Ficam o resultado, o prémio e o
-  código, os consentimentos (sem ninguém a quem se liguem), a origem e o dispositivo: as
-  estatísticas não mudam. O participante que fica sem participações é apagado. É irreversível.
+  a ligação ao browser (cookie), `utm_content` e `utm_term`, e o caminho e a query da origem (fica
+  só o site, por exemplo `news.example`). Ficam o resultado, o prémio e o código, os
+  consentimentos (sem ninguém a quem se liguem), a origem e o dispositivo: as estatísticas não
+  mudam. O participante que fica sem participações é apagado; o que continua (o mesmo browser
+  jogou noutras) perde os dados pessoais antigos que ainda tivesse. É irreversível.
+- A origem das participações novas já só guarda o site de onde o visitante veio, não o URL.
 - Uma participação anonimizada deixa de contar para os limites de participação: quem jogou numa
-  campanha "uma vez no total" pode voltar a jogar depois de os seus dados saírem.
+  campanha "uma vez no total" pode voltar a jogar depois de os seus dados saírem. Um separador
+  ainda aberto numa participação anonimizada não a retoma nem volta a gravar dados.
 - **Aviso antes**: a lista de leads e a etapa Formulário de leads avisam das leads que vão ser
-  anonimizadas nos 7 dias seguintes, para as exportar antes.
-- **Anonimização manual**, na lista de leads: as selecionadas, ou todas as que os filtros mostram
-  (por exemplo, um pedido de um titular, pesquisado pelo e-mail em todas as campanhas). Pede
-  confirmação. A lista pode ocultar as anonimizadas, e o CSV tem uma coluna nova no fim,
-  "Anonimizada em".
-- Tudo fica na auditoria como operação de privacidade, só com contagens (nunca o texto
-  pesquisado). Cada execução da tarefa diária fica num registo global.
+  anonimizadas nos 7 dias seguintes (sem as de teste), para as exportar antes.
+- **Anonimização manual**, na lista de leads (confirmação com o foco em Cancelar):
+  - as selecionadas (o botão diz quantas);
+  - todas as dos filtros aplicados, tal como estavam quando a página abriu: se a contagem mudou
+    entretanto (leads novas, "Hoje" à meia-noite), recusa e pede para rever. Não se usa com uma
+    pesquisa ativa, que procura partes do texto e apanharia outras pessoas;
+  - **pedido de um titular**: o e-mail ou o telefone exatos, em todas as campanhas e períodos,
+    também nas respostas ao formulário (um segundo campo de e-mail) e nos dados antigos dos
+    participantes. «Procurar» diz quantas participações encontra, sem apagar nada.
+- A lista pode ocultar as anonimizadas, e o CSV tem uma coluna nova, "Anonimizada em", sempre a
+  última (depois das colunas por consentimento de uma exportação de campanha).
+- Tudo fica na auditoria como operação de privacidade, só com contagens (nunca o e-mail, o
+  telefone ou o texto pesquisado): cada anonimização manual tem um registo ao começar e outro no
+  fim, também quando falha a meio (com o que já saiu). Cada execução da tarefa diária fica num
+  registo global.
 - **Tarefa diária**: `vercel.json` agenda `GET /api/cron/retention` para as 03:17 UTC. A rota só
   aceita o cabeçalho `Authorization: Bearer $CRON_SECRET`; sem `CRON_SECRET` definido recusa
-  sempre. Anonimiza por lotes de 500 e pára ao fim de 4 minutos; o resto fica para o dia seguinte.
-  Para correr à mão, com o `DATABASE_URL` da base de dados: `npm run privacy:retention`.
-- Se a tarefa deixar de correr (leads que passaram o prazo há mais de dois dias e continuam com os
-  dados), Configurações > Privacidade e a lista de leads avisam.
+  sempre. Anonimiza por lotes de 500, no máximo 30 s por campanha (para uma campanha grande não
+  atrasar as outras) e 4 minutos no total; o resto fica para o dia seguinte. Para correr à mão,
+  com o `DATABASE_URL` da base de dados: `npm run privacy:retention`.
+- Configurações > Privacidade avisa se a tarefa deixou de correr (leads que passaram o prazo há
+  mais de dois dias sem execução nesse tempo) ou se corre mas ainda não chegou a todas.
 
 ### Antes de fazer deploy destas alterações
 
@@ -266,34 +290,47 @@ WHERE c.status IN ('PUBLISHED', 'SCHEDULED', 'PAUSED')
   AND COALESCE(t."legalLinks"->>'privacyPolicyUrl', '') !~ '^https?://';
 ```
 
-O tempo máximo de cada instrução SQL define-se na base de dados, não na aplicação: mandado pela
-aplicação ao abrir a ligação, o pooler da Neon (URL com `-pooler`, PgBouncer) recusa a ligação.
-Uma vez, com o papel que a aplicação usa:
+O tempo máximo de cada instrução SQL, e de uma transação aberta sem atividade, define-se na base
+de dados, não na aplicação: mandado pela aplicação ao abrir a ligação, o pooler da Neon (URL com
+`-pooler`, PgBouncer) recusa a ligação. Uma vez, com o papel que a aplicação usa:
 
 ```sql
 ALTER ROLE <papel_da_aplicacao> SET statement_timeout = '60s';
+ALTER ROLE <papel_da_aplicacao> SET idle_in_transaction_session_timeout = '30s';
 ```
 
+O Prisma aplica cada migração instrução a instrução (não numa transação): se uma falhar, as
+anteriores ficam. As migrações destes passos são idempotentes e podem correr outra vez.
+
 A migração `20260930165124_performance_indexes` cria índices em Participation, AuditLog,
-ConsentRecord, PrizeAward e PrizeCode. Cada um bloqueia as escritas na sua tabela até ao fim da
-migração (as leituras continuam). Com tabelas grandes, criar antes os de Participation sem
-bloquear, fora de uma transação (a migração passa depois por eles):
+ConsentRecord, PrizeAward e PrizeCode. Cada um bloqueia as escritas na sua tabela enquanto é
+criado (as leituras continuam). Com tabelas grandes, criar antes os de Participation sem
+bloquear: uma instrução de cada vez (não todas num só pedido), numa sessão sem limite de tempo, e
+confirmar no fim que nenhum ficou inválido. A migração passa depois por eles.
 
 ```sql
+SET statement_timeout = 0;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_createdAt_id_idx" ON "Participation"("campaignId", "createdAt", "id");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_createdAt_id_idx" ON "Participation"("createdAt", "id");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_participantId_idx" ON "Participation"("participantId");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignVersionId_idx" ON "Participation"("campaignVersionId");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_ipAddress_idx" ON "Participation"("campaignId", "ipAddress");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_sessionId_idx" ON "Participation"("campaignId", "sessionId");
+
+-- Tem de vir vazio. Um índice interrompido fica inválido: apagá-lo
+-- (DROP INDEX CONCURRENTLY "<nome>";) e voltar a criá-lo.
+SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
 ```
 
-Esta migração e a `20260930180000_drop_duplicate_unique_indexes` desistem se não conseguirem um
-bloqueio em 5 s (uma transação longa a usar a tabela), em vez de porem as outras queries em fila.
-Nesse caso, marcar a migração como revertida e voltar a correr o workflow:
+Se um índice inválido escapar, a migração falha com o nome dele em vez de passar por ele.
+
+As migrações `20260930165124_performance_indexes` e `20260930180000_drop_duplicate_unique_indexes`
+desistem se não conseguirem um bloqueio em 5 s (uma transação longa a usar a tabela), em vez de
+porem as outras queries em fila. Se o deploy falhar numa migração (o erro do Prisma diz qual),
+marcá-la como revertida e voltar a correr o workflow:
 
 ```bash
-npx prisma migrate resolve --rolled-back 20260930165124_performance_indexes
+npx prisma migrate resolve --rolled-back <nome_da_migração_que_falhou>
 ```
 
 Para os prazos de conservação serem aplicados, definir `CRON_SECRET` nas variáveis de ambiente de

@@ -218,8 +218,13 @@ const CSV_COLUMNS: Array<[CsvColumnKey, string]> = [
   ["prizeStatus", "Estado do prémio"],
   ["marketingConsent", "Consentimento de marketing"],
   ["consents", "Consentimentos"],
-  ["anonymizedAt", "Anonimizada em"],
 ];
+
+/**
+ * Depois das colunas por consentimento (exportação de uma campanha): assim
+ * é sempre a última, e as dos consentimentos não mudam de posição.
+ */
+const TRAILING_COLUMNS: Array<[CsvColumnKey, string]> = [["anonymizedAt", "Anonimizada em"]];
 
 /** Uma coluna por consentimento do formulário (exportação de uma campanha). */
 export interface ConsentCsvColumn {
@@ -266,7 +271,11 @@ function consentCell(row: LeadRow, column: ConsentCsvColumn): string {
 
 /** Linha de cabeçalho do CSV (sem a quebra de linha). */
 export function csvHeader(consentColumns: readonly ConsentCsvColumn[] = []): string {
-  return [...CSV_COLUMNS.map(([, label]) => label), ...consentColumns.map((column) => consentHeader(column))]
+  return [
+    ...CSV_COLUMNS.map(([, label]) => label),
+    ...consentColumns.map((column) => consentHeader(column)),
+    ...TRAILING_COLUMNS.map(([, label]) => label),
+  ]
     .map(escapeCsvValue)
     .join(",");
 }
@@ -276,6 +285,7 @@ export function csvLine(row: LeadRow, consentColumns: readonly ConsentCsvColumn[
   return [
     ...CSV_COLUMNS.map(([key]) => row[key]),
     ...consentColumns.map((column) => consentCell(row, column)),
+    ...TRAILING_COLUMNS.map(([key]) => row[key]),
   ]
     .map(escapeCsvValue)
     .join(",");

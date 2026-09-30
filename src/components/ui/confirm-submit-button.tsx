@@ -128,14 +128,21 @@ export function ConfirmSubmitButton({
         </div>
         <div className="flex justify-end gap-2 border-t border-caetano-medium-gray-40 bg-caetano-medium-gray-20 px-6 py-3">
           {/* type="button": sem isto submeteriam o formulário que envolve o diálogo. */}
-          <button type="button" onClick={() => setOpen(false)} className={buttonVariants({ variant: "outline" })}>
+          {/* Numa ação destrutiva o foco começa em Cancelar: dois Enter
+              seguidos (um no botão, outro no diálogo) não apagam nada. */}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className={buttonVariants({ variant: "outline" })}
+            autoFocus={severity === "danger"}
+          >
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleConfirm}
             className={buttonVariants({ variant: severity === "danger" ? "danger" : "primary" })}
-            autoFocus
+            autoFocus={severity !== "danger"}
           >
             {confirmLabel}
           </button>

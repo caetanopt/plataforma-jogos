@@ -148,7 +148,8 @@ test.describe("RGPD no jogo público", () => {
     expect(header).toContain(`Consentimento: Aceito receber novidades ${suffix} (v1)`);
     expect(line).toContain(`lead-${suffix}@example.com`);
     expect(line).toContain(",Concedido,");
-    expect(line.endsWith(",Aceite")).toBe(true);
+    // A última é "Anonimizada em", vazia.
+    expect(line.endsWith(",Aceite,")).toBe(true);
   });
 });
 

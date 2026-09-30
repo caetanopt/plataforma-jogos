@@ -86,9 +86,14 @@ export async function GET(request: Request) {
   let count = 0;
   let headerSent = false;
   let finished = false;
+  // O download já saiu inteiro: uma falha a gravar o registo final não o
+  // transforma num erro de rede, mas fica no log (só o nome do erro).
   const finish = (result: "SUCCESS" | "FAILURE", extra: Record<string, unknown>) => {
     finished = true;
-    return audit(result, count, extra).catch(() => undefined);
+    return audit(result, count, extra).catch((error: unknown) => {
+      const name = error instanceof Error ? error.name : typeof error;
+      console.error(`[leads-export] registo final da auditoria não gravado (${String(extra.stage)}, ${name})`);
+    });
   };
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {

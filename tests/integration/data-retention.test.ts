@@ -29,7 +29,7 @@ const { anonymizeCampaignBefore, anonymizeParticipationsByIds } = await import("
 const { anonymizeLeadsAction, updateCampaignRetentionAction, updateOrganizationRetentionAction } = await import(
   "@/features/privacy/actions"
 );
-const { retentionOutlook, isRetentionJobStale } = await import("@/features/privacy/retention-queries");
+const { retentionOutlook, retentionJobStatus } = await import("@/features/privacy/retention-queries");
 const { getCampaignStats } = await import("@/features/analytics/campaign-stats");
 const { listLeads } = await import("@/features/leads/queries");
 const { resolveDateRange } = await import("@/lib/dates/range");
@@ -210,6 +210,12 @@ describe("tarefa diária do prazo de conservação", () => {
   it("anonimiza só o que passou o prazo, e só o que é pessoal", async () => {
     const { campaign, lead } = await createCampaign(a);
     const old = await lead(daysAgo(40), "velha@example.pt");
+    // Origem gravada antes de se guardar só o endereço: o URL inteiro, com
+    // um identificador de quem clicou.
+    await prisma.participation.update({
+      where: { id: old.participation.id },
+      data: { source: "https://news.example/abrir?subscriber=123#topo" },
+    });
     const recent = await lead(daysAgo(10), "recente@example.pt");
     // O mesmo browser jogou há 40 e há 10 dias: o participante fica.
     const shared = await lead(daysAgo(45), "partilhado@example.pt");
@@ -231,7 +237,7 @@ describe("tarefa diária do prazo de conservação", () => {
       // Fica o que alimenta as estatísticas e o resultado.
       status: "COMPLETED",
       resultSummary: { completed: true, score: 80 },
-      source: "google.com",
+      source: "news.example",
       utmSource: "newsletter",
       deviceType: "mobile",
     });
@@ -240,8 +246,12 @@ describe("tarefa diária do prazo de conservação", () => {
     expect(anonymized.consentRecords).toHaveLength(1);
     // O participante só tinha esta participação: sai, com os dados antigos.
     expect(await prisma.participant.findUnique({ where: { id: old.participantId } })).toBeNull();
-    // O partilhado continua a ter uma participação com dados.
-    expect(await prisma.participant.findUnique({ where: { id: shared.participantId } })).not.toBeNull();
+    // O partilhado continua a ter uma participação com dados; os dados
+    // antigos dele (podiam ser de quem saiu) já não.
+    expect(await prisma.participant.findUnique({ where: { id: shared.participantId } })).toMatchObject({
+      email: null,
+      cookieId: expect.any(String),
+    });
 
     expect(await prisma.participation.findUniqueOrThrow({ where: { id: recent.participation.id } })).toMatchObject({
       email: "recente@example.pt",
@@ -379,25 +389,77 @@ describe("tarefa diária do prazo de conservação", () => {
   });
 });
 
+describe("anonimização e eliminação ao mesmo tempo", () => {
+  it("anonimizar uma campanha enquanto ela é eliminada não dá deadlock", async () => {
+    const { deleteCampaignAction } = await import("@/features/campaigns/actions");
+    state.current = a.contexts.ORG_ADMIN;
+    for (let round = 0; round < 3; round += 1) {
+      const { campaign, lead } = await createCampaign(a);
+      const ids: string[] = [];
+      for (let index = 0; index < 40; index += 1) ids.push((await lead(daysAgo(40))).participation.id);
+      const form = new FormData();
+      form.set("campaignId", campaign.id);
+      const results = await Promise.allSettled([
+        anonymizeParticipationsByIds(a.id, ids),
+        deleteCampaignAction(form),
+        anonymizeCampaignBefore({ id: campaign.id, organizationId: a.id }, daysAgo(30), {
+          now: new Date(),
+          deadline: Date.now() + 30_000,
+        }),
+      ]);
+      const failures = results.filter((result) => result.status === "rejected").map((result) => String((result as PromiseRejectedResult).reason));
+      expect(failures).toEqual([]);
+      expect(await prisma.campaign.findUnique({ where: { id: campaign.id } })).toBeNull();
+    }
+  }, 60_000);
+});
+
 describe("avisos antes da anonimização", () => {
-  it("mostra o que sai nos próximos dias e o que já devia ter saído", async () => {
+  it("mostra o que sai nos próximos dias e distingue a tarefa parada da atrasada", async () => {
     const { campaign, lead } = await createCampaign(a);
     await lead(daysAgo(25)); // sai daqui a 5 dias
-    await lead(daysAgo(40)); // passou o prazo há 10 dias: a tarefa não correu
+    await lead(daysAgo(40)); // passou o prazo há 10 dias
     await lead(daysAgo(5)); // longe
+    // As de teste também saem, mas não entram no aviso.
+    const test = await lead(daysAgo(26));
+    await prisma.participation.update({ where: { id: test.participation.id }, data: { isTest: true } });
 
     const outlook = await retentionOutlook(a.id);
 
     expect(outlook).toHaveLength(1);
     expect(outlook[0]).toMatchObject({ campaignId: campaign.id, upcoming: 2, overdue: 1, dueNow: true });
-    expect(isRetentionJobStale(outlook, null)).toBe(true);
+    // Sem nenhuma execução recente e com leads fora do prazo: parada.
+    expect(retentionJobStatus(outlook, null)).toBe("stopped");
+    // Uma execução recente que não chegou a tudo: atrasada, não parada.
+    expect(retentionJobStatus(outlook, { at: new Date() })).toBe("behind");
 
     await runDataRetention();
     const afterRun = await retentionOutlook(a.id);
     expect(afterRun[0]).toMatchObject({ upcoming: 1, overdue: 0, dueNow: false });
-    expect(isRetentionJobStale(afterRun, await lastRetentionRun())).toBe(false);
+    expect(retentionJobStatus(afterRun, await lastRetentionRun())).toBe("ok");
     // Outra organização não vê nada disto.
     expect(await retentionOutlook(b.id)).toEqual([]);
+  });
+
+  it("um prazo acabado de mudar dá 7 dias de aviso, sem falso alarme", async () => {
+    const { campaign, lead } = await createCampaign(a);
+    const old = await lead(daysAgo(200));
+    state.current = a.contexts.ORG_ADMIN;
+    // 30 → 90: as leads de 200 dias ficam fora do prazo novo, mas só saem
+    // daqui a 7 dias.
+    const saved = await updateOrganizationRetentionAction(IDLE, form({ dataRetentionDays: "90" }));
+    expect(saved).toMatchObject({ status: "success", message: expect.stringContaining("daqui a 7 dias") });
+
+    await runDataRetention();
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: old.participation.id } })).anonymizedAt).toBeNull();
+    const outlook = await retentionOutlook(a.id);
+    expect(outlook[0]).toMatchObject({ campaignId: campaign.id, upcoming: 1, overdue: 0, dueNow: false });
+    expect(outlook[0]!.nextAt!.getTime()).toBeGreaterThan(Date.now() + 6 * DAY);
+    expect(retentionJobStatus(outlook, null)).toBe("ok");
+
+    // Passados os 7 dias, sai.
+    await runDataRetention({ now: new Date(Date.now() + 8 * DAY) });
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: old.participation.id } })).anonymizedAt).not.toBeNull();
   });
 });
 
@@ -425,10 +487,13 @@ describe("anonimização manual", () => {
     expect(byId.get(untouched.participation.id)?.anonymizedAt).toBeNull();
     expect(byId.get(foreign.participation.id)).toMatchObject({ email: "alheia@example.pt", anonymizedAt: null });
 
-    const audit = await prisma.auditLog.findFirstOrThrow({
+    // Dois registos: antes de começar e no fim, com as contagens.
+    const audits = await prisma.auditLog.findMany({
       where: { organizationId: a.id, action: "PRIVACY_OPERATION", entityType: "Participation" },
+      orderBy: { createdAt: "asc" },
     });
-    expect(audit.metadata).toMatchObject({ operation: "anonymize", scope: "selection", requested: 3, participationsAnonymized: 2 });
+    expect(audits.map((audit) => (audit.metadata as { stage: string }).stage)).toEqual(["started", "completed"]);
+    expect(audits[1]!.metadata).toMatchObject({ operation: "anonymize", scope: "selection", requested: 3, participationsAnonymized: 2 });
 
     // De novo: já não há nada.
     expect(
@@ -436,32 +501,92 @@ describe("anonimização manual", () => {
     ).toMatchObject({ status: "success", message: "Não havia leads por anonimizar." });
   });
 
-  it("pelos filtros: um pedido do titular, pesquisado pelo e-mail, em todas as campanhas", async () => {
+  it("pelos filtros: só com a contagem confirmada, as que existiam quando a página abriu, e nunca com pesquisa", async () => {
+    const { campaign, lead } = await createCampaign(a);
+    await lead(daysAgo(2));
+    await lead(daysAgo(3));
+    state.current = a.contexts.ORG_ADMIN;
+    const asOf = new Date().toISOString();
+    const filters = { scope: "filters", campaignId: campaign.id, period: "all", excludeTest: "false", asOf };
+
+    // Com uma pesquisa (que procura partes do texto), recusa.
+    expect(await anonymizeLeadsAction(IDLE, form({ ...filters, search: "lead", expected: "2" }))).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("Pedido de um titular"),
+    });
+    // Uma lead que chega depois de a página abrir não entra.
+    const late = await lead(new Date(Date.now() + 1_000));
+    // A contagem não bate certo: a lista mudou (ou o período, à meia-noite).
+    expect(await anonymizeLeadsAction(IDLE, form({ ...filters, expected: "3" }))).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("A lista mudou"),
+    });
+
+    expect(await anonymizeLeadsAction(IDLE, form({ ...filters, expected: "2" }))).toMatchObject({
+      status: "success",
+      message: "2 leads anonimizadas.",
+    });
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: late.participation.id } })).anonymizedAt).toBeNull();
+  });
+
+  it("pedido de um titular: o e-mail exato, em todas as campanhas e nas respostas; não os parecidos", async () => {
     const one = await createCampaign(a);
     const two = await createCampaign(a);
-    const mine1 = await one.lead(daysAgo(2), "titular@example.pt");
-    const mine2 = await two.lead(daysAgo(3), "titular@example.pt");
-    const someoneElse = await one.lead(daysAgo(2), "outra@example.pt");
+    const mine1 = await one.lead(daysAgo(2), "ana@example.pt");
+    const mine2 = await two.lead(daysAgo(300), "ANA@example.pt".toLowerCase());
+    // Noutra lead, a ana aparece só num segundo campo de e-mail (indicou uma amiga).
+    const referral = await one.lead(daysAgo(1), "amiga@example.pt");
+    await prisma.participation.update({
+      where: { id: referral.participation.id },
+      data: { leadFormResponse: { email: "amiga@example.pt", amigo: " Ana@Example.pt " } },
+    });
+    const joana = await one.lead(daysAgo(2), "joana@example.pt");
+    const mariana = await two.lead(daysAgo(2), "mariana@example.pt");
+    // Dados antigos no Participant com o mesmo e-mail.
+    const legacy = await prisma.participant.create({
+      data: { organizationId: a.id, cookieId: `legacy-${randomUUID()}`, email: "ana@example.pt", firstName: "Ana" },
+    });
     state.current = a.contexts.ORG_ADMIN;
 
-    const result = await anonymizeLeadsAction(
-      IDLE,
-      form({ scope: "filters", search: "titular@example.pt", period: "all", excludeTest: "false" }),
-    );
+    const preview = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: " Ana@Example.pt ", intent: "preview" }));
+    expect(preview).toMatchObject({ status: "success", message: "3 participações com este e-mail exato, em 2 campanhas." });
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: mine1.participation.id } })).anonymizedAt).toBeNull();
 
-    expect(result).toMatchObject({ status: "success", message: "2 leads anonimizadas." });
-    for (const { participation } of [mine1, mine2]) {
-      expect((await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).email).toBeNull();
+    const result = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana@example.pt", intent: "anonymize" }));
+    expect(result).toMatchObject({ status: "success", message: "3 leads anonimizadas." });
+    for (const { participation } of [mine1, mine2, referral]) {
+      expect((await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).anonymizedAt).not.toBeNull();
     }
-    expect((await prisma.participation.findUniqueOrThrow({ where: { id: someoneElse.participation.id } })).email).toBe(
-      "outra@example.pt",
-    );
-    // O texto pesquisado (um e-mail) não vai para a auditoria.
-    const audit = await prisma.auditLog.findFirstOrThrow({
+    for (const { participation } of [joana, mariana]) {
+      expect((await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).anonymizedAt).toBeNull();
+    }
+    expect(await prisma.participant.findUniqueOrThrow({ where: { id: legacy.id } })).toMatchObject({ email: null, firstName: null });
+
+    // Nada do pedido (o e-mail) vai para a auditoria.
+    const audits = await prisma.auditLog.findMany({
       where: { organizationId: a.id, action: "PRIVACY_OPERATION", entityType: "Participation" },
     });
-    expect(audit.metadata).toMatchObject({ scope: "filters", hadSearch: true, participationsAnonymized: 2 });
-    expect(JSON.stringify(audit.metadata)).not.toContain("titular");
+    expect(audits.length).toBe(2);
+    expect(JSON.stringify(audits.map((audit) => audit.metadata))).not.toContain("ana");
+    expect(audits.find((audit) => (audit.metadata as { stage: string }).stage === "completed")?.metadata).toMatchObject({
+      scope: "subject",
+      identifierKind: "email",
+      participationsAnonymized: 3,
+    });
+
+    // Um identificador incompleto é recusado.
+    expect(await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana", intent: "preview" }))).toMatchObject({
+      status: "error",
+    });
+  });
+
+  it("pedido de um titular pelo telefone, escrito de outra forma", async () => {
+    const { lead } = await createCampaign(a);
+    const mine = await lead(daysAgo(2)); // telefone 912345678
+    state.current = a.contexts.ORG_ADMIN;
+    const result = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "912 345 678", intent: "anonymize" }));
+    expect(result).toMatchObject({ status: "success", message: "1 lead anonimizada." });
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: mine.participation.id } })).phone).toBeNull();
   });
 
   it("o editor e o analista não anonimizam nem mudam o prazo", async () => {
@@ -471,6 +596,9 @@ describe("anonimização manual", () => {
       state.current = a.contexts[role];
       expect(
         await anonymizeLeadsAction(IDLE, form({ scope: "selection", participationId: [target.participation.id] })),
+      ).toMatchObject({ status: "error", message: "Não tem permissão para fazer esta alteração." });
+      expect(
+        await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana@example.pt", intent: "preview" })),
       ).toMatchObject({ status: "error", message: "Não tem permissão para fazer esta alteração." });
       expect(await updateOrganizationRetentionAction(IDLE, form({ dataRetentionDays: "" }))).toMatchObject({ status: "error" });
       expect(
@@ -483,10 +611,17 @@ describe("anonimização manual", () => {
 });
 
 describe("configuração do prazo", () => {
-  it("da organização: um dos prazos sugeridos, ou nenhum", async () => {
+  it("da organização: um dos prazos sugeridos, ou nenhum; a data da alteração só muda com o valor", async () => {
     state.current = a.contexts.ORG_ADMIN;
     expect((await updateOrganizationRetentionAction(IDLE, form({ dataRetentionDays: "180" }))).status).toBe("success");
-    expect((await prisma.organization.findUniqueOrThrow({ where: { id: a.id } })).dataRetentionDays).toBe(180);
+    const first = await prisma.organization.findUniqueOrThrow({ where: { id: a.id } });
+    expect(first.dataRetentionDays).toBe(180);
+    expect(first.dataRetentionChangedAt).not.toBeNull();
+    // O mesmo valor outra vez (um autosave repetido) não reinicia o aviso.
+    await updateOrganizationRetentionAction(IDLE, form({ dataRetentionDays: "180" }));
+    expect((await prisma.organization.findUniqueOrThrow({ where: { id: a.id } })).dataRetentionChangedAt).toEqual(
+      first.dataRetentionChangedAt,
+    );
     expect(await updateOrganizationRetentionAction(IDLE, form({ dataRetentionDays: "45" }))).toMatchObject({
       status: "error",
       fieldErrors: { dataRetentionDays: "Prazo de conservação: opção inválida." },
@@ -495,7 +630,7 @@ describe("configuração do prazo", () => {
     expect((await prisma.organization.findUniqueOrThrow({ where: { id: a.id } })).dataRetentionDays).toBeNull();
   });
 
-  it("da campanha: dias, uma data futura no fuso da campanha, ou o da organização", async () => {
+  it("da campanha: dias, uma data a pelo menos 7 dias no fuso da campanha, ou o da organização", async () => {
     const { campaign } = await createCampaign(a, { timezone: "Europe/Lisbon" });
     state.current = a.contexts.ORG_ADMIN;
     const save = (retention: string, retentionUntil = "") =>
@@ -511,10 +646,13 @@ describe("configuração do prazo", () => {
     // 00:00 em Lisboa no verão é 23:00 UTC da véspera.
     expect(await stored()).toEqual({ dataRetentionDays: null, dataRetentionUntil: new Date(`${nextYear}-06-30T23:00:00Z`) });
 
-    expect(await save("until", "2020-01-01")).toMatchObject({
-      status: "error",
-      fieldErrors: { retentionUntil: "Data de anonimização: tem de ser depois de hoje." },
-    });
+    const soon = new Date(Date.now() + 3 * DAY).toISOString().slice(0, 10);
+    for (const date of ["2020-01-01", soon]) {
+      expect(await save("until", date)).toMatchObject({
+        status: "error",
+        fieldErrors: { retentionUntil: expect.stringContaining("pelo menos 7 dias depois de hoje") },
+      });
+    }
     expect(await save("until", "")).toMatchObject({ status: "error", fieldErrors: { retentionUntil: expect.any(String) } });
     expect((await stored()).dataRetentionUntil).not.toBeNull();
 

@@ -34,9 +34,16 @@ const variantLabels: Record<AlertVariant, string> = {
 
 export function Alert({
   variant = "info",
+  live = true,
   children,
 }: {
   variant?: AlertVariant;
+  /**
+   * Anunciar ao aparecer. Falso num aviso que já está na página quando ela
+   * abre (um estado, não uma resposta a uma ação): com `role="alert"`, o
+   * leitor de ecrã interrompia a leitura em cada visita e em cada atualização.
+   */
+  live?: boolean;
   children: ReactNode;
 }) {
   const Icon = variantIcons[variant];
@@ -46,7 +53,7 @@ export function Alert({
 
   return (
     <div
-      role={isUrgent ? "alert" : "status"}
+      role={live ? (isUrgent ? "alert" : "status") : undefined}
       className={cn("flex items-start gap-2 rounded-lg border px-4 py-3 text-sm", variantClasses[variant])}
     >
       <Icon size={18} aria-hidden="true" className="mt-0.5 shrink-0" />

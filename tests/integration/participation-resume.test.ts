@@ -522,5 +522,7 @@ describe("participação anonimizada", () => {
     const saved = await prisma.participation.findUniqueOrThrow({ where: { id: ref.participationId } });
     expect(saved).toMatchObject({ email: null, leadFormResponse: null });
     expect(saved.anonymizedAt).not.toBeNull();
+    // Repetir o início com a mesma chave (o separador guardou-a) não a reabre.
+    expect(await fixture.start(token)).toEqual({ ok: false, reason: "not_found" });
   });
 });

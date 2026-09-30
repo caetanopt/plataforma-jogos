@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { prisma } from "@/server/db/client";
+import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -20,7 +20,7 @@ import {
 import { emptyToNull, getField, readCheckbox, readMultiple, readOptional } from "@/lib/forms/form-data";
 import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
 import { editRemovesLivePrivacyNotice, LIVE_PRIVACY_NOTICE_MESSAGE } from "@/features/publishing/readiness";
-import { loadPrivacyNoticeState } from "@/features/publishing/privacy-guard";
+import { withPrivacyNoticeLock } from "@/features/publishing/privacy-guard";
 import {
   editBreaksLiveAgeCheck,
   LIVE_BIRTH_DATE_REQUIRED_MESSAGE,
@@ -86,29 +86,26 @@ export async function updateLeadFormSettingsAction(_previous: ActionResult, form
     if (data.position !== undefined && breaksLiveAgeCheck(owned, { ...ageFormOf(owned.leadForm), position: data.position })) {
       rejectField(parse, "position", LIVE_POSITION_NEEDS_FORM_MESSAGE);
     }
-    // Sair de "Sem formulário" numa campanha publicada sem aviso de
-    // privacidade: o jogo passava a pedir dados sem dizer como são tratados.
-    if (data.position !== undefined) {
-      const { status, state } = await loadPrivacyNoticeState(owned.campaign.id);
-      const after = state.leadForm ? { ...state, leadForm: { ...state.leadForm, position: data.position } } : state;
-      if (editRemovesLivePrivacyNotice(status, state, after)) rejectField(parse, "position", LIVE_PRIVACY_NOTICE_MESSAGE);
-    }
-
-    const leadFormUpdate = { position: data.position, honeypotEnabled: data.honeypotEnabled };
-    const changedLeadForm = Object.values(leadFormUpdate).some((value) => value !== undefined);
-    const changedCampaign = data.dedupStrategies !== undefined;
-    const savedSomething = changedLeadForm || changedCampaign;
+    // Verificar e gravar juntos, com a campanha bloqueada (ver
+    // withPrivacyNoticeLock): sair de "Sem formulário" numa campanha publicada
+    // sem aviso de privacidade fazia o jogo pedir dados sem dizer como são
+    // tratados.
+    const savedSomething = await withPrivacyNoticeLock(owned.campaign.id, async (tx, { status, state }) => {
+      if (data.position !== undefined) {
+        const after = state.leadForm ? { ...state, leadForm: { ...state.leadForm, position: data.position } } : state;
+        if (editRemovesLivePrivacyNotice(status, state, after)) rejectField(parse, "position", LIVE_PRIVACY_NOTICE_MESSAGE);
+      }
+      const leadFormUpdate = { position: data.position, honeypotEnabled: data.honeypotEnabled };
+      const changedLeadForm = Object.values(leadFormUpdate).some((value) => value !== undefined);
+      const changedCampaign = data.dedupStrategies !== undefined;
+      if (changedLeadForm) await tx.leadForm.update({ where: { id: owned.leadForm.id }, data: leadFormUpdate });
+      if (changedCampaign) {
+        await tx.campaign.update({ where: { id: owned.campaign.id }, data: { dedupStrategies: data.dedupStrategies } });
+      }
+      return changedLeadForm || changedCampaign;
+    });
 
     if (savedSomething) {
-      await prisma.$transaction([
-        ...(changedLeadForm
-          ? [prisma.leadForm.update({ where: { id: owned.leadForm.id }, data: leadFormUpdate })]
-          : []),
-        ...(changedCampaign
-          ? [prisma.campaign.update({ where: { id: owned.campaign.id }, data: { dedupStrategies: data.dedupStrategies } })]
-          : []),
-      ]);
-
       await logAudit({
         organizationId: context.organizationId,
         userId: context.userId,
@@ -142,41 +139,42 @@ export async function addLeadFieldAction(_previous: ActionResult, formData: Form
     if (!parsed.success) return fail("O campo não foi adicionado.", zodFieldErrors(parsed.error));
 
     // Numa campanha publicada sem aviso de privacidade, o primeiro campo que
-    // pede dados fazia o jogo recolhê-los sem aviso.
-    {
-      const { status, state } = await loadPrivacyNoticeState(owned.campaign.id);
+    // pede dados fazia o jogo recolhê-los sem aviso. Verificar e criar juntos,
+    // com a campanha bloqueada (ver withPrivacyNoticeLock).
+    const created = await withPrivacyNoticeLock(owned.campaign.id, async (tx, { status, state }) => {
       const after = state.leadForm
         ? { ...state, leadForm: { ...state.leadForm, fields: [...state.leadForm.fields, { type: parsed.data.type }] } }
         : state;
-      if (editRemovesLivePrivacyNotice(status, state, after)) return fail(LIVE_PRIVACY_NOTICE_MESSAGE);
-    }
+      if (editRemovesLivePrivacyNotice(status, state, after)) return null;
 
-    const existingFields = await prisma.leadFormField.findMany({
-      where: { leadFormId: owned.leadForm.id },
-      select: { internalKey: true, order: true },
+      const existingFields = await tx.leadFormField.findMany({
+        where: { leadFormId: owned.leadForm.id },
+        select: { internalKey: true, order: true },
+      });
+
+      const baseKey = slugify(parsed.data.label) || slugify(parsed.data.type);
+      let internalKey = baseKey;
+      let suffix = 1;
+      const existingKeys = new Set(existingFields.map((f) => f.internalKey));
+      while (existingKeys.has(internalKey)) {
+        internalKey = `${baseKey}-${suffix}`;
+        suffix += 1;
+      }
+
+      const nextOrder = existingFields.reduce((max, f) => Math.max(max, f.order), -1) + 1;
+
+      return tx.leadFormField.create({
+        data: {
+          leadFormId: owned.leadForm.id,
+          type: parsed.data.type,
+          label: parsed.data.label,
+          internalKey,
+          order: nextOrder,
+          required: false,
+        },
+      });
     });
-
-    const baseKey = slugify(parsed.data.label) || slugify(parsed.data.type);
-    let internalKey = baseKey;
-    let suffix = 1;
-    const existingKeys = new Set(existingFields.map((f) => f.internalKey));
-    while (existingKeys.has(internalKey)) {
-      internalKey = `${baseKey}-${suffix}`;
-      suffix += 1;
-    }
-
-    const nextOrder = existingFields.reduce((max, f) => Math.max(max, f.order), -1) + 1;
-
-    const created = await prisma.leadFormField.create({
-      data: {
-        leadFormId: owned.leadForm.id,
-        type: parsed.data.type,
-        label: parsed.data.label,
-        internalKey,
-        order: nextOrder,
-        required: false,
-      },
-    });
+    if (!created) return fail(LIVE_PRIVACY_NOTICE_MESSAGE);
 
     await logAudit({
       organizationId: context.organizationId,
@@ -227,7 +225,8 @@ export async function updateLeadFieldAction(_previous: ActionResult, formData: F
       label: data.label,
       placeholder: emptyToNull(data.placeholder),
       helpText: emptyToNull(data.helpText),
-      required: data.required,
+      // Um campo oculto não é preenchido por ninguém: não pode ser obrigatório.
+      required: field.type === "HIDDEN" ? (data.required === undefined ? undefined : false) : data.required,
       validationRegex: emptyToNull(data.validationRegex),
       defaultValue: emptyToNull(data.defaultValue),
       options: data.options,
@@ -351,34 +350,35 @@ export async function addConsentAction(_previous: ActionResult, formData: FormDa
     });
     if (!parsed.success) return fail("O consentimento não foi adicionado.", zodFieldErrors(parsed.error));
 
-    // Um consentimento também pede uma decisão informada (ver hasPrivacyNotice).
-    {
-      const { status, state } = await loadPrivacyNoticeState(owned.campaign.id);
+    // Um consentimento também pede uma decisão informada (ver
+    // hasPrivacyNotice). Verificar e criar juntos, com a campanha bloqueada.
+    const consent = await withPrivacyNoticeLock(owned.campaign.id, async (tx, { status, state }) => {
       const after = state.leadForm
         ? {
             ...state,
             leadForm: { ...state.leadForm, consentDefinitions: [...state.leadForm.consentDefinitions, {}] },
           }
         : state;
-      if (editRemovesLivePrivacyNotice(status, state, after)) return fail(LIVE_PRIVACY_NOTICE_MESSAGE);
-    }
+      if (editRemovesLivePrivacyNotice(status, state, after)) return null;
 
-    const existing = await prisma.consentDefinition.findMany({
-      where: { leadFormId: owned.leadForm.id },
-      select: { order: true },
-    });
-    const nextOrder = existing.reduce((max, c) => Math.max(max, c.order), -1) + 1;
+      const existing = await tx.consentDefinition.findMany({
+        where: { leadFormId: owned.leadForm.id },
+        select: { order: true },
+      });
+      const nextOrder = existing.reduce((max, c) => Math.max(max, c.order), -1) + 1;
 
-    const consent = await prisma.consentDefinition.create({
-      data: {
-        leadFormId: owned.leadForm.id,
-        text: parsed.data.text,
-        version: 1,
-        isMarketing: parsed.data.isMarketing,
-        required: parsed.data.required,
-        order: nextOrder,
-      },
+      return tx.consentDefinition.create({
+        data: {
+          leadFormId: owned.leadForm.id,
+          text: parsed.data.text,
+          version: 1,
+          isMarketing: parsed.data.isMarketing,
+          required: parsed.data.required,
+          order: nextOrder,
+        },
+      });
     });
+    if (!consent) return fail(LIVE_PRIVACY_NOTICE_MESSAGE);
 
     await logAudit({
       organizationId: context.organizationId,
@@ -420,31 +420,44 @@ export async function updateConsentAction(_previous: ActionResult, formData: For
     });
     if (!parsed.success) return fail("O consentimento não foi guardado.", zodFieldErrors(parsed.error));
 
-    if (parsed.data.isMarketing !== consent.isMarketing) {
-      const recorded = await prisma.consentRecord.findFirst({
-        where: { consentDefinitionId: consent.id },
-        select: { id: true },
-      });
-      if (recorded) {
-        return fail("O consentimento não foi guardado.", { isMarketing: CONSENT_MARKETING_LOCKED_MESSAGE });
-      }
-    }
-
     // Texto novo = versão nova: cada ConsentRecord guarda a versão que o
     // participante viu. Só as mudanças de linha (CRLF gravado antes) não
     // contam como texto novo.
     const textChanged = parsed.data.text !== storedText.trim();
     const versionAfter = textChanged ? consent.version + 1 : consent.version;
 
-    await prisma.consentDefinition.update({
-      where: { id: consent.id },
-      data: {
-        text: textChanged ? parsed.data.text : undefined,
-        version: versionAfter,
-        isMarketing: parsed.data.isMarketing,
-        required: parsed.data.required,
+    // Mudar o tipo (marketing ou não) com respostas reais mudava o que elas
+    // querem dizer. A definição fica bloqueada (FOR UPDATE) enquanto se
+    // decide: uma resposta a ser gravada agora (que a referencia) espera, ou
+    // é esta alteração que espera por ela e depois a vê. As respostas de
+    // teste não contam e saem com a alteração: não podem prender um rascunho.
+    const saved = await prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "ConsentDefinition" WHERE "id" = ${consent.id} FOR UPDATE`;
+        if (parsed.data.isMarketing !== consent.isMarketing) {
+          const recorded = await tx.consentRecord.findFirst({
+            where: { consentDefinitionId: consent.id, participation: { isTest: false } },
+            select: { id: true },
+          });
+          if (recorded) return false;
+          await tx.consentRecord.deleteMany({ where: { consentDefinitionId: consent.id, participation: { isTest: true } } });
+        }
+        await tx.consentDefinition.update({
+          where: { id: consent.id },
+          data: {
+            text: textChanged ? parsed.data.text : undefined,
+            version: versionAfter,
+            isMarketing: parsed.data.isMarketing,
+            required: parsed.data.required,
+          },
+        });
+        return true;
       },
-    });
+      { maxWait: TRANSACTION_MAX_WAIT_MS, timeout: 15_000 },
+    );
+    if (!saved) {
+      return fail("O consentimento não foi guardado.", { isMarketing: CONSENT_MARKETING_LOCKED_MESSAGE });
+    }
 
     // Consentimentos são dados relevantes para o RGPD (secção 24) — auditar
     // sempre que o texto (nova versão) ou o carácter de marketing/obrigatório
@@ -488,17 +501,22 @@ export async function removeConsentAction(_previous: ActionResult, formData: For
     if (!consent) return fail(CONSENT_GONE_MESSAGE);
 
     // O registo de cada consentimento dado aponta para a definição (RESTRICT):
-    // é a prova do que o participante aceitou e não pode ficar órfão.
+    // é a prova do que o participante aceitou e não pode ficar órfão. As
+    // respostas de teste não são prova de nada: saem com a definição, para um
+    // teste não impedir de corrigir um rascunho.
     const inUse = await prisma.consentRecord.findFirst({
-      where: { consentDefinitionId: consent.id },
+      where: { consentDefinitionId: consent.id, participation: { isTest: false } },
       select: { id: true },
     });
     if (inUse) return fail(CONSENT_IN_USE_MESSAGE);
 
     try {
-      await prisma.consentDefinition.delete({ where: { id: consent.id } });
+      await prisma.$transaction([
+        prisma.consentRecord.deleteMany({ where: { consentDefinitionId: consent.id, participation: { isTest: true } } }),
+        prisma.consentDefinition.delete({ where: { id: consent.id } }),
+      ]);
     } catch (error) {
-      // Aceite entre a contagem e a remoção.
+      // Aceite (por um participante real) entre a contagem e a remoção.
       if (databaseErrorKind(error) === "foreign_key") return fail(CONSENT_IN_USE_MESSAGE);
       throw error;
     }

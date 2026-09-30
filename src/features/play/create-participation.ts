@@ -61,6 +61,8 @@ export async function createParticipationIfAllowed(
       if (existing.campaignId !== input.campaignId || existing.isTest !== input.isTest) {
         return { kind: "conflict" as const };
       }
+      // Anonimizada: já não é de ninguém e não se retoma (a página começa de novo).
+      if (existing.anonymizedAt) return { kind: "conflict" as const };
       return { kind: "existing" as const, participation: existing };
     }
 

@@ -18,6 +18,14 @@ export class NoEligibleSegmentsError extends Error {
   }
 }
 
+/** A participação foi anonimizada entre a verificação e o sorteio. */
+export class ParticipationAnonymizedError extends Error {
+  constructor() {
+    super("A participação foi anonimizada.");
+    this.name = "ParticipationAnonymizedError";
+  }
+}
+
 /**
  * O que fica gravado em `Participation.resultSummary`. O código não: vive
  * no PrizeAward/PrizeCode, a única fonte de verdade sobre a entrega (uma
@@ -94,6 +102,7 @@ async function drawInTransaction(participationId: string, now: Date): Promise<Wh
         resultSummary: true,
         leadFormResponse: true,
         leadFormPosition: true,
+        anonymizedAt: true,
         campaign: {
           select: {
             timezone: true,
@@ -104,6 +113,10 @@ async function drawInTransaction(participationId: string, now: Date): Promise<Wh
         },
       },
     });
+
+    // Anonimizada depois de passar a verificação do jogo (a pedido, num
+    // separador ainda aberto): nada se sorteia nem se atribui.
+    if (participation.anonymizedAt) throw new ParticipationAnonymizedError();
 
     // O modo de teste é sempre lido da participação gravada, nunca de um
     // parâmetro do pedido — spinWheelAction é um endpoint público, e um valor

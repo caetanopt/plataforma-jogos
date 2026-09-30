@@ -6,6 +6,13 @@ import { effectiveRetention, retentionCutoff, type EffectiveRetention } from "@/
 /** Registo global de cada execução (auditoria sem organização). */
 export const RETENTION_RUN_ENTITY = "DataRetentionRun";
 
+/**
+ * O máximo de cada campanha por execução: uma campanha grande com atraso não
+ * pode gastar o tempo todo e deixar as outras (de outras organizações) para
+ * trás dia após dia. O resto dela fica para o dia seguinte.
+ */
+const CAMPAIGN_SLICE_MS = 30_000;
+
 export interface RetentionRunSummary {
   startedAt: string;
   finishedAt: string;
@@ -55,7 +62,8 @@ export async function runDataRetention(
       organizationId: true,
       dataRetentionDays: true,
       dataRetentionUntil: true,
-      organization: { select: { dataRetentionDays: true } },
+      dataRetentionChangedAt: true,
+      organization: { select: { dataRetentionDays: true, dataRetentionChangedAt: true } },
     },
     orderBy: { id: "asc" },
   });
@@ -74,13 +82,24 @@ export async function runDataRetention(
       summary.timedOut = true;
       break;
     }
-    const retention = effectiveRetention({ campaign, organizationDays: campaign.organization.dataRetentionDays });
+    const retention = effectiveRetention({
+      campaign,
+      organizationDays: campaign.organization.dataRetentionDays,
+      organizationChangedAt: campaign.organization.dataRetentionChangedAt,
+    });
     const cutoff = retentionCutoff(retention, now);
     if (!cutoff) continue;
     summary.campaignsChecked += 1;
 
+    // O que já saiu desta campanha, mesmo que a seguir falhe.
+    const progress = { participationsAnonymized: 0, participantsDeleted: 0 };
     try {
-      const counts = await anonymizeCampaignBefore(campaign, cutoff, { now, deadline, batchSize: options.batchSize });
+      const counts = await anonymizeCampaignBefore(campaign, cutoff, {
+        now,
+        deadline: Math.min(deadline, Date.now() + CAMPAIGN_SLICE_MS),
+        batchSize: options.batchSize,
+        progress,
+      });
       summary.participationsAnonymized += counts.participationsAnonymized;
       summary.participantsDeleted += counts.participantsDeleted;
       if (counts.participationsAnonymized > 0) {
@@ -99,14 +118,16 @@ export async function runDataRetention(
           },
         });
       }
-      if (counts.timedOut) {
-        summary.timedOut = true;
-        break;
-      }
+      // Esgotou a sua parte (ou o tempo total): o resto fica para amanhã, e
+      // as campanhas seguintes têm a sua vez.
+      if (counts.timedOut) summary.timedOut = true;
     } catch (error) {
       // Uma campanha que falha não trava as outras. Só o nome do erro: a
-      // mensagem de uma query pode trazer valores.
+      // mensagem de uma query pode trazer valores. Os lotes já confirmados
+      // ficam na auditoria, com as contagens.
       summary.failedCampaigns += 1;
+      summary.participationsAnonymized += progress.participationsAnonymized;
+      summary.participantsDeleted += progress.participantsDeleted;
       const name = error instanceof Error ? error.name : typeof error;
       console.error(`[retention] falha a anonimizar a campanha ${campaign.id} (${name})`);
       await logAudit({
@@ -115,7 +136,7 @@ export async function runDataRetention(
         entityType: "Campaign",
         entityId: campaign.id,
         result: "FAILURE",
-        metadata: { operation: "retention", reason: "error", error: name },
+        metadata: { operation: "retention", reason: "error", error: name, ...progress, retention: describeForAudit(retention) },
       }).catch(() => undefined);
     }
   }

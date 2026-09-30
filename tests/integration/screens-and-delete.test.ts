@@ -637,6 +637,34 @@ describe("eliminar campanha", () => {
     expect(created.map((participation) => participation.participantId)).toEqual([participant.id]);
   });
 
+  it("espera por uma transação longa na campanha em vez de desistir aos 5 s", async () => {
+    const campaign = await createCampaign(f);
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const lockedSignal = new Promise<void>((resolve) => (locked = resolve));
+    // Uma transação que segura a campanha 6 s (um sorteio lento, uma
+    // exportação): antes, o Prisma dava 5 s à eliminação inteira e ela falhava.
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR KEY SHARE`;
+        locked();
+        await released;
+      },
+      { timeout: 20_000 },
+    );
+    await lockedSignal;
+    const deletion = deleteCampaignAction(form({ campaignId: campaign.id })).then(
+      () => "eliminada",
+      (error: unknown) => `falhou: ${String(error)}`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    release();
+    await holder;
+    expect(await deletion).toBe("eliminada");
+    expect(await prisma.campaign.findUnique({ where: { id: campaign.id } })).toBeNull();
+  }, 20_000);
+
   it("participações a começar durante a eliminação não a fazem falhar", async () => {
     const campaign = await createCampaign(f);
     const version = await prisma.campaignVersion.create({

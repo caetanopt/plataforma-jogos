@@ -138,11 +138,11 @@ describe("consentimentos na lista e na exportação", () => {
     );
     const [header, line] = csv.split("\n");
     expect(header.endsWith(
-      ",Consentimentos,Anonimizada em,Consentimento: Aceito o regulamento (v2),Consentimento: Aceito receber novidades por e-mail (v3),Consentimento: Consentimento acrescentado depois (v1)",
+      ",Consentimentos,Consentimento: Aceito o regulamento (v2),Consentimento: Aceito receber novidades por e-mail (v3),Consentimento: Consentimento acrescentado depois (v1),Anonimizada em",
     )).toBe(true);
     expect(line.endsWith(
       // O marketing foi recusado na v2; a coluna é a v3 (texto novo).
-      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,,Aceite,Recusado (v2),",
+      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,Aceite,Recusado (v2),,",
     )).toBe(true);
   });
 });
