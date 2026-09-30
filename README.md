@@ -171,6 +171,22 @@ para "desmarcada" se distinguir de "ausente".
   dados pessoais antigos que tivessem. A operação fica na auditoria como operação de
   privacidade.
 
+### Performance e resiliência
+
+- As estatísticas são agregadas na base de dados, e as contagens de cada tabela numa só query.
+- A exportação de leads sai em streaming, por lotes de 500, com um BOM UTF-8 para o Excel ler os
+  acentos. Cada exportação deixa dois registos na auditoria: um antes do primeiro byte ("started")
+  e outro no fim, com o número de linhas ("completed") ou a interrupção ("interrupted": erro ou
+  download cancelado).
+- O Redis (rate limit e locks) falha aberto e depressa: cada comando espera no máximo 1 s. Um
+  lock cujo pedido excedeu esse tempo é libertado assim que o pedido chega ao Redis.
+- O pool de ligações à base de dados tem 10 ligações (`DATABASE_POOL_MAX`), e um pedido espera
+  no máximo 30 s por uma livre (`DATABASE_CONNECTION_TIMEOUT_MS`); antes esperava sem fim.
+- O clique em "Jogar" conta-se no servidor, com o limite dos eventos (600 por hora e por IP), e
+  não trava o jogo se não se gravar.
+- Um quiz submetido com a mesma pergunta ou a mesma resposta repetidas é recusado: a pontuação e
+  as estatísticas liam-nas de maneira diferente. O jogo nunca as manda.
+
 ### Antes de fazer deploy destas alterações
 
 Uma campanha publicada com idade mínima passa a recusar todas as participações quando a idade não
@@ -215,6 +231,36 @@ WHERE c.status IN ('PUBLISHED', 'SCHEDULED', 'PAUSED')
   )
   AND COALESCE(btrim(c."legalText"), '') = ''
   AND COALESCE(t."legalLinks"->>'privacyPolicyUrl', '') !~ '^https?://';
+```
+
+O tempo máximo de cada instrução SQL define-se na base de dados, não na aplicação: mandado pela
+aplicação ao abrir a ligação, o pooler da Neon (URL com `-pooler`, PgBouncer) recusa a ligação.
+Uma vez, com o papel que a aplicação usa:
+
+```sql
+ALTER ROLE <papel_da_aplicacao> SET statement_timeout = '60s';
+```
+
+A migração `20260930165124_performance_indexes` cria índices em Participation, AuditLog,
+ConsentRecord, PrizeAward e PrizeCode. Cada um bloqueia as escritas na sua tabela até ao fim da
+migração (as leituras continuam). Com tabelas grandes, criar antes os de Participation sem
+bloquear, fora de uma transação (a migração passa depois por eles):
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_createdAt_id_idx" ON "Participation"("campaignId", "createdAt", "id");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_createdAt_id_idx" ON "Participation"("createdAt", "id");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_participantId_idx" ON "Participation"("participantId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignVersionId_idx" ON "Participation"("campaignVersionId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_ipAddress_idx" ON "Participation"("campaignId", "ipAddress");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_sessionId_idx" ON "Participation"("campaignId", "sessionId");
+```
+
+Esta migração e a `20260930180000_drop_duplicate_unique_indexes` desistem se não conseguirem um
+bloqueio em 5 s (uma transação longa a usar a tabela), em vez de porem as outras queries em fila.
+Nesse caso, marcar a migração como revertida e voltar a correr o workflow:
+
+```bash
+npx prisma migrate resolve --rolled-back 20260930165124_performance_indexes
 ```
 
 ### Depois do deploy

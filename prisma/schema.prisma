@@ -564,8 +564,11 @@ model Participation {
   quizResponse    QuizResponse?
 
   @@index([campaignId, status, createdAt])
-  // Lista e exportação de leads, estatísticas por período (passo 7).
-  @@index([campaignId, createdAt])
+  // Lista e exportação de leads, estatísticas por período (passo 7). O id
+  // desempata a ordem da exportação (keyset por data e id), de uma campanha
+  // e de todas.
+  @@index([campaignId, createdAt, id])
+  @@index([createdAt, id])
   @@index([campaignId, participantId])
   // Chaves estrangeiras: sem índice, apagar um participante ou uma versão
   // percorria a tabela inteira (o SET NULL/RESTRICT corre por linha).

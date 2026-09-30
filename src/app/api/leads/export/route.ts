@@ -80,41 +80,58 @@ export async function GET(request: Request) {
       },
     });
 
+  // Um registo antes do primeiro byte (§26): se o processo morrer a meio
+  // (tempo máximo da plataforma, deploy), a saída dos dados fica registada.
+  await audit("SUCCESS", 0, { stage: "started" });
+
   // Em streaming, por lotes (iterateLeadsForExport): antes a exportação
-  // inteira ficava em memória, três vezes. A auditoria regista no fim quantas
-  // linhas saíram, ou que a exportação foi interrompida.
+  // inteira ficava em memória, três vezes. No fim, um segundo registo diz
+  // quantas linhas saíram, ou que a exportação foi interrompida — um só:
+  // um download cancelado a meio de um lote escrevia dois (erro e
+  // cancelamento) e um erro falso no log.
   const encoder = new TextEncoder();
   const batches = iterateLeadsForExport(context.organizationId, range, filters);
   let count = 0;
-  let started = false;
+  let headerSent = false;
+  let finished = false;
+  const finish = (result: "SUCCESS" | "FAILURE", extra: Record<string, unknown>) => {
+    finished = true;
+    return audit(result, count, extra).catch(() => undefined);
+  };
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
+      if (finished) return;
       try {
-        if (!started) {
-          started = true;
+        if (!headerSent) {
+          headerSent = true;
           // BOM: sem ele o Excel lê o UTF-8 como Latin-1 e parte os acentos.
           controller.enqueue(encoder.encode(`\uFEFF${csvHeader(consentColumns)}`));
           return;
         }
         const next = await batches.next();
+        // Cancelado enquanto o lote era lido: já não há para onde o mandar.
+        if (finished) return;
         if (next.done) {
-          await audit("SUCCESS", count);
+          await finish("SUCCESS", { stage: "completed" });
           controller.close();
           return;
         }
-        count += next.value.length;
         const lines = next.value.map((participation) => `\n${csvLine(toLeadRow(participation), consentColumns)}`);
         controller.enqueue(encoder.encode(lines.join("")));
+        count += next.value.length;
       } catch (error) {
+        if (finished) return;
         const name = error instanceof Error ? error.name : typeof error;
         console.error(`[leads-export] falha a meio da exportação (${name})`);
-        await audit("FAILURE", count, { reason: "error" }).catch(() => undefined);
+        await finish("FAILURE", { stage: "interrupted", reason: "error" });
         controller.error(error);
       }
     },
     async cancel() {
+      if (finished) return;
+      const audited = finish("FAILURE", { stage: "interrupted", reason: "cancelled" });
       await batches.return(undefined);
-      await audit("FAILURE", count, { reason: "cancelled" }).catch(() => undefined);
+      await audited;
     },
   });
 

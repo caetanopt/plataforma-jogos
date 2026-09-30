@@ -95,7 +95,7 @@ const leadFormContent = {
 
 export async function recordAnalyticsEventAction(
   campaignId: string,
-  type: "CAMPAIGN_VIEWED" | "START_CLICKED" | "CTA_CLICKED",
+  type: "CAMPAIGN_VIEWED" | "CTA_CLICKED",
   isTest: boolean,
   sessionId?: string,
 ): Promise<void> {
@@ -176,6 +176,22 @@ export async function startParticipationAction(
 
   const ip = await getRequestIp();
   const cookieId = await getOrCreateVisitorCookieId();
+  const isTest = input.testRequested && (await canTestCampaign(campaign.organizationId));
+
+  // O clique em "Jogar" (§31) fica registado aqui, e não numa ação à parte do
+  // browser: as server actions de uma página correm uma de cada vez, e o
+  // início da participação ficava à espera do registo do evento. Com o
+  // limite largo dos eventos (recordAnalyticsEventAction) e antes do das
+  // participações: numa rede partilhada, como o Wi-Fi de um evento, os
+  // cliques deixavam de contar ao fim de 30 por hora e a taxa de início
+  // descia. Um evento que não se grava não impede ninguém de jogar.
+  const eventLimit = await checkRateLimit(`analytics:${campaign.id}:${ip ?? input.sessionId}`, 600, 3600);
+  if (eventLimit.allowed) {
+    await recordEvent(campaign.id, "START_CLICKED", isTest, input.sessionId).catch((error: unknown) => {
+      console.error(`[play] evento START_CLICKED não gravado (${error instanceof Error ? error.name : typeof error})`);
+    });
+  }
+
   // Sem IP (proxy/CDN que não define x-forwarded-for), usa o cookie do
   // visitante em vez de um balde "unknown" partilhado por todos — evita que
   // muitos visitantes sem IP detetável se bloqueiem uns aos outros.
@@ -185,12 +201,6 @@ export async function startParticipationAction(
     3600,
   );
   if (!rateLimit.allowed) return { ok: false, reason: "rate_limited" };
-
-  const isTest = input.testRequested && (await canTestCampaign(campaign.organizationId));
-  // O clique em "Jogar" (§31) fica registado aqui, e não numa ação à parte do
-  // browser: as server actions de uma página correm uma de cada vez, e o
-  // início da participação ficava à espera do registo do evento.
-  await recordEvent(campaign.id, "START_CLICKED", isTest, input.sessionId);
 
   // Idade mínima sem data de nascimento no formulário não se verifica: falha
   // fechado (§16) em vez de deixar jogar sem confirmar. A publicação e o

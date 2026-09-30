@@ -70,51 +70,39 @@ export async function getCampaignStats(
     ? campaigns[0]?.type
     : filters.type ?? (new Set(campaigns.map((c) => c.type)).size === 1 ? campaigns[0]?.type : undefined);
 
-  const eventWhere = {
-    campaignId: { in: campaignIds },
-    isTest: false,
-    occurredAt: { gte: range.from, lte: range.to },
-  };
   const participationWhere: Prisma.ParticipationWhereInput = {
     campaignId: { in: campaignIds },
     isTest: false,
     createdAt: { gte: range.from, lte: range.to },
   };
 
-  const [
-    views,
-    uniqueViewRows,
-    startEvents,
-    blockedEvents,
-    totalParticipations,
-    completedParticipations,
-    leadsCount,
-    mobileCount,
-    avgTimeRows,
-    timelineRows,
-    bySource,
-    byDevice,
-    byBrowser,
-    byOs,
-  ] = await Promise.all([
-    prisma.analyticsEvent.count({ where: { ...eventWhere, type: "CAMPAIGN_VIEWED" } }),
-    prisma.$queryRaw<Array<{ count: number }>>`
-      SELECT COUNT(DISTINCT "sessionId")::int AS count
+  // As contagens de cada tabela numa só query (COUNT ... FILTER): antes eram
+  // 14 queries em paralelo por pedido, que num pool de 10 ligações punham
+  // os pedidos do jogo público à espera.
+  const [eventRows, participationRows, timelineRows, bySource, byDevice, byBrowser, byOs] = await Promise.all([
+    prisma.$queryRaw<Array<{ views: number; uniqueViews: number; starts: number; blocked: number }>>`
+      SELECT
+        COUNT(*) FILTER (WHERE "type" = 'CAMPAIGN_VIEWED')::int AS views,
+        COUNT(DISTINCT "sessionId") FILTER (WHERE "type" = 'CAMPAIGN_VIEWED')::int AS "uniqueViews",
+        COUNT(*) FILTER (WHERE "type" = 'START_CLICKED')::int AS starts,
+        COUNT(*) FILTER (WHERE "type" = 'PARTICIPATION_BLOCKED')::int AS blocked
       FROM "AnalyticsEvent"
       WHERE "campaignId" IN (${Prisma.join(campaignIds)})
         AND "isTest" = false
-        AND "type" = 'CAMPAIGN_VIEWED'
         AND "occurredAt" >= ${range.from} AND "occurredAt" <= ${range.to}`,
-    prisma.analyticsEvent.count({ where: { ...eventWhere, type: "START_CLICKED" } }),
-    prisma.analyticsEvent.count({ where: { ...eventWhere, type: "PARTICIPATION_BLOCKED" } }),
-    prisma.participation.count({ where: participationWhere }),
-    prisma.participation.count({ where: { ...participationWhere, status: "COMPLETED" } }),
-    prisma.participation.count({ where: { ...participationWhere, leadFormResponse: { not: Prisma.JsonNull } } }),
-    prisma.participation.count({ where: { ...participationWhere, deviceType: "mobile" } }),
-    prisma.$queryRaw<Array<{ avg: number | null }>>`
-      SELECT AVG(EXTRACT(EPOCH FROM ("completedAt" - "startedAt")))::float8 AS avg
+    // Leads: com resposta ao formulário (nem NULL nem JSON null).
+    prisma.$queryRaw<
+      Array<{ total: number; completed: number; leads: number; mobile: number; avgTime: number | null }>
+    >`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE "status" = 'COMPLETED')::int AS completed,
+        COUNT(*) FILTER (WHERE "leadFormResponse" IS NOT NULL AND "leadFormResponse" <> 'null'::jsonb)::int AS leads,
+        COUNT(*) FILTER (WHERE "deviceType" = 'mobile')::int AS mobile,
+        (AVG(EXTRACT(EPOCH FROM ("completedAt" - "startedAt"))) FILTER (WHERE "completedAt" IS NOT NULL))::float8
+          AS "avgTime"
       FROM "Participation"
-      WHERE ${participationSql(campaignIds, range)} AND "completedAt" IS NOT NULL`,
+      WHERE ${participationSql(campaignIds, range)}`,
     // Dias em UTC, como antes (toISOString).
     prisma.$queryRaw<Array<{ date: string; count: number }>>`
       SELECT to_char("createdAt", 'YYYY-MM-DD') AS date, COUNT(*)::int AS count
@@ -128,10 +116,22 @@ export async function getCampaignStats(
     groupParticipationsBy(participationWhere, "os"),
   ]);
 
-  const avgTime = avgTimeRows[0]?.avg;
+  const { views, uniqueViews, starts: startEvents, blocked: blockedEvents } = eventRows[0] ?? {
+    views: 0,
+    uniqueViews: 0,
+    starts: 0,
+    blocked: 0,
+  };
+  const {
+    total: totalParticipations,
+    completed: completedParticipations,
+    leads: leadsCount,
+    mobile: mobileCount,
+    avgTime,
+  } = participationRows[0] ?? { total: 0, completed: 0, leads: 0, mobile: 0, avgTime: null };
   const general = {
     views,
-    uniqueViews: uniqueViewRows[0]?.count ?? 0,
+    uniqueViews,
     starts: startEvents,
     participations: totalParticipations,
     completions: completedParticipations,
@@ -177,10 +177,29 @@ async function getMemoryStats(campaignIds: string[], range: DateRange, showParti
   // O ranking respeita a configuração por campanha (secção 12): só entram
   // as campanhas com o ranking ligado, com o menor limite de posições entre
   // elas, e uma com "rankingAnonymize" nunca mostra o nome real.
-  const rankingConfigs = await prisma.memoryGameConfig.findMany({
+  const enabledConfigs = await prisma.memoryGameConfig.findMany({
     where: { campaignId: { in: campaignIds }, rankingEnabled: true },
     select: { campaignId: true, rankingMaxEntries: true },
   });
+  // Só contam as campanhas com jogos no período: uma com o ranking ligado e
+  // sem resultados (limite de 1, por exemplo) encolhia o ranking das outras.
+  const playedCampaigns =
+    enabledConfigs.length > 0
+      ? new Set(
+          (
+            await prisma.participation.groupBy({
+              by: ["campaignId"],
+              where: {
+                campaignId: { in: enabledConfigs.map((config) => config.campaignId) },
+                isTest: false,
+                createdAt: { gte: range.from, lte: range.to },
+                memoryResult: { isNot: null },
+              },
+            })
+          ).map((row) => row.campaignId),
+        )
+      : new Set<string>();
+  const rankingConfigs = enabledConfigs.filter((config) => playedCampaigns.has(config.campaignId));
   const maxEntries = Math.min(
     MAX_RANKING_ENTRIES,
     ...rankingConfigs.map((config) => config.rankingMaxEntries ?? MAX_RANKING_ENTRIES),
@@ -323,10 +342,10 @@ async function getWheelStats(campaignIds: string[], range: DateRange) {
   };
 }
 
+/** A mesma comparação da pontuação (sameAnswerSet em quiz-game/scoring.ts). */
 function sameAnswers(selected: unknown, correct: ReadonlySet<string>): boolean {
-  if (!Array.isArray(selected)) return false;
-  const ids = new Set(selected.filter((id): id is string => typeof id === "string"));
-  return ids.size === correct.size && [...ids].every((id) => correct.has(id));
+  if (!Array.isArray(selected) || selected.length !== correct.size) return false;
+  return selected.every((id) => typeof id === "string" && correct.has(id));
 }
 
 async function getQuizStats(campaignIds: string[], range: DateRange) {
@@ -355,22 +374,24 @@ async function getQuizStats(campaignIds: string[], range: DateRange) {
       select: { id: true, title: true },
     }),
     // Uma linha por (pergunta, combinação de respostas escolhidas): o número
-    // de linhas depende das combinações, não das participações. A primeira
-    // submissão de cada pergunta, como no cálculo da pontuação.
+    // de linhas depende das combinações, não das participações. Com uma
+    // pergunta submetida mais de uma vez (dados de antes da validação), a
+    // última, como no cálculo da pontuação. O DISTINCT ON corre dentro de
+    // cada resposta: ordenar todas as submissões juntas ia para disco.
     prisma.$queryRaw<Array<{ questionId: string | null; selected: unknown; count: number }>>`
-      SELECT first."questionId", first.selected, COUNT(*)::int AS count
-      FROM (
-        SELECT DISTINCT ON (r.id, element->>'questionId')
+      SELECT last."questionId", last.selected, COUNT(*)::int AS count
+      FROM "QuizResponse" r
+      JOIN "Participation" p ON p.id = r."participationId"
+      CROSS JOIN LATERAL (
+        SELECT DISTINCT ON (element->>'questionId')
           element->>'questionId' AS "questionId",
           element->'selectedAnswerIds' AS selected
-        FROM "QuizResponse" r
-        JOIN "Participation" p ON p.id = r."participationId"
-        CROSS JOIN LATERAL jsonb_array_elements(
+        FROM jsonb_array_elements(
           CASE WHEN jsonb_typeof(r.answers) = 'array' THEN r.answers ELSE '[]'::jsonb END
         ) WITH ORDINALITY AS submission(element, position)
-        WHERE ${participationSql(campaignIds, range, "p")}
-        ORDER BY r.id, element->>'questionId', position
-      ) first
+        ORDER BY element->>'questionId', position DESC
+      ) last
+      WHERE ${participationSql(campaignIds, range, "p")}
       GROUP BY 1, 2`,
   ]);
 

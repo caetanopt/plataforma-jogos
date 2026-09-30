@@ -56,21 +56,30 @@ export const memorySubmitSchema = z.strictObject({
   timeSeconds: z.number().min(0).max(86_400),
 });
 
+const unique = (values: readonly string[]) => new Set(values).size === values.length;
+
+// Sem repetidas: a pontuação usava a última submissão de cada pergunta e as
+// estatísticas a primeira, e respostas repetidas contavam de forma diferente
+// numa e noutra. O jogo nunca as manda.
 export const quizSubmissionsSchema = z
   .array(
     z.strictObject({
       questionId: id,
-      selectedAnswerIds: z.array(id).max(50),
+      selectedAnswerIds: z.array(id).max(50).refine(unique, "Resposta repetida."),
     }),
   )
-  .max(500);
+  .max(500)
+  .refine((submissions) => unique(submissions.map((submission) => submission.questionId)), "Pergunta repetida.");
 
 /** Tempo total do quiz: nunca negativo (dava bónus de rapidez indevido). */
 export const quizTimeSecondsSchema = z.number().min(0).max(86_400);
 
 export const analyticsEventSchema = z.strictObject({
   campaignId: id,
-  type: z.enum(["CAMPAIGN_VIEWED", "START_CLICKED", "CTA_CLICKED"]),
+  // O clique em "Jogar" grava-se no servidor, ao iniciar a participação: do
+  // browser só inflacionava a taxa de início (e contava a dobrar com
+  // separadores abertos antes da mudança).
+  type: z.enum(["CAMPAIGN_VIEWED", "CTA_CLICKED"]),
   isTest: z.boolean(),
   sessionId: z.uuid().optional(),
 });

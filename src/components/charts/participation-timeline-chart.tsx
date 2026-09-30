@@ -2,11 +2,8 @@
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+/** Carregado por participation-timeline-chart-lazy.tsx, que trata o caso sem dados. */
 export function ParticipationTimelineChart({ data }: { data: Array<{ date: string; count: number }> }) {
-  if (data.length === 0) {
-    return <p className="text-sm text-caetano-anthracite-80">Sem dados suficientes para o período selecionado.</p>;
-  }
-
   return (
     <ResponsiveContainer width="100%" height={240}>
       <BarChart data={data}>

@@ -110,7 +110,9 @@ export default async function PublicPlayPage({
 
   // O tema da campanha (Marca e design): cores, tipografia, fundo e logótipo.
   const brandLogo = theme?.logoMediaId ? mediaById.get(theme.logoMediaId) : undefined;
-  const shell = (children: React.ReactNode) => (
+  // O jogo marca o seu próprio <main>, para o rodapé legal ficar fora dele
+  // (PublicGameFlow, `landmarks`); as mensagens de estado vão num <main> aqui.
+  const shell = (children: React.ReactNode, { main = true }: { main?: boolean } = {}) => (
     <GameThemeShell
       theme={theme}
       backgroundImageUrl={theme?.backgroundImageMediaId ? mediaById.get(theme.backgroundImageMediaId)?.url : undefined}
@@ -138,7 +140,7 @@ export default async function PublicPlayPage({
           />
         </header>
       )}
-      <main className="flex flex-1 flex-col">{children}</main>
+      {main ? <main className="flex flex-1 flex-col">{children}</main> : children}
     </GameThemeShell>
   );
 
@@ -261,8 +263,9 @@ export default async function PublicPlayPage({
 
   return shell(
     <div className="mx-auto w-full max-w-xl px-4 py-8">
-      <PublicGameFlow {...flowProps} />
+      <PublicGameFlow {...flowProps} landmarks />
     </div>,
+    { main: false },
   );
 }
 

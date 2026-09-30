@@ -112,10 +112,68 @@ describe("exportação por lotes", () => {
     expect(lines[0]!.startsWith("ID,Data,Estado")).toBe(true);
     expect(lines).toHaveLength(8);
     const audit = await prisma.auditLog.findFirstOrThrow({
-      where: { organizationId, action: "EXPORT", result: "SUCCESS" },
+      where: { organizationId, action: "EXPORT", result: "SUCCESS", metadata: { path: ["stage"], equals: "completed" } },
       orderBy: { createdAt: "desc" },
     });
     expect(audit.metadata).toMatchObject({ count: 7 });
+  });
+
+  it("a saída fica registada antes do primeiro byte", async () => {
+    await prisma.auditLog.deleteMany({ where: { organizationId } });
+    const response = await exportRoute.GET(
+      new Request(`http://localhost:3000/api/leads/export?period=all&campaignId=${campaignId}`),
+    );
+    // Ainda sem ler o corpo: se o processo morresse agora, o registo existia.
+    const started = await prisma.auditLog.findMany({ where: { organizationId, action: "EXPORT" } });
+    expect(started.map((audit) => audit.metadata)).toEqual([expect.objectContaining({ stage: "started", count: 0 })]);
+    await response.arrayBuffer();
+  });
+
+  it("uma linha apagada entre lotes não corta a exportação", async () => {
+    const other = await prisma.campaign.create({
+      data: {
+        organizationId,
+        workspaceId: (await prisma.workspace.findFirstOrThrow({ where: { organizationId } })).id,
+        type: "MEMORY",
+        internalName: "Outra",
+        ownerId: userId,
+        slug: `exp-outra-${randomUUID().slice(0, 8)}`,
+      },
+    });
+    const otherVersion = await prisma.campaignVersion.create({
+      data: { campaignId: other.id, versionNumber: 1, snapshot: {}, publishedById: userId },
+    });
+    // A linha mais recente é da outra campanha, e sai no primeiro lote.
+    const doomed = await prisma.participation.create({
+      data: {
+        campaignId: other.id,
+        campaignVersionId: otherVersion.id,
+        idempotencyKey: randomUUID(),
+        email: "apagada@example.pt",
+        createdAt: new Date(SAME_INSTANT.getTime() + 3_600_000),
+      },
+    });
+    const range = resolveDateRange({ period: "all" });
+    const emails: string[] = [];
+    try {
+      let first = true;
+      for await (const batch of iterateLeadsForExport(organizationId, range, {}, 1)) {
+        emails.push(...batch.map((participation) => participation.email ?? ""));
+        if (first) {
+          first = false;
+          expect(batch[0]!.id).toBe(doomed.id);
+          // A campanha é eliminada enquanto a exportação de todas decorre.
+          await prisma.participation.delete({ where: { id: doomed.id } });
+        }
+      }
+    } finally {
+      await prisma.participation.deleteMany({ where: { campaignId: other.id } });
+      await prisma.campaignVersion.deleteMany({ where: { campaignId: other.id } });
+      await prisma.campaign.delete({ where: { id: other.id } });
+    }
+    // Antes, o lote seguinte ao da linha apagada vinha vazio: saía só ela.
+    expect(emails).toHaveLength(8);
+    expect(new Set(emails).size).toBe(8);
   });
 
   it("uma transferência interrompida fica na auditoria como falha", async () => {
@@ -130,5 +188,27 @@ describe("exportação por lotes", () => {
       prisma.auditLog.findFirstOrThrow({ where: { organizationId, action: "EXPORT", result: "FAILURE" } }),
     );
     expect(audit.metadata).toMatchObject({ reason: "cancelled", count: 0 });
+  });
+
+  it("cancelada a meio de um lote: um só registo de falha e nenhum erro no log", async () => {
+    await prisma.auditLog.deleteMany({ where: { organizationId } });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await exportRoute.GET(
+      new Request(`http://localhost:3000/api/leads/export?period=all&campaignId=${campaignId}`),
+    );
+    const reader = response.body!.getReader();
+    await reader.read();
+    // O stream já está a ler o lote seguinte para encher a fila.
+    await reader.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const audits = await prisma.auditLog.findMany({ where: { organizationId, action: "EXPORT" }, orderBy: { createdAt: "asc" } });
+    expect(audits.map((audit) => [audit.result, (audit.metadata as { stage?: string }).stage])).toEqual([
+      ["SUCCESS", "started"],
+      ["FAILURE", "interrupted"],
+    ]);
+    expect(audits[1]!.metadata).toMatchObject({ reason: "cancelled" });
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 });

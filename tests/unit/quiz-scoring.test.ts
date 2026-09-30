@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
+import { quizSubmissionsSchema } from "@/lib/validation/play";
 
 const questions = [
   { id: "q1", points: 10, correctAnswerIds: ["q1-a1"] },
@@ -132,5 +133,33 @@ describe("matchResultProfile", () => {
 
   it("returns null when no profile matches", () => {
     expect(matchResultProfile(30, [{ id: "high", minPercentage: 80, maxPercentage: 100 }])).toBeNull();
+  });
+});
+
+describe("quizSubmissionsSchema", () => {
+  // Ids no formato das chaves da base de dados.
+  const q1 = "cmg0000000000000000000001";
+  const q2 = "cmg0000000000000000000002";
+  const a1 = "cmg0000000000000000000011";
+  const a2 = "cmg0000000000000000000012";
+
+  it("aceita uma submissão por pergunta, sem respostas repetidas", () => {
+    expect(
+      quizSubmissionsSchema.safeParse([
+        { questionId: q1, selectedAnswerIds: [a1, a2] },
+        { questionId: q2, selectedAnswerIds: [] },
+      ]).success,
+    ).toBe(true);
+  });
+
+  it("recusa a mesma pergunta duas vezes e a mesma resposta duas vezes", () => {
+    // A pontuação e as estatísticas liam-nas de forma diferente.
+    expect(
+      quizSubmissionsSchema.safeParse([
+        { questionId: q1, selectedAnswerIds: [a1] },
+        { questionId: q1, selectedAnswerIds: [a2] },
+      ]).success,
+    ).toBe(false);
+    expect(quizSubmissionsSchema.safeParse([{ questionId: q1, selectedAnswerIds: [a1, a1] }]).success).toBe(false);
   });
 });

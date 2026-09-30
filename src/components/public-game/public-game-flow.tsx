@@ -58,6 +58,12 @@ export interface PublicGameFlowProps {
   };
   regulationText: string | null;
   legal: PublicLegalInfo;
+  /**
+   * Na página pública, o jogo é o <main> e a informação legal fica fora dele,
+   * como rodapé da página. Na pré-visualização a página do backoffice já tem
+   * o seu <main>.
+   */
+  landmarks?: boolean;
   intermediateBefore: ScreenData | null;
   intermediateAfter: ScreenData | null;
   final: {
@@ -452,16 +458,19 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
     window.location.reload();
   }
 
+  const Main = props.landmarks ? "main" : "div";
+
   if (stage === "blocked") {
     return (
-      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center text-game-text">
+      <Main className="block rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center text-game-text">
         {BLOCKED_MESSAGES[blockedReason ?? ""] ?? "Não foi possível continuar."}
-      </div>
+      </Main>
     );
   }
 
   return (
     <div className="space-y-4">
+      <Main className="block space-y-4">
       {/* A faixa do modo de teste está na página (play/[slug]/page.tsx), antes do cabeçalho. */}
       {stage === "start" && (
         <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
@@ -633,6 +642,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
         </div>
       )}
 
+      </Main>
       <LegalFooter legal={props.legal} regulationText={props.regulationText} />
     </div>
   );

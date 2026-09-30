@@ -108,8 +108,14 @@ const exportInclude = {
 /**
  * As participações da exportação, por lotes, das mais recentes para as mais
  * antigas. Antes lia-se tudo de uma vez (e o CSV era montado em memória com
- * mais duas cópias): uma campanha grande esgotava a memória da função. Com
- * um cursor por (data, id), cada lote continua onde o anterior acabou.
+ * mais duas cópias): uma campanha grande esgotava a memória da função.
+ *
+ * Cada lote continua a partir dos valores (data, id) da última linha do
+ * anterior, não do id como cursor do Prisma: esse relia a linha do cursor e,
+ * se ela fosse apagada entre lotes (uma campanha eliminada durante a
+ * exportação de todas), o lote seguinte vinha vazio e a exportação acabava
+ * a meio, dada como completa. O limite `lte` na data deixa o índice
+ * (createdAt, id) começar no sítio certo em vez de reler o que já saiu.
  */
 export async function* iterateLeadsForExport(
   organizationId: string,
@@ -118,18 +124,27 @@ export async function* iterateLeadsForExport(
   batchSize = EXPORT_BATCH_SIZE,
 ) {
   const where = buildWhere(organizationId, range, filters);
-  let cursor: string | undefined;
+  let last: { createdAt: Date; id: string } | undefined;
   for (;;) {
-    const batch = await prisma.participation.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: batchSize,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: exportInclude,
-    });
+    const batch: Array<Prisma.ParticipationGetPayload<{ include: typeof exportInclude }>> =
+      await prisma.participation.findMany({
+        where: last
+          ? {
+              AND: [
+                where,
+                { createdAt: { lte: last.createdAt } },
+                { OR: [{ createdAt: { lt: last.createdAt } }, { id: { lt: last.id } }] },
+              ],
+            }
+          : where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: batchSize,
+        include: exportInclude,
+      });
     if (batch.length > 0) yield batch;
     if (batch.length < batchSize) return;
-    cursor = batch[batch.length - 1]!.id;
+    const tail = batch[batch.length - 1]!;
+    last = { createdAt: tail.createdAt, id: tail.id };
   }
 }
 

@@ -51,6 +51,12 @@ export async function withLock<T>(key: string, fn: () => Promise<T>, options: Lo
     }
   } catch (error) {
     console.error(`[lock] Redis indisponível, a continuar sem lock: ${describeRedisError(error)}`);
+    // Um SET que excedeu o commandTimeout não é cancelado: segue para o Redis
+    // e cria o lock mais tarde, com o nosso token, e ninguém o libertava —
+    // durante o TTL, cada rotação da campanha esperava os 5 s inteiros. A
+    // libertação vai na mesma ligação, atrás dele, e apaga-o. Sem esperar: o
+    // Redis está lento, e o lock só apaga o que tiver o nosso token.
+    redis.eval(RELEASE_SCRIPT, 1, key, token).catch(() => undefined);
   }
 
   try {

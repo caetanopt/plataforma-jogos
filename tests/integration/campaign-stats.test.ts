@@ -207,9 +207,10 @@ beforeAll(async () => {
   });
   await respond({
     answers: [
-      { questionId: q1.id, selectedAnswerIds: [q1.answers[1].id] },
-      // Repetida: conta a primeira.
       { questionId: q1.id, selectedAnswerIds: [q1.answers[0].id] },
+      // Repetida (dados de antes da validação): conta a última, como na
+      // pontuação (computeQuizScore).
+      { questionId: q1.id, selectedAnswerIds: [q1.answers[1].id] },
     ],
     totalScore: 0,
     percentage: 0,
@@ -291,6 +292,14 @@ describe("Memória", () => {
 
     const anonymous = await getCampaignStats(org.organizationId, RANGE, { campaignId: memory.campaign.id });
     expect(anonymous.memory?.ranking.map((row) => row.name)).toEqual(["Anónimo", "Anónimo"]);
+  });
+
+  it("uma campanha com ranking de 1 posição e sem jogos não encolhe o ranking das outras", async () => {
+    await createCampaign(org, "MEMORY", { memoryConfig: { create: { rankingEnabled: true, rankingMaxEntries: 1 } } });
+
+    const stats = await getCampaignStats(org.organizationId, RANGE, { type: "MEMORY" }, { showParticipantNames: true });
+
+    expect(stats.memory?.ranking.map((row) => row.name)).toEqual(["Carla", "Ana"]);
   });
 });
 

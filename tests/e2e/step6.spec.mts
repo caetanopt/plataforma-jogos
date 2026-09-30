@@ -82,6 +82,8 @@ test.describe("RGPD no jogo público", () => {
     await expect(play).toHaveCSS("background-color", "rgb(140, 29, 24)");
     await expect(play).toHaveCSS("color", "rgb(255, 255, 255)");
     await expect(visitor.getByText(E2E_LEGAL_TEXT)).toBeVisible();
+    // O jogo é o conteúdo principal; a informação legal é o rodapé da página.
+    await expect(visitor.getByRole("main").getByRole("button", { name: /Jogar/i })).toBeVisible();
     const footer = visitor.getByRole("contentinfo");
     await expect(footer.getByRole("link", { name: /Termos e condições/ })).toHaveAttribute(
       "href",

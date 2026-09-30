@@ -573,7 +573,7 @@ describe("consentimentos nas leads", () => {
     expect(lines[0]).toContain(",Concedido,");
 
     const audit = await prisma.auditLog.findFirstOrThrow({
-      where: { organizationId: a.id, action: "EXPORT", result: "SUCCESS" },
+      where: { organizationId: a.id, action: "EXPORT", result: "SUCCESS", metadata: { path: ["stage"], equals: "completed" } },
     });
     expect(audit.metadata).toMatchObject({ count: 1, filters: { marketingConsent: "granted" } });
   });

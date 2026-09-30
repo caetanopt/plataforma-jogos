@@ -12,9 +12,13 @@ import type { CampaignType, LeadFieldType, LeadFormPosition } from "@/generated/
  */
 
 vi.mock("@/server/auth", () => ({ auth: async () => null }));
-const rateLimit = vi.hoisted(() => ({ allowed: true }));
+// Os eventos (analytics:) têm um limite à parte, mais largo.
+const rateLimit = vi.hoisted(() => ({ allowed: true, analyticsAllowed: true }));
 vi.mock("@/lib/security/rate-limit", () => ({
-  checkRateLimit: async () => ({ allowed: rateLimit.allowed, remaining: rateLimit.allowed ? 10 : 0 }),
+  checkRateLimit: async (key: string) => {
+    const allowed = key.startsWith("analytics:") ? rateLimit.analyticsAllowed : rateLimit.allowed;
+    return { allowed, remaining: allowed ? 10 : 0 };
+  },
 }));
 vi.mock("@/lib/security/request-ip", () => ({ getRequestIp: async () => null }));
 const visitor = vi.hoisted(() => ({ cookieId: "" }));
@@ -126,6 +130,8 @@ async function createFixture(options: Options = {}) {
 
 afterEach(async () => {
   rateLimit.allowed = true;
+  rateLimit.analyticsAllowed = true;
+  vi.restoreAllMocks();
   while (cleanups.length) await cleanups.pop()!();
 });
 
@@ -460,5 +466,34 @@ describe("campos ocultos", () => {
     if (!started.ok) throw new Error("start");
     // Sem nada para o participante preencher, o jogo começa logo.
     expect(await beginGameAction({ participationId: started.participationId, token })).toEqual({ ok: true });
+  });
+});
+
+describe("clique em «Jogar» (START_CLICKED)", () => {
+  const clicks = (campaignId: string) => prisma.analyticsEvent.count({ where: { campaignId, type: "START_CLICKED" } });
+
+  it("conta também quem o limite de participações trava, com o limite largo dos eventos", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: null });
+
+    rateLimit.allowed = false;
+    expect(await fixture.start()).toEqual({ ok: false, reason: "rate_limited" });
+    expect(await clicks(fixture.campaignId)).toBe(1);
+
+    // Acima do limite dos eventos já não conta, mas joga-se na mesma.
+    rateLimit.allowed = true;
+    rateLimit.analyticsAllowed = false;
+    expect(await fixture.start()).toMatchObject({ ok: true });
+    expect(await clicks(fixture.campaignId)).toBe(1);
+  });
+
+  it("uma falha a gravar o evento não impede o início da participação", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({ position: null });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const create = vi.spyOn(prisma.analyticsEvent, "create").mockRejectedValueOnce(new Error("base de dados lenta"));
+
+    expect(await fixture.start()).toMatchObject({ ok: true });
+    expect(create).toHaveBeenCalled();
   });
 });

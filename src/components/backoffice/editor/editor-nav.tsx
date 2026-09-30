@@ -26,8 +26,8 @@ export function EditorNav({
               <ProgressLink
                 href={`/apps/${campaignId}/${step.slug}`}
                 // Sem prefetch: cada autosave refazia o prefetch das dez
-                // etapas (dezenas de pedidos por página). A barra de progresso
-                // e o loading.tsx cobrem a navegação.
+                // etapas (dezenas de pedidos por página). A navegação mostra
+                // a barra de progresso (ProgressLink).
                 prefetch={false}
                 aria-current={isActive ? "step" : undefined}
                 className={cn(
