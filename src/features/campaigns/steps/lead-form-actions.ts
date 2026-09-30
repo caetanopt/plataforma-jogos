@@ -10,6 +10,7 @@ import { databaseErrorKind, runAction } from "@/server/actions/run-action";
 import {
   addLeadFieldSchema,
   CONSENT_IN_USE_MESSAGE,
+  CONSENT_MARKETING_LOCKED_MESSAGE,
   consentSchema,
   fieldTypeHasOptions,
   leadFieldShape,
@@ -18,6 +19,8 @@ import {
 } from "@/lib/validation/lead-form";
 import { emptyToNull, getField, readCheckbox, readMultiple, readOptional } from "@/lib/forms/form-data";
 import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
+import { editRemovesLivePrivacyNotice, LIVE_PRIVACY_NOTICE_MESSAGE } from "@/features/publishing/readiness";
+import { loadPrivacyNoticeState } from "@/features/publishing/privacy-guard";
 import {
   editBreaksLiveAgeCheck,
   LIVE_BIRTH_DATE_REQUIRED_MESSAGE,
@@ -83,6 +86,13 @@ export async function updateLeadFormSettingsAction(_previous: ActionResult, form
     if (data.position !== undefined && breaksLiveAgeCheck(owned, { ...ageFormOf(owned.leadForm), position: data.position })) {
       rejectField(parse, "position", LIVE_POSITION_NEEDS_FORM_MESSAGE);
     }
+    // Sair de "Sem formulário" numa campanha publicada sem aviso de
+    // privacidade: o jogo passava a pedir dados sem dizer como são tratados.
+    if (data.position !== undefined) {
+      const { status, state } = await loadPrivacyNoticeState(owned.campaign.id);
+      const after = state.leadForm ? { ...state, leadForm: { ...state.leadForm, position: data.position } } : state;
+      if (editRemovesLivePrivacyNotice(status, state, after)) rejectField(parse, "position", LIVE_PRIVACY_NOTICE_MESSAGE);
+    }
 
     const leadFormUpdate = { position: data.position, honeypotEnabled: data.honeypotEnabled };
     const changedLeadForm = Object.values(leadFormUpdate).some((value) => value !== undefined);
@@ -130,6 +140,16 @@ export async function addLeadFieldAction(_previous: ActionResult, formData: Form
       label: getField(formData, "label"),
     });
     if (!parsed.success) return fail("O campo não foi adicionado.", zodFieldErrors(parsed.error));
+
+    // Numa campanha publicada sem aviso de privacidade, o primeiro campo que
+    // pede dados fazia o jogo recolhê-los sem aviso.
+    {
+      const { status, state } = await loadPrivacyNoticeState(owned.campaign.id);
+      const after = state.leadForm
+        ? { ...state, leadForm: { ...state.leadForm, fields: [...state.leadForm.fields, { type: parsed.data.type }] } }
+        : state;
+      if (editRemovesLivePrivacyNotice(status, state, after)) return fail(LIVE_PRIVACY_NOTICE_MESSAGE);
+    }
 
     const existingFields = await prisma.leadFormField.findMany({
       where: { leadFormId: owned.leadForm.id },
@@ -331,6 +351,18 @@ export async function addConsentAction(_previous: ActionResult, formData: FormDa
     });
     if (!parsed.success) return fail("O consentimento não foi adicionado.", zodFieldErrors(parsed.error));
 
+    // Um consentimento também pede uma decisão informada (ver hasPrivacyNotice).
+    {
+      const { status, state } = await loadPrivacyNoticeState(owned.campaign.id);
+      const after = state.leadForm
+        ? {
+            ...state,
+            leadForm: { ...state.leadForm, consentDefinitions: [...state.leadForm.consentDefinitions, {}] },
+          }
+        : state;
+      if (editRemovesLivePrivacyNotice(status, state, after)) return fail(LIVE_PRIVACY_NOTICE_MESSAGE);
+    }
+
     const existing = await prisma.consentDefinition.findMany({
       where: { leadFormId: owned.leadForm.id },
       select: { order: true },
@@ -387,6 +419,16 @@ export async function updateConsentAction(_previous: ActionResult, formData: For
       required: readCheckbox(formData, "required") ?? consent.required,
     });
     if (!parsed.success) return fail("O consentimento não foi guardado.", zodFieldErrors(parsed.error));
+
+    if (parsed.data.isMarketing !== consent.isMarketing) {
+      const recorded = await prisma.consentRecord.findFirst({
+        where: { consentDefinitionId: consent.id },
+        select: { id: true },
+      });
+      if (recorded) {
+        return fail("O consentimento não foi guardado.", { isMarketing: CONSENT_MARKETING_LOCKED_MESSAGE });
+      }
+    }
 
     // Texto novo = versão nova: cada ConsentRecord guarda a versão que o
     // participante viu. Só as mudanças de linha (CRLF gravado antes) não

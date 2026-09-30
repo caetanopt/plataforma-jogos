@@ -8,6 +8,7 @@ import {
   participationLeadFormPosition,
   revealPolicy,
   type RevealPolicy,
+  visibleFieldCount,
 } from "@/features/play/reveal";
 import type { GameBlockedReason, ParticipationRef } from "@/features/play/types";
 
@@ -86,7 +87,7 @@ export async function openGameGate(
           scheduleStartAt: true,
           scheduleEndAt: true,
           leadForm: {
-            select: { position: true, fields: { select: { id: true } }, consentDefinitions: { select: { id: true } } },
+            select: { position: true, fields: { select: { type: true } }, consentDefinitions: { select: { id: true } } },
           },
         },
       },
@@ -109,7 +110,7 @@ export async function openGameGate(
   const position = participationLeadFormPosition(
     participation.leadFormPosition,
     liveForm
-      ? { position: liveForm.position, fieldCount: liveForm.fields.length, consentCount: liveForm.consentDefinitions.length }
+      ? { position: liveForm.position, fieldCount: visibleFieldCount(liveForm.fields), consentCount: liveForm.consentDefinitions.length }
       : null,
   );
   const leadSubmitted = participation.leadFormResponse !== null;

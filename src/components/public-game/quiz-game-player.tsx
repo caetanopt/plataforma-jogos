@@ -192,7 +192,7 @@ export function QuizGamePlayer({
                 hasAnswerImages ? "block p-2" : "block px-4 py-2",
                 isSelected
                   ? "border-game-accent bg-game-accent-tint text-game-selected-text"
-                  : "border-game-border-strong text-game-text hover:bg-game-subtle active:bg-game-border",
+                  : "border-game-border-strong text-game-text hover:bg-game-subtle hover:text-game-subtle-text active:bg-game-border",
               )}
             >
               {answer.imageUrl && (
@@ -211,7 +211,7 @@ export function QuizGamePlayer({
       </div>
 
       {error && (
-        <p className="mt-4 text-sm text-danger" role="alert">
+        <p className="mt-4 text-sm text-game-danger" role="alert">
           {error}
         </p>
       )}

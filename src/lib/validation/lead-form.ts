@@ -141,3 +141,12 @@ export const consentSchema = z
       ctx.addIssue({ code: "custom", path: ["required"], message: CONSENT_MARKETING_REQUIRED_MESSAGE });
     }
   });
+
+/**
+ * O carácter de marketing de um consentimento já aceite não muda: o registo
+ * de cada participante não guarda uma cópia dele, e a lista, o filtro e a
+ * exportação de leads leem-no da definição. Um consentimento obrigatório
+ * (aceite por todos) passava a "marketing concedido" de toda a gente.
+ */
+export const CONSENT_MARKETING_LOCKED_MESSAGE =
+  "Este consentimento já foi aceite ou recusado por participantes: não pode passar a ser (ou deixar de ser) de marketing. Crie um consentimento novo.";

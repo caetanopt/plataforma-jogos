@@ -1,6 +1,8 @@
+import type { CampaignStatus, LeadFormPosition } from "@/generated/prisma/client";
 import type { CampaignForEditor } from "@/features/campaigns/queries";
+import { isLiveStatus } from "@/features/campaigns/live-status";
 import { AGE_UNVERIFIABLE_ISSUE, isAgeVerifiable } from "@/features/publishing/age-check";
-import { effectiveLeadFormPosition } from "@/features/play/reveal";
+import { effectiveLeadFormPosition, visibleFieldCount } from "@/features/play/reveal";
 import { readLegalLinks } from "@/features/brand/legal-links";
 
 export interface PublishReadiness {
@@ -11,27 +13,58 @@ export interface PublishReadiness {
 export const PRIVACY_NOTICE_ISSUE =
   "O formulário de leads recolhe dados pessoais: indique o texto legal (Ecrã inicial) ou o link da política de privacidade (Marca e design).";
 
+/** O que decide se o jogo tem de mostrar um aviso de privacidade. */
+export interface PrivacyNoticeInput {
+  legalText: string | null;
+  theme: { legalLinks: unknown } | null;
+  leadForm: {
+    position: LeadFormPosition;
+    fields: readonly { type: string }[];
+    consentDefinitions: readonly unknown[];
+  } | null;
+}
+
 /**
  * Um formulário que pede dados pessoais tem de dizer como são tratados
  * (art. 13.º do RGPD, §24): pelo texto legal ou pela política de
  * privacidade. Antes publicava-se sem nada, e o jogo recolhia nome, e-mail e
- * telefone sem aviso. Um formulário que não entra no fluxo (vazio ou "Sem
- * formulário") ou só com campos ocultos não pede nada ao participante.
+ * telefone sem aviso. Pede dados um formulário que entra no fluxo: com
+ * campos visíveis ou com consentimentos (que também têm de ser informados).
+ * Vazio, "Sem formulário" ou só com campos ocultos, não pede nada.
  */
-export function hasPrivacyNotice(
-  campaign: Pick<CampaignForEditor, "legalText" | "leadForm"> & { theme: { legalLinks: unknown } | null },
-): boolean {
+export function hasPrivacyNotice(campaign: PrivacyNoticeInput): boolean {
   const form = campaign.leadForm;
   if (!form) return true;
   const position = effectiveLeadFormPosition({
     position: form.position,
-    fieldCount: form.fields.length,
+    fieldCount: visibleFieldCount(form.fields),
     consentCount: form.consentDefinitions.length,
   });
-  const asksPersonalData = position !== "NONE" && form.fields.some((field) => field.type !== "HIDDEN");
-  if (!asksPersonalData) return true;
+  if (position === "NONE") return true;
   return Boolean(campaign.legalText?.trim()) || readLegalLinks(campaign.theme?.legalLinks).privacyPolicyUrl !== null;
 }
+
+/**
+ * Numa campanha publicada, uma edição que tira o aviso a um formulário que
+ * pede dados (ou que passa a pedir dados sem aviso). A publicação já o
+ * recusava, mas depois de publicar o editor deixava-o fazer: o jogo passava
+ * a recolher e-mails sem aviso nenhum. Uma campanha que já estava assim não
+ * fica pior; o editor avisa-a à parte.
+ */
+export function editRemovesLivePrivacyNotice(
+  status: CampaignStatus,
+  before: PrivacyNoticeInput,
+  after: PrivacyNoticeInput,
+): boolean {
+  return isLiveStatus(status) && hasPrivacyNotice(before) && !hasPrivacyNotice(after);
+}
+
+export const LIVE_PRIVACY_NOTICE_MESSAGE =
+  "A campanha está publicada e o formulário de leads pede dados pessoais: é preciso manter o texto legal (Ecrã inicial) ou o link da política de privacidade (Marca e design).";
+
+/** Campanha publicada antes da regra, que já recolhe dados sem aviso. */
+export const LIVE_PRIVACY_NOTICE_MISSING_WARNING =
+  "Esta campanha está publicada e o formulário de leads recolhe dados pessoais sem aviso de privacidade. Indique o texto legal (Ecrã inicial) ou o link da política de privacidade (Marca e design).";
 
 export function getPublishReadiness(campaign: CampaignForEditor): PublishReadiness {
   const issues: string[] = [];

@@ -90,7 +90,7 @@ export function LegalFooter({ legal, regulationText }: { legal: PublicLegalInfo;
       </nav>
       {legal.privacyContactEmail && <PrivacyContact email={legal.privacyContactEmail} />}
       {regulationText && showRegulation && (
-        <p id="regulation-text" className="whitespace-pre-line rounded-game bg-game-subtle p-3 text-left">
+        <p id="regulation-text" className="whitespace-pre-line rounded-game bg-game-subtle p-3 text-left text-game-subtle-text">
           {regulationText}
         </p>
       )}

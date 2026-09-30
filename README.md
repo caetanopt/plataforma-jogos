@@ -141,19 +141,32 @@ para "desmarcada" se distinguir de "ausente".
 - O jogo público e a pré-visualização aplicam o tema da campanha (Marca e design): cores,
   tipografia, border radius, sombras, imagem de fundo, logótipo e favicon. Sem tema, fica o
   aspeto Caetano de sempre.
-- O texto tem de se ler (WCAG 2.2 AA, 4,5:1). Quando uma combinação da marca não chega lá, a
-  página usa outra cor de texto e o editor avisa. O tema por omissão tem botões azul cyan com
-  texto branco (2,4:1): na página pública o texto desses botões sai em antracite.
+- O texto tem de se ler (WCAG 2.2 AA, 4,5:1; contornos de campos 3:1). Quando uma combinação
+  da marca não chega lá, a página usa outra cor de texto e o editor avisa, par a par. Num tema
+  escuro, os controlos nativos (calendário, listas) também saem escuros.
+- Os temas nasciam com botões azul cyan e texto branco (2,4:1). A migração
+  `20260930170137_default_theme_button_contrast` passa os temas e brand kits que ainda têm esse
+  par a azul profundo com texto branco — o aspeto que o jogo público sempre mostrou — e muda o
+  valor por omissão. Um tema com outra combinação não é tocado.
 - O texto legal do ecrã inicial aparece no ecrã inicial e junto ao formulário de leads. Os links
   legais (política de privacidade, termos, cookies) configuram-se no tema, e o contacto de
   privacidade em Configurações > Privacidade (só administradores). Todos aparecem também no
   rodapé do jogo, com o regulamento.
-- Uma campanha cujo formulário pede dados pessoais só se publica (ou republica) com texto legal
-  ou com o link da política de privacidade.
-- A lista de leads mostra o consentimento de marketing e filtra por ele; a exportação respeita
-  o filtro. O CSV tem duas colunas novas no fim ("Consentimento de marketing" e
-  "Consentimentos"). Ao exportar uma só campanha, vem também uma coluna por consentimento do
-  formulário.
+- Uma campanha cujo formulário pede dados pessoais (campos visíveis ou consentimentos) só se
+  publica (ou republica) com texto legal ou com o link da política de privacidade. Numa campanha
+  já publicada, o editor recusa a edição que tiraria o único aviso (apagar o texto legal, tirar
+  o link, aplicar um brand kit sem ele, acrescentar o primeiro campo ou consentimento, sair de
+  "Sem formulário"); o resto do envio grava-se. As que já estão publicadas sem aviso têm um
+  alerta na etapa Formulário de leads.
+- Os campos ocultos não aparecem no jogo: o servidor grava neles o valor predefinido e ignora o
+  que o browser mandar.
+- A lista de leads mostra o consentimento de marketing e filtra por ele ("com" inclui quem
+  aceitou pelo menos um); a exportação respeita o filtro. O CSV tem duas colunas novas no fim
+  ("Consentimento de marketing" e "Consentimentos"). Ao exportar uma só campanha, vem também uma
+  coluna por consentimento do formulário, na versão atual; uma resposta a outra versão leva-a
+  indicada, por exemplo "Recusado (v2)".
+- Um consentimento que já tem respostas não pode passar a ser (nem deixar de ser) de marketing:
+  mudava o que as respostas querem dizer. O texto pode mudar (versão nova).
 - Eliminar uma campanha apaga também os participantes que só jogaram nessa campanha, com os
   dados pessoais antigos que tivessem. A operação fica na auditoria como operação de
   privacidade.
@@ -186,8 +199,8 @@ WHERE c."minAge" IS NOT NULL
 nascimento, por isso a última condição já o apanha.)
 
 As campanhas no ar continuam a funcionar sem texto legal, mas deixam de se poder republicar até
-o terem. Para as encontrar (formulário com campos visíveis, sem texto legal nem política de
-privacidade no tema):
+o terem. Para as encontrar (formulário com campos visíveis ou consentimentos, sem texto legal
+nem política de privacidade no tema):
 
 ```sql
 SELECT c.id, c."internalName", c.status
@@ -196,7 +209,10 @@ JOIN "LeadForm" lf ON lf."campaignId" = c.id
 LEFT JOIN "CampaignTheme" t ON t.id = c."themeId"
 WHERE c.status IN ('PUBLISHED', 'SCHEDULED', 'PAUSED')
   AND lf.position <> 'NONE'
-  AND EXISTS (SELECT 1 FROM "LeadFormField" f WHERE f."leadFormId" = lf.id AND f.type <> 'HIDDEN')
+  AND (
+    EXISTS (SELECT 1 FROM "LeadFormField" f WHERE f."leadFormId" = lf.id AND f.type <> 'HIDDEN')
+    OR EXISTS (SELECT 1 FROM "ConsentDefinition" d WHERE d."leadFormId" = lf.id)
+  )
   AND COALESCE(btrim(c."legalText"), '') = ''
   AND COALESCE(t."legalLinks"->>'privacyPolicyUrl', '') !~ '^https?://';
 ```

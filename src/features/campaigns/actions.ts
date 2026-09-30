@@ -490,8 +490,19 @@ export async function deleteCampaignAction(formData: FormData): Promise<void> {
   // identificador do browser serve os limites de participação de lá). Antes
   // das participações: a FK é SET NULL e, depois de elas saírem, já não se
   // sabia quem só tinha jogado aqui.
-  const [, participantsDeleted, participations] = await prisma.$transaction([
+  //
+  // Os candidatos ficam bloqueados (FOR UPDATE) antes do DELETE: uma
+  // participação a começar noutra campanha com o mesmo participante tem o
+  // registo ainda por confirmar, e o DELETE não a via — o participante saía
+  // e essa participação ficava sem ele (e fora do limite por browser). O
+  // bloqueio espera por ela, e o DELETE, uma instrução nova, já a vê.
+  const [, , participantsDeleted, participations] = await prisma.$transaction([
     prisma.$queryRaw`SELECT "id" FROM "Campaign" WHERE "id" = ${campaign.id} FOR UPDATE`,
+    prisma.$queryRaw`
+      SELECT "id" FROM "Participant"
+      WHERE "organizationId" = ${context.organizationId}
+        AND "id" IN (SELECT "participantId" FROM "Participation" WHERE "campaignId" = ${campaign.id})
+      FOR UPDATE`,
     prisma.$executeRaw`
       DELETE FROM "Participant" p
       WHERE p."organizationId" = ${context.organizationId}

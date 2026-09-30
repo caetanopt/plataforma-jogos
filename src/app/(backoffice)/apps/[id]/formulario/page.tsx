@@ -24,6 +24,9 @@ import {
   LEAD_FORM_POSITION_LABELS,
 } from "@/lib/labels";
 import { CONSENT_LIMITS, fieldTypeHasOptions, LEAD_FIELD_LIMITS } from "@/lib/validation/lead-form";
+import { Alert } from "@/components/ui/alert";
+import { isLiveStatus } from "@/features/campaigns/live-status";
+import { hasPrivacyNotice, LIVE_PRIVACY_NOTICE_MISSING_WARNING } from "@/features/publishing/readiness";
 import type { DedupStrategy, LeadFieldType } from "@/generated/prisma/client";
 
 const MOVE_BUTTON_CLASS =
@@ -43,6 +46,7 @@ export default async function LeadFormStepPage({
   const campaign = await prisma.campaign.findFirst({
     where: { id, organizationId: context.organizationId },
     include: {
+      theme: { select: { legalLinks: true } },
       leadForm: {
         include: {
           fields: { orderBy: { order: "asc" } },
@@ -54,6 +58,7 @@ export default async function LeadFormStepPage({
   if (!campaign || !campaign.leadForm) notFound();
 
   const { leadForm } = campaign;
+  const privacyNoticeMissing = isLiveStatus(campaign.status) && !hasPrivacyNotice(campaign);
   // Consentimentos já aceites (não se removem). Só os deste formulário: o
   // `_count` do Prisma agregava a tabela ConsentRecord inteira.
   const consentsInUse = new Set(
@@ -73,6 +78,8 @@ export default async function LeadFormStepPage({
           Configure onde e que dados recolher dos participantes.
         </p>
       </div>
+
+      {privacyNoticeMissing ? <Alert variant="warning">{LIVE_PRIVACY_NOTICE_MISSING_WARNING}</Alert> : null}
 
       <AutoSaveForm action={updateLeadFormSettingsAction} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
         <input type="hidden" name="campaignId" value={campaign.id} />

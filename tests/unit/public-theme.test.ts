@@ -8,7 +8,7 @@ const SCHEMA_DEFAULT: PublicThemeSource = {
   secondaryColor: "#00AEEF",
   backgroundColor: "#FFFFFF",
   textColor: "#2E3A46",
-  buttonColor: "#00AEEF",
+  buttonColor: "#002E5D",
   buttonTextColor: "#FFFFFF",
   fontFamily: "Montserrat",
   borderRadiusPx: 8,
@@ -70,17 +70,33 @@ describe("tema na página pública", () => {
     expect(variables["--game-accent"]).toBe("#8C1D18");
     expect(variables["--game-radius"]).toBe("20px");
     expect(variables["--game-radius-lg"]).toBe("30px");
-    expect(variables["--game-shadow"]).toBe("none");
+    // Uma sombra vazia, não "none": o anel de foco compõe-se com ela.
+    expect(variables["--game-shadow"]).toBe("0 0 #0000");
+  });
+
+  it("o tema por omissão é o aspeto Caetano e não tem avisos", () => {
+    const { variables } = resolvePublicTheme(SCHEMA_DEFAULT);
+    expect(variables).toMatchObject({
+      "--game-button": "#002E5D",
+      "--game-button-text": "#FFFFFF",
+      "--game-button-hover": "#33587D",
+      "--game-border": "#D7DFE3",
+      "--game-subtle": "#EBEFF1",
+      "--game-accent-tint": "#CCD5DF",
+      "--game-highlight": "#CCEFFC",
+    });
+    expect(themeContrastWarnings(SCHEMA_DEFAULT)).toEqual([]);
   });
 
   it("texto que não se lê é trocado por um que se lê, e o editor avisa", () => {
-    // O tema por omissão tem texto branco sobre cyan nos botões (2,4:1).
-    const { variables } = resolvePublicTheme(SCHEMA_DEFAULT);
+    // O antigo valor por omissão: texto branco sobre cyan nos botões (2,4:1).
+    const cyanButton = { ...SCHEMA_DEFAULT, buttonColor: "#00AEEF" };
+    const { variables } = resolvePublicTheme(cyanButton);
     expect(variables["--game-button"]).toBe("#00AEEF");
     expect(variables["--game-button-text"]).toBe("#2E3A46");
     expect(contrastRatio(variables["--game-button-text"], variables["--game-button"])).toBeGreaterThanOrEqual(4.5);
 
-    const warnings = themeContrastWarnings(SCHEMA_DEFAULT);
+    const warnings = themeContrastWarnings(cyanButton);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("O texto dos botões");
     expect(warnings[0]).toContain("#2E3A46");
@@ -103,7 +119,44 @@ describe("tema na página pública", () => {
     expect(themeContrastWarnings(dark).map((warning) => warning.slice(0, 20))).toEqual([
       "A cor do texto sobre",
       "A cor primária sobre",
+      // As costas das cartas e o aro da roda usam a primária tal como está.
+      "A cor primária quase",
     ]);
+  });
+
+  it("todos os pares de cores desenhados se leem, com qualquer tema", () => {
+    const themes: PublicThemeSource[] = [
+      SCHEMA_DEFAULT,
+      { ...SCHEMA_DEFAULT, backgroundColor: "#111111", textColor: "#333333", buttonColor: "#FFD23F", buttonTextColor: "#111111" },
+      { ...SCHEMA_DEFAULT, backgroundColor: "#002E5D", textColor: "#FFFFFF", primaryColor: "#66CEF5", secondaryColor: "#FFA931" },
+      { ...SCHEMA_DEFAULT, backgroundColor: "#FFA931", textColor: "#FFFFFF", primaryColor: "#FFD23F", buttonColor: "#FFFFFF" },
+      { ...SCHEMA_DEFAULT, backgroundColor: "#777777", textColor: "#888888", primaryColor: "#777777", secondaryColor: "#777777" },
+    ];
+    const textPairs = [
+      ["--game-text", "--game-surface"],
+      ["--game-muted", "--game-surface"],
+      ["--game-accent", "--game-surface"],
+      ["--game-danger", "--game-surface"],
+      ["--game-subtle-text", "--game-subtle"],
+      ["--game-selected-text", "--game-accent-tint"],
+      ["--game-highlight-text", "--game-highlight"],
+      ["--game-success-text", "--game-success-tint"],
+      ["--game-button-text", "--game-button"],
+      ["--game-button-text", "--game-button-hover"],
+    ] as const;
+    for (const theme of themes) {
+      const { variables: v } = resolvePublicTheme(theme);
+      for (const [foreground, background] of textPairs) {
+        expect(contrastRatio(v[foreground], v[background]), `${foreground} sobre ${background} em ${theme.backgroundColor}`).toBeGreaterThanOrEqual(4.5);
+      }
+      // Contorno dos campos (WCAG 1.4.11).
+      expect(contrastRatio(v["--game-border-strong"], v["--game-surface"])).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("num tema escuro os controlos nativos também são escuros", () => {
+    expect(resolvePublicTheme(SCHEMA_DEFAULT).colorScheme).toBe("light");
+    expect(resolvePublicTheme({ ...SCHEMA_DEFAULT, backgroundColor: "#111111", textColor: "#FFFFFF" }).colorScheme).toBe("dark");
   });
 
   it("limita o border radius e ignora cores inválidas", () => {

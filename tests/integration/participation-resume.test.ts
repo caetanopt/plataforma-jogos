@@ -33,7 +33,7 @@ const {
 interface Options {
   type?: CampaignType;
   position?: LeadFormPosition | null;
-  fields?: Array<{ type: LeadFieldType; internalKey: string; required?: boolean }>;
+  fields?: Array<{ type: LeadFieldType; internalKey: string; required?: boolean; defaultValue?: string }>;
   consents?: boolean;
   minAge?: number;
   dedupStrategies?: Array<"EMAIL" | "PHONE">;
@@ -92,6 +92,7 @@ async function createFixture(options: Options = {}) {
             internalKey: field.internalKey,
             label: field.internalKey,
             required: field.required ?? false,
+            defaultValue: field.defaultValue,
             order,
           })),
         },
@@ -421,5 +422,43 @@ describe("telefone", () => {
         consents: {},
       }),
     ).toEqual({ ok: false, reason: "duplicate" });
+  });
+});
+
+describe("campos ocultos", () => {
+  it("não vão para o browser; levam o valor predefinido e ignoram o que o browser mandar", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({
+      position: "BEFORE_GAME",
+      fields: [
+        { type: "EMAIL", internalKey: "email", required: true },
+        { type: "HIDDEN", internalKey: "origem", required: true, defaultValue: "newsletter-outubro" },
+      ],
+    });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    expect(started.leadForm?.fields.map((field) => field.internalKey)).toEqual(["email"]);
+
+    const ref = { participationId: started.participationId, token };
+    // Obrigatório mas oculto: o participante não o preenche e o envio passa.
+    expect(
+      await submitLeadFormAction({ ref, values: { email: "ana@example.pt", origem: "adulterado" }, consents: {} }),
+    ).toEqual({ ok: true });
+    const saved = await prisma.participation.findUniqueOrThrow({ where: { id: ref.participationId } });
+    expect(saved.leadFormResponse).toEqual({ email: "ana@example.pt", origem: "newsletter-outubro" });
+  });
+
+  it("um formulário só com campos ocultos não se mostra", async () => {
+    visitor.cookieId = randomUUID();
+    const fixture = await createFixture({
+      position: "BEFORE_GAME",
+      fields: [{ type: "HIDDEN", internalKey: "origem", defaultValue: "x" }],
+    });
+    const token = randomUUID();
+    const started = await fixture.start(token);
+    if (!started.ok) throw new Error("start");
+    // Sem nada para o participante preencher, o jogo começa logo.
+    expect(await beginGameAction({ participationId: started.participationId, token })).toEqual({ ok: true });
   });
 });

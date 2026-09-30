@@ -10,7 +10,15 @@ export interface LeadFormShape {
 }
 
 /**
- * Um formulário sem campos nem consentimentos não faz parte do fluxo: vale
+ * Campos que o participante vê. Um campo oculto não se mostra nem se
+ * preenche: o valor é o predefinido, posto pelo servidor.
+ */
+export function visibleFieldCount(fields: readonly { type: string }[]): number {
+  return fields.filter((field) => field.type !== "HIDDEN").length;
+}
+
+/**
+ * Um formulário sem campos visíveis nem consentimentos não faz parte do fluxo: vale
  * "Sem formulário". As campanhas novas nascem com um formulário vazio, e
  * antes o visitante via um ecrã só com "Continuar" e cada participação
  * contava como uma lead sem dados (§20). Usado no servidor e no cliente.

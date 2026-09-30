@@ -141,8 +141,9 @@ export default async function LeadsPage({
             className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm"
           >
             <option value="">Todos</option>
-            <option value="granted">Concedido</option>
-            <option value="not_granted">Não concedido</option>
+            {/* "Com" inclui as leads «Parcial» (aceitaram pelo menos um). */}
+            <option value="granted">Com consentimento aceite</option>
+            <option value="not_granted">Sem consentimento aceite</option>
           </select>
         </div>
         <label className="flex h-10 items-center gap-2 text-sm text-caetano-anthracite">

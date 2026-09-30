@@ -37,6 +37,13 @@ vi.mock("@/components/public-game/public-game-flow", () => ({ PublicGameFlow: ()
 const { IDLE } = await import("@/lib/forms/action-result");
 const { updateCampaignThemeAction } = await import("@/features/campaigns/steps/brand-actions");
 const { updateBrandKitAction } = await import("@/features/brand/actions");
+const { applyBrandKitAction } = await import("@/features/campaigns/steps/brand-actions");
+const { updateStartScreenAction } = await import("@/features/campaigns/steps/start-screen-actions");
+const { addConsentAction, addLeadFieldAction, updateConsentAction, updateLeadFormSettingsAction } = await import(
+  "@/features/campaigns/steps/lead-form-actions"
+);
+const { LIVE_PRIVACY_NOTICE_MESSAGE } = await import("@/features/publishing/readiness");
+const { CONSENT_MARKETING_LOCKED_MESSAGE } = await import("@/lib/validation/lead-form");
 const { updatePrivacySettingsAction } = await import("@/features/organizations/actions");
 const { default: PublicPlayPage, generateMetadata } = await import("@/app/play/[slug]/page");
 const { listLeads } = await import("@/features/leads/queries");
@@ -304,6 +311,156 @@ describe("links legais no editor", () => {
     expect(result.status).toBe("success");
     const saved = await prisma.campaignTheme.findUniqueOrThrow({ where: { id: kit.id } });
     expect(saved.legalLinks).toEqual({ privacyPolicyUrl: "https://marca.pt/p", termsUrl: null, cookiesUrl: null });
+  });
+});
+
+describe("aviso de privacidade numa campanha publicada", () => {
+  /** Uma campanha publicada cujo único aviso é `notice` (ou nenhum). */
+  async function withOnlyNotice(notice: "legalText" | "privacyPolicyUrl" | null, status: "PUBLISHED" | "DRAFT" = "PUBLISHED") {
+    const created = await createCampaign(a, { legalText: notice === "legalText" ? "Responsável: Marca, Lda." : null });
+    await prisma.campaign.update({ where: { id: created.campaign.id }, data: { status } });
+    await prisma.campaignTheme.update({
+      where: { id: created.theme.id },
+      data: {
+        legalLinks:
+          notice === "privacyPolicyUrl"
+            ? { privacyPolicyUrl: "https://marca.pt/privacidade", termsUrl: "https://marca.pt/termos" }
+            : { termsUrl: "https://marca.pt/termos" },
+      },
+    });
+    state.current = a.contexts.EDITOR;
+    return created;
+  }
+
+  /** Formulário que ainda não pede nada: sem campos nem consentimentos. */
+  async function emptyForm(campaignId: string, position: "BEFORE_GAME" | "NONE" = "BEFORE_GAME") {
+    const leadForm = await prisma.leadForm.findUniqueOrThrow({ where: { campaignId } });
+    await prisma.leadFormField.deleteMany({ where: { leadFormId: leadForm.id } });
+    await prisma.consentDefinition.deleteMany({ where: { leadFormId: leadForm.id } });
+    await prisma.leadForm.update({ where: { id: leadForm.id }, data: { position } });
+    return leadForm;
+  }
+
+  it("não apaga o texto legal se for o único aviso; o resto do envio grava-se", async () => {
+    const { campaign } = await withOnlyNotice("legalText");
+
+    const result = await updateStartScreenAction(IDLE, form({ campaignId: campaign.id, legalText: "", startTitle: "Novo título" }));
+
+    expect(result).toMatchObject({ status: "error", fieldErrors: { legalText: LIVE_PRIVACY_NOTICE_MESSAGE } });
+    const saved = await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
+    expect(saved.legalText).toBe("Responsável: Marca, Lda.");
+    expect(saved.startTitle).toBe("Novo título");
+  });
+
+  it("com a política de privacidade, o texto legal apaga-se; num rascunho também", async () => {
+    const live = await withOnlyNotice("privacyPolicyUrl");
+    await prisma.campaign.update({ where: { id: live.campaign.id }, data: { legalText: "Texto" } });
+    expect((await updateStartScreenAction(IDLE, form({ campaignId: live.campaign.id, legalText: "" }))).status).toBe("success");
+
+    const draft = await withOnlyNotice("legalText", "DRAFT");
+    expect((await updateStartScreenAction(IDLE, form({ campaignId: draft.campaign.id, legalText: "" }))).status).toBe("success");
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: draft.campaign.id } })).legalText).toBeNull();
+  });
+
+  it("não tira a política de privacidade se for o único aviso; as cores gravam-se", async () => {
+    const { campaign, theme } = await withOnlyNotice("privacyPolicyUrl");
+
+    const result = await updateCampaignThemeAction(
+      IDLE,
+      form({ campaignId: campaign.id, privacyPolicyUrl: "", termsUrl: "", primaryColor: "#002E5D" }),
+    );
+
+    expect(result).toMatchObject({ status: "error", fieldErrors: { privacyPolicyUrl: LIVE_PRIVACY_NOTICE_MESSAGE } });
+    const saved = await prisma.campaignTheme.findUniqueOrThrow({ where: { id: theme.id } });
+    expect(saved.legalLinks).toEqual({ privacyPolicyUrl: "https://marca.pt/privacidade", termsUrl: null, cookiesUrl: null });
+    expect(saved.primaryColor).toBe("#002E5D");
+  });
+
+  it("aplicar um brand kit sem política de privacidade mantém os links da campanha", async () => {
+    const { campaign, theme } = await withOnlyNotice("privacyPolicyUrl");
+    const kit = await prisma.campaignTheme.create({
+      data: { organizationId: a.id, name: "Kit", isBrandKit: true, primaryColor: "#49B489", legalLinks: { termsUrl: "https://kit.pt/t" } },
+    });
+
+    const result = await applyBrandKitAction(IDLE, form({ campaignId: campaign.id, brandKitId: kit.id }));
+
+    expect(result).toMatchObject({ status: "success", message: expect.stringContaining("Os links legais da campanha ficaram") });
+    const saved = await prisma.campaignTheme.findUniqueOrThrow({ where: { id: theme.id } });
+    expect(saved.primaryColor).toBe("#49B489");
+    expect(saved.legalLinks).toEqual({ privacyPolicyUrl: "https://marca.pt/privacidade", termsUrl: "https://marca.pt/termos" });
+  });
+
+  it("sem aviso, um formulário que não pedia nada não passa a pedir dados", async () => {
+    const { campaign } = await withOnlyNotice(null);
+    const leadForm = await emptyForm(campaign.id);
+
+    expect(await addLeadFieldAction(IDLE, form({ campaignId: campaign.id, type: "EMAIL", label: "E-mail" }))).toMatchObject({
+      status: "error",
+      message: LIVE_PRIVACY_NOTICE_MESSAGE,
+    });
+    expect(await addConsentAction(IDLE, form({ campaignId: campaign.id, text: "Aceito o regulamento" }))).toMatchObject({
+      status: "error",
+      message: LIVE_PRIVACY_NOTICE_MESSAGE,
+    });
+    expect(await prisma.leadFormField.count({ where: { leadFormId: leadForm.id } })).toBe(0);
+    expect(await prisma.consentDefinition.count({ where: { leadFormId: leadForm.id } })).toBe(0);
+
+    // Um campo oculto não se mostra ao participante: pode-se.
+    expect((await addLeadFieldAction(IDLE, form({ campaignId: campaign.id, type: "HIDDEN", label: "Origem" }))).status).toBe(
+      "success",
+    );
+  });
+
+  it("sem aviso, não sai de «Sem formulário» com campos que pedem dados", async () => {
+    const { campaign } = await withOnlyNotice(null);
+    const leadForm = await prisma.leadForm.findUniqueOrThrow({ where: { campaignId: campaign.id } });
+    await prisma.leadForm.update({ where: { id: leadForm.id }, data: { position: "NONE" } });
+
+    const result = await updateLeadFormSettingsAction(
+      IDLE,
+      form({ campaignId: campaign.id, position: "BEFORE_GAME", honeypotEnabled: "on" }),
+    );
+
+    expect(result).toMatchObject({ status: "error", fieldErrors: { position: LIVE_PRIVACY_NOTICE_MESSAGE } });
+    const saved = await prisma.leadForm.findUniqueOrThrow({ where: { id: leadForm.id } });
+    expect(saved.position).toBe("NONE");
+    expect(saved.honeypotEnabled).toBe(true);
+  });
+});
+
+describe("consentimento de marketing já respondido", () => {
+  it("não muda de tipo depois de haver respostas; antes, muda", async () => {
+    const { campaign, version, consents } = await createCampaign(a);
+    const [regulation, marketing] = consents;
+    state.current = a.contexts.EDITOR;
+
+    // Sem respostas: o regulamento pode passar a não obrigatório.
+    expect(
+      (await updateConsentAction(IDLE, form({ campaignId: campaign.id, consentId: regulation.id, required: "" }))).status,
+    ).toBe("success");
+
+    const participation = await prisma.participation.create({
+      data: { campaignId: campaign.id, campaignVersionId: version.id, idempotencyKey: randomUUID() },
+    });
+    await prisma.consentRecord.create({
+      data: { participationId: participation.id, consentDefinitionId: marketing.id, status: "DECLINED", text: marketing.text, version: 3 },
+    });
+
+    // Com respostas: deixar de ser de marketing mudava o que elas querem dizer.
+    const result = await updateConsentAction(IDLE, form({ campaignId: campaign.id, consentId: marketing.id, isMarketing: "" }));
+    expect(result).toMatchObject({ status: "error", fieldErrors: { isMarketing: CONSENT_MARKETING_LOCKED_MESSAGE } });
+    expect((await prisma.consentDefinition.findUniqueOrThrow({ where: { id: marketing.id } })).isMarketing).toBe(true);
+
+    // O texto continua a poder mudar (versão nova).
+    const edited = await updateConsentAction(
+      IDLE,
+      form({ campaignId: campaign.id, consentId: marketing.id, text: "Aceito receber novidades por SMS" }),
+    );
+    expect(edited.status).toBe("success");
+    expect(await prisma.consentDefinition.findUniqueOrThrow({ where: { id: marketing.id } })).toMatchObject({
+      isMarketing: true,
+      version: 4,
+    });
   });
 });
 

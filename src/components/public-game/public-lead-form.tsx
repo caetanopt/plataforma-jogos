@@ -134,7 +134,7 @@ export function PublicLeadForm({
         <div key={field.id}>
           <label htmlFor={field.id} className="mb-1.5 block text-sm font-medium text-game-text">
             {field.label}
-            {field.required && <span className="text-danger"> *</span>}
+            {field.required && <span className="text-game-danger"> *</span>}
           </label>
 
           {field.type === "LONG_TEXT" ? (
@@ -143,7 +143,7 @@ export function PublicLeadForm({
               required={field.required}
               placeholder={field.placeholder ?? undefined}
               rows={3}
-              className="w-full rounded-game border border-game-border-strong px-3 py-2 text-sm"
+              className="w-full rounded-game border border-game-border-strong bg-game-surface px-3 py-2 text-sm"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
@@ -153,7 +153,7 @@ export function PublicLeadForm({
               aria-required={field.required || undefined}
               aria-describedby={field.helpText ? `${field.id}-help` : undefined}
               required={field.required}
-              className="h-10 w-full rounded-game border border-game-border-strong px-3 text-sm"
+              className="h-10 w-full rounded-game border border-game-border-strong bg-game-surface px-3 text-sm"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             >
@@ -192,7 +192,7 @@ export function PublicLeadForm({
               inputMode={field.type === "PHONE" ? "tel" : undefined}
               autoComplete={field.type === "PHONE" ? "tel" : field.type === "EMAIL" ? "email" : undefined}
               placeholder={field.placeholder ?? undefined}
-              className="h-10 w-full rounded-game border border-game-border-strong px-3 text-sm focus-visible:border-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
+              className="h-10 w-full rounded-game border border-game-border-strong bg-game-surface px-3 text-sm focus-visible:border-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
               value={values[field.internalKey] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [field.internalKey]: e.target.value }))}
             />
@@ -216,7 +216,7 @@ export function PublicLeadForm({
           />
           <span>
             {consent.text}
-            {consent.required && <span className="text-danger"> *</span>}
+            {consent.required && <span className="text-game-danger"> *</span>}
           </span>
         </label>
       ))}
@@ -224,7 +224,7 @@ export function PublicLeadForm({
       {privacyNotice}
 
       {error && (
-        <p id="lead-form-error" role="alert" className="text-sm text-danger">
+        <p id="lead-form-error" role="alert" className="text-sm text-game-danger">
           {error}
         </p>
       )}

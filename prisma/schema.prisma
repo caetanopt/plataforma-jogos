@@ -208,7 +208,9 @@ model CampaignTheme {
   secondaryColor         String   @default("#00AEEF")
   backgroundColor        String   @default("#FFFFFF")
   textColor              String   @default("#2E3A46")
-  buttonColor            String   @default("#00AEEF")
+  // Azul profundo: o texto branco dos botões sobre o azul cyan fica abaixo
+  // dos 4,5:1 da WCAG 2.2 AA (migração default_theme_button_contrast).
+  buttonColor            String   @default("#002E5D")
   buttonTextColor        String   @default("#FFFFFF")
   fontFamily             String   @default("Montserrat")
   borderRadiusPx         Int      @default(8)

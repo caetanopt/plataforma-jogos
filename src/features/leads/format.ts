@@ -49,8 +49,8 @@ export interface LeadRow {
   marketingConsent: string;
   /** Cada consentimento com o texto, a versão, o estado e a data. */
   consents: string;
-  /** Estado do último registo de cada consentimento (colunas por consentimento). */
-  consentStatusByDefinition: Record<string, string>;
+  /** Estado e versão do último registo de cada consentimento (colunas por consentimento). */
+  consentStatusByDefinition: Record<string, { status: string; version: number }>;
 }
 
 export const CONSENT_STATUS_LABELS: Record<string, string> = {
@@ -93,7 +93,7 @@ function consentColumns(records: readonly LeadConsentRecord[]): Pick<
       )
       .join(" | "),
     consentStatusByDefinition: Object.fromEntries(
-      latest.map((record) => [record.consentDefinitionId, CONSENT_STATUS_LABELS[record.status] ?? record.status]),
+      latest.map((record) => [record.consentDefinitionId, { status: CONSENT_STATUS_LABELS[record.status] ?? record.status, version: record.version }]),
     ),
   };
 }
@@ -249,6 +249,17 @@ function escapeCsvValue(value: unknown): string {
   return str;
 }
 
+/**
+ * O estado do consentimento, com a versão aceite quando não é a atual do
+ * cabeçalho: um "Aceite" debaixo do texto v2 não pode passar por aceitação
+ * do texto v2 se a pessoa aceitou o v1.
+ */
+function consentCell(row: LeadRow, column: ConsentCsvColumn): string {
+  const recorded = row.consentStatusByDefinition[column.definitionId];
+  if (!recorded) return "";
+  return recorded.version === column.version ? recorded.status : `${recorded.status} (v${recorded.version})`;
+}
+
 /** Linha de cabeçalho do CSV (sem a quebra de linha). */
 export function csvHeader(consentColumns: readonly ConsentCsvColumn[] = []): string {
   return [...CSV_COLUMNS.map(([, label]) => label), ...consentColumns.map((column) => consentHeader(column))]
@@ -260,7 +271,7 @@ export function csvHeader(consentColumns: readonly ConsentCsvColumn[] = []): str
 export function csvLine(row: LeadRow, consentColumns: readonly ConsentCsvColumn[] = []): string {
   return [
     ...CSV_COLUMNS.map(([key]) => row[key]),
-    ...consentColumns.map((column) => row.consentStatusByDefinition[column.definitionId] ?? ""),
+    ...consentColumns.map((column) => consentCell(row, column)),
   ]
     .map(escapeCsvValue)
     .join(",");

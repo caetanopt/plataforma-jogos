@@ -10,6 +10,8 @@ import { logAudit } from "@/server/audit/log";
 import { runAction } from "@/server/actions/run-action";
 import { parseThemeForm, saveAsBrandKitSchema } from "@/lib/validation/brand";
 import { mergeLegalLinks } from "@/features/brand/legal-links";
+import { editRemovesLivePrivacyNotice, LIVE_PRIVACY_NOTICE_MESSAGE } from "@/features/publishing/readiness";
+import { loadPrivacyNoticeState } from "@/features/publishing/privacy-guard";
 import { getField, readOptional } from "@/lib/forms/form-data";
 import { fail, ok, partialResult, zodFieldErrors, type ActionResult } from "@/lib/forms/action-result";
 
@@ -41,7 +43,19 @@ export async function updateCampaignThemeAction(_previous: ActionResult, formDat
       return fail(MEDIA_UNAVAILABLE_MESSAGE);
     }
 
-    if (savedSomething) {
+    // Numa campanha publicada, tirar a política de privacidade não pode
+    // deixar o formulário a pedir dados sem aviso.
+    if (legalLinkChanges.privacyPolicyUrl !== undefined) {
+      const { status, state } = await loadPrivacyNoticeState(campaign.id);
+      const after = { ...state, theme: { legalLinks: mergeLegalLinks(campaign.theme.legalLinks, legalLinkChanges) } };
+      if (editRemovesLivePrivacyNotice(status, state, after)) {
+        delete legalLinkChanges.privacyPolicyUrl;
+        fieldErrors.privacyPolicyUrl = LIVE_PRIVACY_NOTICE_MESSAGE;
+      }
+    }
+    const saving = savedSomething && (Object.values(update).some((value) => value !== undefined) || Object.keys(legalLinkChanges).length > 0);
+
+    if (saving) {
       await prisma.campaignTheme.update({
         where: { id: campaign.theme.id },
         data: {
@@ -64,7 +78,7 @@ export async function updateCampaignThemeAction(_previous: ActionResult, formDat
       revalidatePath(`/apps/${campaign.id}/marca`);
     }
 
-    return partialResult(fieldErrors, savedSomething);
+    return partialResult(fieldErrors, saving);
   });
 }
 
@@ -140,6 +154,13 @@ export async function applyBrandKitAction(_previous: ActionResult, formData: For
     });
     if (!campaign || !campaign.theme || !brandKit) notFound();
 
+    // Um kit sem política de privacidade não a tira a uma campanha publicada
+    // cujo formulário pede dados: os links legais da campanha ficam.
+    const { status, state } = await loadPrivacyNoticeState(campaign.id);
+    const keepLegalLinks =
+      brandKit.legalLinks != null &&
+      editRemovesLivePrivacyNotice(status, state, { ...state, theme: { legalLinks: brandKit.legalLinks } });
+
     await prisma.campaignTheme.update({
       where: { id: campaign.theme.id },
       data: {
@@ -158,7 +179,7 @@ export async function applyBrandKitAction(_previous: ActionResult, formData: For
         shadowEnabled: brandKit.shadowEnabled,
         headerConfig: brandKit.headerConfig ?? undefined,
         footerConfig: brandKit.footerConfig ?? undefined,
-        legalLinks: brandKit.legalLinks ?? undefined,
+        legalLinks: keepLegalLinks ? undefined : (brandKit.legalLinks ?? undefined),
       },
     });
 
@@ -173,6 +194,10 @@ export async function applyBrandKitAction(_previous: ActionResult, formData: For
     });
 
     revalidatePath(`/apps/${campaign.id}/marca`);
-    return ok("Brand kit aplicado.");
+    return ok(
+      keepLegalLinks
+        ? "Brand kit aplicado. Os links legais da campanha ficaram: o kit não tem política de privacidade e a campanha publicada precisa dela."
+        : "Brand kit aplicado.",
+    );
   });
 }

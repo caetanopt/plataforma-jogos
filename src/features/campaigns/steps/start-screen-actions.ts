@@ -10,7 +10,9 @@ import { logAudit } from "@/server/audit/log";
 import { runAction } from "@/server/actions/run-action";
 import { startScreenShape } from "@/lib/validation/campaign";
 import { emptyToNull, readCheckbox, readOptional } from "@/lib/forms/form-data";
-import { parsePartial } from "@/lib/forms/parse-partial";
+import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
+import { editRemovesLivePrivacyNotice, LIVE_PRIVACY_NOTICE_MESSAGE } from "@/features/publishing/readiness";
+import { loadPrivacyNoticeState } from "@/features/publishing/privacy-guard";
 import { fail, partialResult, type ActionResult } from "@/lib/forms/action-result";
 
 export async function updateStartScreenAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -27,7 +29,7 @@ export async function updateStartScreenAction(_previous: ActionResult, formData:
 
     // Campo a campo: um regulamento acima do limite já não deita fora o
     // título e o resto do formulário.
-    const { data, fieldErrors } = parsePartial(startScreenShape, {
+    const parse = parsePartial(startScreenShape, {
       startTitle: readOptional(formData, "startTitle"),
       startSubtitle: readOptional(formData, "startSubtitle"),
       startIntroText: readOptional(formData, "startIntroText"),
@@ -39,6 +41,16 @@ export async function updateStartScreenAction(_previous: ActionResult, formData:
       regulationText: readOptional(formData, "regulationText"),
       legalText: readOptional(formData, "legalText"),
     });
+    const { data, fieldErrors } = parse;
+
+    // Numa campanha publicada, apagar o texto legal não pode deixar o
+    // formulário a pedir dados sem aviso de privacidade.
+    if (data.legalText !== undefined) {
+      const { status, state } = await loadPrivacyNoticeState(campaign.id);
+      if (editRemovesLivePrivacyNotice(status, state, { ...state, legalText: emptyToNull(data.legalText) ?? null })) {
+        rejectField(parse, "legalText", LIVE_PRIVACY_NOTICE_MESSAGE);
+      }
+    }
     // Só media da própria organização (ver mediaBelongsToOrganization).
     if (!(await mediaBelongsToOrganization(context.organizationId, [data.startMediaId, data.startLogoMediaId]))) {
       return fail("A imagem escolhida não está disponível. Carregue-a de novo.");

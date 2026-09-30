@@ -462,19 +462,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 
   return (
     <div className="space-y-4">
-      {props.isTestMode && (
-        // O CLAUDE.md §18 exige aviso visual PERMANENTE. Em linha, saía do ecrã
-        // com o scroll e um jogo longo passava a parecer real.
-        <div
-          role="status"
-          className="fixed inset-x-0 top-0 z-50 border-b border-caetano-dynamic-orange bg-caetano-dynamic-orange-20 px-4 py-2 text-center text-sm font-medium text-caetano-anthracite"
-        >
-          Modo de teste — esta participação não conta para estatísticas nem consome stock.
-        </div>
-      )}
-      {/* Reserva o espaço da faixa fixa para não tapar o conteúdo. */}
-      {props.isTestMode && <div aria-hidden="true" className="h-9" />}
-
+      {/* A faixa do modo de teste está na página (play/[slug]/page.tsx), antes do cabeçalho. */}
       {stage === "start" && (
         <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
           {props.start.logoUrl && (
@@ -499,7 +487,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
             {starting ? "A preparar…" : resuming ? "A carregar…" : props.start.buttonLabel || "Jogar"}
           </button>
           {startError && (
-            <p role="alert" className="mt-3 text-sm text-danger-strong">
+            <p role="alert" className="mt-3 text-sm text-game-danger">
               {startError}
             </p>
           )}
@@ -510,7 +498,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
       )}
 
       {resumed && stage !== "start" && (
-        <p role="status" className="rounded-game bg-game-highlight px-4 py-2 text-sm text-game-text">
+        <p role="status" className="rounded-game bg-game-highlight px-4 py-2 text-sm text-game-highlight-text">
           Retomámos a sua participação.
         </p>
       )}
@@ -583,19 +571,19 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
           {props.final.title && <h2 className="text-xl font-bold text-game-text">{props.final.title}</h2>}
           {props.final.message && <p className="mt-2 text-game-muted">{props.final.message}</p>}
           {prizeUnavailable && !wheelPrize && (
-            <p className="mt-4 rounded-game bg-game-subtle p-4 text-sm text-game-text">
+            <p className="mt-4 rounded-game bg-game-subtle p-4 text-sm text-game-subtle-text">
               O prémio já não pode ser atribuído a esta participação: o prazo para o reclamar terminou ou o
               stock esgotou.
             </p>
           )}
           {storedResult && <StoredResultCard stored={storedResult} />}
           {wheelPrize && (
-            <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-text">
+            <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-highlight-text">
               <p className="text-sm">O seu prémio</p>
               <p className="text-lg font-bold">{wheelPrize.publicName}</p>
               {wheelPrize.code && <p className="mt-1 font-mono">{wheelPrize.code}</p>}
               {wheelPrize.instructions && (
-                <p className="mt-2 whitespace-pre-line text-sm text-game-muted">{wheelPrize.instructions}</p>
+                <p className="mt-2 whitespace-pre-line text-sm">{wheelPrize.instructions}</p>
               )}
             </div>
           )}
@@ -653,7 +641,7 @@ export function PublicGameFlow(props: PublicGameFlowProps) {
 function StoredResultCard({ stored }: { stored: StoredGameResult }) {
   if (stored.kind === "MEMORY") {
     return (
-      <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-text">
+      <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-highlight-text">
         <p className="text-lg font-bold">{stored.result.completed ? "Jogo concluído!" : "Tempo esgotado"}</p>
         <p className="mt-1 text-sm">Pontuação: {stored.result.score}</p>
       </div>
@@ -661,7 +649,7 @@ function StoredResultCard({ stored }: { stored: StoredGameResult }) {
   }
   const { result } = stored;
   return (
-    <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-text">
+    <div className="mt-4 rounded-game bg-game-highlight p-4 text-game-highlight-text">
       <p className="text-lg font-bold">
         {result.percentage.toFixed(0)}% ({result.totalScore}/{result.maxPossibleScore} pontos)
       </p>
@@ -670,7 +658,7 @@ function StoredResultCard({ stored }: { stored: StoredGameResult }) {
         <div className="mt-3">
           <p className="font-medium">{result.resultProfile.title}</p>
           {result.resultProfile.description && (
-            <p className="mt-1 text-sm text-game-muted">{result.resultProfile.description}</p>
+            <p className="mt-1 text-sm">{result.resultProfile.description}</p>
           )}
           {result.resultProfile.ctaLabel && result.resultProfile.ctaUrl && (
             <a

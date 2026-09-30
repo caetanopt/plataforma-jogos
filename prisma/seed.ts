@@ -125,7 +125,9 @@ async function main() {
         secondaryColor: "#00AEEF",
         backgroundColor: "#FFFFFF",
         textColor: "#2E3A46",
-        buttonColor: "#00AEEF",
+        // Azul profundo com texto branco (13:1). O azul cyan com texto branco
+        // fica abaixo dos 4,5:1 da WCAG 2.2 AA.
+        buttonColor: "#002E5D",
         buttonTextColor: "#FFFFFF",
         fontFamily: "Montserrat",
         borderRadiusPx: 8,

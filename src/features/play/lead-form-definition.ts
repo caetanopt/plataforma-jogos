@@ -30,7 +30,10 @@ export function toPublicLeadForm(
   return {
     position,
     honeypotEnabled: form.honeypotEnabled,
+    // Os campos ocultos não vão para o browser: antes apareciam como caixas de
+    // texto, e o valor escrito ia para a lead.
     fields: [...form.fields]
+      .filter((field) => field.type !== "HIDDEN")
       .sort((a, b) => a.order - b.order)
       .map((field) => ({
         id: field.id,

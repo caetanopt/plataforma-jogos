@@ -143,7 +143,8 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
   return (
     <div>
       {previewing && (
-        <p className="mb-3 text-center text-sm text-game-muted" aria-live="polite">
+        // Com fundo próprio: pode estar sobre a imagem de fundo do tema.
+        <p className="mx-auto mb-3 w-fit rounded-game bg-game-surface px-3 py-1 text-center text-sm text-game-muted" aria-live="polite">
           Memorize as cartas…
         </p>
       )}
@@ -178,9 +179,9 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
                 "transition-[transform,border-color] duration-150",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2",
                 !locked && "motion-safe:active:scale-[0.96]",
-                // Tom oficial em vez de opacidade, que deixa de ser cor da
-                // paleta assim que o fundo não é branco.
-                isMatched && "border-caetano-eco-green-40 bg-caetano-eco-green-20",
+                // Tom do verde eco sobre o fundo do tema, com texto que se lê
+                // nele (num tema Caetano, os tons oficiais -40 e -20).
+                isMatched && "border-game-success-border bg-game-success-tint text-game-success-text",
                 locked && "cursor-default",
               )}
             >
@@ -189,7 +190,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={tile.mediaUrl} alt={tile.alt ?? ""} className="h-full w-full object-contain" />
                 ) : (
-                  <span className="text-center text-sm font-medium text-game-text">
+                  <span className={cn("text-center text-sm font-medium", isMatched ? "text-game-success-text" : "text-game-text")}>
                     {tile.text}
                   </span>
                 )
@@ -204,7 +205,7 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
         })}
       </div>
 
-      <div className="mt-4 flex justify-center gap-6 text-sm text-game-muted">
+      <div className="mx-auto mt-4 flex w-fit flex-wrap justify-center gap-x-6 gap-y-1 rounded-game bg-game-surface px-4 py-1.5 text-sm text-game-muted">
         {/*
           O tempo muda a cada segundo: dentro de um aria-live fazia o leitor de
           ecrã falar sem parar. Fica fora; o que é anunciado são as tentativas

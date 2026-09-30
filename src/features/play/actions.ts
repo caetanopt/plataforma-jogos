@@ -10,6 +10,7 @@ import {
   effectiveLeadFormPosition,
   participationLeadFormPosition,
   projectWheelOutcome,
+  visibleFieldCount,
   type LeadFormShape,
 } from "@/features/play/reveal";
 import { toPublicLeadForm } from "@/features/play/lead-form-definition";
@@ -75,13 +76,13 @@ async function recordEvent(
 
 type LeadFormForShape = {
   position: LeadFormShape["position"];
-  fields: readonly unknown[];
+  fields: readonly { type: string }[];
   consentDefinitions: readonly unknown[];
 } | null;
 
 function shapeOf(form: LeadFormForShape): LeadFormShape | null {
   return form
-    ? { position: form.position, fieldCount: form.fields.length, consentCount: form.consentDefinitions.length }
+    ? { position: form.position, fieldCount: visibleFieldCount(form.fields), consentCount: form.consentDefinitions.length }
     : null;
 }
 
@@ -489,7 +490,8 @@ export async function submitLeadFormAction(
   } = participation.campaign;
 
   for (const field of leadForm.fields) {
-    if (!field.required) continue;
+    // O valor de um campo oculto vem do servidor (abaixo), nunca do browser.
+    if (!field.required || field.type === "HIDDEN") continue;
     // Uma checkbox desmarcada é serializada como a string "false", que não é
     // vazia — sem este caso especial, `!"false".trim()` avalia a falso e a
     // validação de obrigatoriedade era ignorada (ex.: aceitação de
@@ -533,10 +535,15 @@ export async function submitLeadFormAction(
   }
 
   // Minimização (secção 24): só se guardam os campos que o formulário tem.
-  const knownKeys = new Set(leadForm.fields.map((f) => f.internalKey));
-  const values = Object.fromEntries(
-    Object.entries(input.values).filter(([key]) => knownKeys.has(key)),
+  // Um campo oculto não se mostra nem se preenche: leva o valor predefinido,
+  // e o que o browser mandar para ele é ignorado.
+  const visibleKeys = new Set(leadForm.fields.filter((f) => f.type !== "HIDDEN").map((f) => f.internalKey));
+  const values: Record<string, string> = Object.fromEntries(
+    Object.entries(input.values).filter(([key]) => visibleKeys.has(key)),
   );
+  for (const field of leadForm.fields) {
+    if (field.type === "HIDDEN" && field.defaultValue) values[field.internalKey] = field.defaultValue;
+  }
   const identity = extractLeadIdentity(leadForm.fields, values);
 
   // Controlo de duplicados e gravação na mesma transação serializável: duas

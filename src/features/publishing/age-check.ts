@@ -1,5 +1,5 @@
 import type { CampaignStatus, LeadFieldType, LeadFormPosition } from "@/generated/prisma/client";
-import { effectiveLeadFormPosition } from "@/features/play/reveal";
+import { effectiveLeadFormPosition, visibleFieldCount } from "@/features/play/reveal";
 import { isLiveStatus } from "@/features/campaigns/live-status";
 
 export interface AgeCheckForm {
@@ -19,7 +19,7 @@ export function isAgeVerifiable(minAge: number | null, form: AgeCheckForm | null
   if (!form) return false;
   const position = effectiveLeadFormPosition({
     position: form.position,
-    fieldCount: form.fields.length,
+    fieldCount: visibleFieldCount(form.fields),
     consentCount: form.consentCount,
   });
   return position !== "NONE" && form.fields.some((field) => field.type === "BIRTH_DATE");

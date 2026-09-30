@@ -46,7 +46,7 @@ export function PublicMemoryGame({
   if (phase === "error") {
     return (
       <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
-        <p className="text-sm text-danger" role="alert">
+        <p className="text-sm text-game-danger" role="alert">
           Não foi possível calcular o resultado. Tente novamente.
         </p>
         <button

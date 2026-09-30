@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeLegalLinks, publicLegalLinks, readLegalLinks } from "@/features/brand/legal-links";
-import { hasPrivacyNotice } from "@/features/publishing/readiness";
+import { editRemovesLivePrivacyNotice, hasPrivacyNotice } from "@/features/publishing/readiness";
 
 describe("links legais", () => {
   it("só aceita links http(s)", () => {
@@ -76,8 +76,27 @@ describe("aviso de privacidade na publicação", () => {
     expect(hasPrivacyNotice({ legalText: null, theme: null, leadForm: null } as unknown as Campaign)).toBe(true);
     expect(hasPrivacyNotice(campaign({ position: "NONE" }))).toBe(true);
     expect(hasPrivacyNotice(campaign({ fields: [] }))).toBe(true);
+    // Campos ocultos não se mostram ao participante (o servidor preenche-os).
     expect(hasPrivacyNotice(campaign({ fields: ["HIDDEN"] }))).toBe(true);
-    // Só consentimentos, sem campos: nada identifica a pessoa.
-    expect(hasPrivacyNotice(campaign({ fields: [], consents: 1 }))).toBe(true);
+  });
+
+  it("um formulário só com consentimentos também tem de informar", () => {
+    // O consentimento fica registado com a sessão e o IP da participação.
+    expect(hasPrivacyNotice(campaign({ fields: [], consents: 1 }))).toBe(false);
+    expect(hasPrivacyNotice(campaign({ fields: ["HIDDEN"], consents: 1 }))).toBe(false);
+    expect(hasPrivacyNotice(campaign({ fields: [], consents: 1, legalText: "Responsável: Marca, Lda." }))).toBe(true);
+    expect(hasPrivacyNotice(campaign({ position: "NONE", fields: [], consents: 1 }))).toBe(true);
+  });
+
+  it("numa campanha publicada, recusa a edição que tira o aviso; noutra, não", () => {
+    const withNotice = campaign({ legalText: "Responsável: Marca, Lda." });
+    const withoutNotice = campaign();
+    expect(editRemovesLivePrivacyNotice("PUBLISHED", withNotice, withoutNotice)).toBe(true);
+    expect(editRemovesLivePrivacyNotice("SCHEDULED", withNotice, withoutNotice)).toBe(true);
+    expect(editRemovesLivePrivacyNotice("DRAFT", withNotice, withoutNotice)).toBe(false);
+    // Já estava sem aviso (publicada antes da regra): a edição não piora.
+    expect(editRemovesLivePrivacyNotice("PUBLISHED", withoutNotice, withoutNotice)).toBe(false);
+    // Passar a pedir dados sem aviso também tira o aviso.
+    expect(editRemovesLivePrivacyNotice("PUBLISHED", campaign({ fields: [] }), withoutNotice)).toBe(true);
   });
 });

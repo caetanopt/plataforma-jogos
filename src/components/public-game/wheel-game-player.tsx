@@ -128,7 +128,7 @@ export function WheelGamePlayer({ segments, onSpin, onResultRevealed }: WheelGam
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-danger-strong">
+        <p role="alert" className="rounded-game bg-game-surface px-3 py-1.5 text-sm text-game-danger">
           {error}
         </p>
       )}

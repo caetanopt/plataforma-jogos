@@ -108,7 +108,7 @@ describe("consentimentos na lista e na exportação", () => {
       record("m", "WITHDRAWN", true, { grantedAt: new Date(T0.getTime() + 60_000) }),
     ]);
     expect(row.marketingConsent).toBe("Recusado");
-    expect(row.consentStatusByDefinition).toEqual({ m: "Retirado" });
+    expect(row.consentStatusByDefinition).toEqual({ m: { status: "Retirado", version: 2 } });
   });
 
   it("o resumo leva o texto, a versão, o estado e a data", () => {
@@ -118,7 +118,7 @@ describe("consentimentos na lista e na exportação", () => {
     );
   });
 
-  it("numa campanha, uma coluna por consentimento", () => {
+  it("numa campanha, uma coluna por consentimento; uma resposta a outra versão di-lo", () => {
     const row = withConsents([record("r", "GRANTED", false), record("m", "DECLINED", true)]);
     const csv = leadsToCsv(
       [row],
@@ -133,7 +133,8 @@ describe("consentimentos na lista e na exportação", () => {
       ",Consentimentos,Consentimento: Aceito o regulamento (v2),Consentimento: Aceito receber novidades por e-mail (v3),Consentimento: Consentimento acrescentado depois (v1)",
     )).toBe(true);
     expect(line.endsWith(
-      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,Aceite,Recusado,",
+      // O marketing foi recusado na v2; a coluna é a v3 (texto novo).
+      ",Recusado,«Aceito o regulamento» (v2): Aceite em 2026-09-30T09:00:00.000Z | «Aceito receber novidades por e-mail» (v2): Recusado em 2026-09-30T09:00:00.000Z,Aceite,Recusado (v2),",
     )).toBe(true);
   });
 });

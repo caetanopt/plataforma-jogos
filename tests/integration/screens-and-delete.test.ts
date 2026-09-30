@@ -571,15 +571,70 @@ describe("eliminar campanha", () => {
     const foreign = await createFixture();
     const cookieId = `partilhado-${randomUUID()}`;
     const mine = await prisma.participant.create({ data: { organizationId: f.organizationId, cookieId } });
-    const theirs = await prisma.participant.create({ data: { organizationId: foreign.organizationId, cookieId } });
-    await prisma.participation.create({
-      data: { campaignId: campaign.id, campaignVersionId: version.id, participantId: mine.id, idempotencyKey: randomUUID() },
+    const theirs = await prisma.participant.create({
+      data: { organizationId: foreign.organizationId, cookieId, email: "alheio@example.pt" },
     });
+    // Uma participação nesta campanha ligada ao participante da outra
+    // organização (dados inconsistentes): só o filtro da organização o
+    // protege. Sem ela, o teste passava mesmo sem o filtro.
+    for (const participantId of [mine.id, theirs.id]) {
+      await prisma.participation.create({
+        data: { campaignId: campaign.id, campaignVersionId: version.id, participantId, idempotencyKey: randomUUID() },
+      });
+    }
 
     await deleteCampaignAction(form({ campaignId: campaign.id }));
 
     expect(await prisma.participant.findUnique({ where: { id: mine.id } })).toBeNull();
-    expect(await prisma.participant.findUnique({ where: { id: theirs.id } })).not.toBeNull();
+    expect(await prisma.participant.findUnique({ where: { id: theirs.id } })).toMatchObject({ email: "alheio@example.pt" });
+    const audit = await prisma.auditLog.findFirst({
+      where: { organizationId: f.organizationId, action: "DELETE", entityId: campaign.id },
+    });
+    expect(audit?.metadata).toMatchObject({ participationsDeleted: 2, participantsDeleted: 1 });
+  });
+
+  it("quem começa a jogar noutra campanha durante a eliminação não perde o participante", async () => {
+    const campaign = await createCampaign(f);
+    const other = await createCampaign(f);
+    const [version, otherVersion] = await Promise.all(
+      [campaign, other].map((c) =>
+        prisma.campaignVersion.create({ data: { campaignId: c.id, versionNumber: 1, snapshot: {}, publishedById: f.userId } }),
+      ),
+    );
+    const participant = await prisma.participant.create({
+      data: { organizationId: f.organizationId, cookieId: `corrida-${randomUUID()}` },
+    });
+    await prisma.participation.create({
+      data: { campaignId: campaign.id, campaignVersionId: version.id, participantId: participant.id, idempotencyKey: randomUUID() },
+    });
+
+    // A participação noutra campanha fica gravada mas por confirmar enquanto
+    // a eliminação arranca; só depois se confirma.
+    let commit!: () => void;
+    const committed = new Promise<void>((resolve) => (commit = resolve));
+    let inserted!: () => void;
+    const insertedSignal = new Promise<void>((resolve) => (inserted = resolve));
+    const concurrent = prisma.$transaction(
+      async (tx) => {
+        await tx.participation.create({
+          data: { campaignId: other.id, campaignVersionId: otherVersion.id, participantId: participant.id, idempotencyKey: randomUUID() },
+        });
+        inserted();
+        await committed;
+      },
+      { timeout: 20_000 },
+    );
+    await insertedSignal;
+    const deletion = deleteCampaignAction(form({ campaignId: campaign.id }));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    commit();
+    await Promise.all([concurrent, deletion]);
+
+    // Sem o bloqueio, o DELETE não via a participação por confirmar: o
+    // participante saía e ela ficava sem ele (ON DELETE SET NULL).
+    expect(await prisma.participant.findUnique({ where: { id: participant.id } })).not.toBeNull();
+    const created = await prisma.participation.findMany({ where: { campaignId: other.id } });
+    expect(created.map((participation) => participation.participantId)).toEqual([participant.id]);
   });
 
   it("participações a começar durante a eliminação não a fazem falhar", async () => {

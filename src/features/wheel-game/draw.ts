@@ -9,7 +9,7 @@ import {
   releaseExpiredReservations,
   settleReservation,
 } from "@/features/prizes/reservation";
-import { holdsPrizeUntilLead, participationLeadFormPosition, type PrizeDelivery } from "@/features/play/reveal";
+import { holdsPrizeUntilLead, participationLeadFormPosition, visibleFieldCount, type PrizeDelivery } from "@/features/play/reveal";
 
 export class NoEligibleSegmentsError extends Error {
   constructor() {
@@ -98,7 +98,7 @@ async function drawInTransaction(participationId: string, now: Date): Promise<Wh
           select: {
             timezone: true,
             leadForm: {
-              select: { position: true, fields: { select: { id: true } }, consentDefinitions: { select: { id: true } } },
+              select: { position: true, fields: { select: { type: true } }, consentDefinitions: { select: { id: true } } },
             },
           },
         },
@@ -117,7 +117,7 @@ async function drawInTransaction(participationId: string, now: Date): Promise<Wh
       liveForm
         ? {
             position: liveForm.position,
-            fieldCount: liveForm.fields.length,
+            fieldCount: visibleFieldCount(liveForm.fields),
             consentCount: liveForm.consentDefinitions.length,
           }
         : null,

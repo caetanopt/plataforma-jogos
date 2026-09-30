@@ -22,7 +22,7 @@ const loadPublicCampaign = cache((slug: string) =>
     where: { slug },
     include: {
       theme: true,
-      organization: { select: { privacyContactEmail: true } },
+      organization: { select: { name: true, privacyContactEmail: true } },
       // Um ecrã desligado no editor guarda o conteúdo, mas não se mostra.
       screens: { where: { enabled: true } },
       memoryConfig: { include: { pairs: { orderBy: { order: "asc" } } } },
@@ -116,13 +116,29 @@ export default async function PublicPlayPage({
       backgroundImageUrl={theme?.backgroundImageMediaId ? mediaById.get(theme.backgroundImageMediaId)?.url : undefined}
       className="flex min-h-dvh flex-1 flex-col"
     >
+      {isTestMode && (
+        // O CLAUDE.md §18 exige aviso visual PERMANENTE: fixo no topo ao fazer
+        // scroll, e antes do cabeçalho para não tapar o logótipo.
+        <div
+          role="status"
+          className="sticky top-0 z-50 border-b border-caetano-dynamic-orange bg-caetano-dynamic-orange-20 px-4 py-2 text-center text-sm font-medium text-caetano-anthracite"
+        >
+          Modo de teste — esta participação não conta para estatísticas nem consome stock.
+        </div>
+      )}
       {brandLogo && (
         <header className="flex justify-center px-4 pt-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={brandLogo.url} alt={brandLogo.altText || "Logótipo"} className="h-10 max-w-[60%] object-contain" />
+          <img
+            src={brandLogo.url}
+            // Sem texto alternativo gravado, o nome da organização: "Logótipo"
+            // não diz de quem é.
+            alt={brandLogo.altText || campaign.organization.name}
+            className="h-10 max-w-[60%] object-contain"
+          />
         </header>
       )}
-      {children}
+      <main className="flex flex-1 flex-col">{children}</main>
     </GameThemeShell>
   );
 

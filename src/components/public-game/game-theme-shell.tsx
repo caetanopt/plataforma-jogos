@@ -26,6 +26,7 @@ export function GameThemeShell({
     backgroundColor: resolved.backgroundColor,
     color: "var(--game-text)",
     fontFamily: "var(--game-font)",
+    colorScheme: resolved.colorScheme,
   };
   if (backgroundImageUrl) {
     style.backgroundImage = `url(${JSON.stringify(backgroundImageUrl)})`;
