@@ -116,6 +116,7 @@ export async function saveAsBrandKitAction(_previous: ActionResult, formData: Fo
         name: parsed.data.kitName,
         isBrandKit: true,
         logoMediaId: campaign.theme.logoMediaId,
+        logoAltText: campaign.theme.logoAltText,
         faviconMediaId: campaign.theme.faviconMediaId,
         backgroundImageMediaId: campaign.theme.backgroundImageMediaId,
         primaryColor: campaign.theme.primaryColor,
@@ -176,6 +177,8 @@ export async function applyBrandKitAction(_previous: ActionResult, formData: For
         data: {
           sourceBrandKitId: brandKit.id,
           logoMediaId: brandKit.logoMediaId,
+          // O texto vem com o logótipo: o da campanha descrevia o anterior.
+          logoAltText: brandKit.logoAltText,
           faviconMediaId: brandKit.faviconMediaId,
           backgroundImageMediaId: brandKit.backgroundImageMediaId,
           primaryColor: brandKit.primaryColor,

@@ -28,7 +28,15 @@ interface SubmitButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>
  *
  * Dentro de um `ActionForm` o envio não passa pelo `action=` do `<form>`, e o
  * `useFormStatus` não o vê: o estado vem do contexto do formulário, que
- * também desativa o botão durante um upload.
+ * também trava o botão durante um upload ou outra tarefa do formulário (a
+ * exportação de um titular).
+ *
+ * Enquanto espera fica com `aria-disabled`, não `disabled`: um botão
+ * desativado perde o foco, que caía no `<body>` a meio do envio, e quem usa o
+ * teclado recomeçava no topo da página (WCAG 2.4.3). O clique (rato, teclado
+ * ou o Enter num campo, que clica no botão por omissão) é cancelado, por isso
+ * continua a não haver dois envios. `disabled` fica para quando o chamador o
+ * pede.
  */
 export function SubmitButton({
   variant = "primary",
@@ -37,19 +45,29 @@ export function SubmitButton({
   pendingLabel,
   children,
   disabled,
+  onClick,
   ...props
 }: SubmitButtonProps) {
   const status = useFormStatus();
   const form = useFormAction();
   const pending = status.pending || Boolean(form?.isPending);
+  const blocked = pending || Boolean(form?.uploading) || Boolean(form?.busy);
 
   return (
     <button
       type="submit"
-      disabled={disabled || pending || Boolean(form?.uploading)}
+      disabled={disabled}
+      aria-disabled={blocked || undefined}
       aria-busy={pending || undefined}
       className={buttonVariants({ variant, size, className })}
       {...props}
+      onClick={(event) => {
+        if (blocked) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
     >
       {pending && <Loader2 size={16} aria-hidden="true" className="motion-safe:animate-spin" />}
       {pending && pendingLabel ? pendingLabel : children}

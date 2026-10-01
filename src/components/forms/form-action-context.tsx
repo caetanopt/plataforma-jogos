@@ -26,6 +26,18 @@ export interface FormActionContextValue {
    * próximo envio.
    */
   notifyChange: () => void;
+  /**
+   * Uma tarefa do formulário que não é a ação está a decorrer (a exportação
+   * dos dados de um titular): os envios esperam que acabe. Só no ActionForm.
+   */
+  busy?: boolean;
+  setBusy?: (taskId: string, active: boolean) => void;
+  /**
+   * Esconde a resposta que está à vista até à próxima: outra tarefa do
+   * formulário tornou-a antiga. A mensagem, o `aria-invalid` dos campos e a
+   * confirmação tratam-na como se não houvesse resposta. Só no ActionForm.
+   */
+  dismissResult?: () => void;
 }
 
 export const FormActionContext = createContext<FormActionContextValue | null>(null);
@@ -39,23 +51,37 @@ export function fieldErrorId(idPrefix: string, name: string): string {
   return `${idPrefix}-${name}-error`;
 }
 
-/** Estado partilhado pelo AutoSaveForm e pelo ActionForm. */
-export function useFormActionState(action: FormAction) {
-  const [result, dispatch, isPending] = useActionState(action, IDLE);
-  const [uploads, setUploads] = useState<ReadonlySet<string>>(() => new Set());
-  const idPrefix = useId();
+/** Tarefas a decorrer, por id: várias ao mesmo tempo, cada uma retira-se a si. */
+function useActiveTasks(): [boolean, (taskId: string, active: boolean) => void] {
+  const [tasks, setTasks] = useState<ReadonlySet<string>>(() => new Set());
 
-  const setUploading = useCallback((uploadId: string, active: boolean) => {
-    setUploads((previous) => {
-      if (previous.has(uploadId) === active) return previous;
+  const setActive = useCallback((taskId: string, active: boolean) => {
+    setTasks((previous) => {
+      if (previous.has(taskId) === active) return previous;
       const next = new Set(previous);
-      if (active) next.add(uploadId);
-      else next.delete(uploadId);
+      if (active) next.add(taskId);
+      else next.delete(taskId);
       return next;
     });
   }, []);
 
-  return { result, dispatch, isPending, uploading: uploads.size > 0, setUploading, idPrefix };
+  return [tasks.size > 0, setActive];
+}
+
+/** Estado partilhado pelo AutoSaveForm e pelo ActionForm. */
+export function useFormActionState(action: FormAction) {
+  const [latest, dispatch, isPending] = useActionState(action, IDLE);
+  const [uploading, setUploading] = useActiveTasks();
+  const [busy, setBusy] = useActiveTasks();
+  // Pela identidade do objeto: a resposta seguinte é sempre um objeto novo
+  // (mesmo com a mesma mensagem) e volta a aparecer.
+  const [dismissed, setDismissed] = useState<ActionResult | null>(null);
+  const idPrefix = useId();
+
+  const result = latest === dismissed ? IDLE : latest;
+  const dismissResult = useCallback(() => setDismissed(latest), [latest]);
+
+  return { result, dispatch, isPending, uploading, setUploading, busy, setBusy, dismissResult, idPrefix };
 }
 
 type FieldElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;

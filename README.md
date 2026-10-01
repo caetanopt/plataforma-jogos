@@ -228,23 +228,46 @@ para "desmarcada" se distinguir de "ausente".
   - todas as dos filtros aplicados, tal como estavam quando a página abriu: se a contagem mudou
     entretanto (leads novas, "Hoje" à meia-noite), recusa e pede para rever. Não se usa com uma
     pesquisa ativa, que procura partes do texto e apanharia outras pessoas;
-  - **pedido de um titular**: o e-mail ou o telefone exatos, em todas as campanhas e períodos,
-    também nas respostas ao formulário (um segundo campo de e-mail) e nos dados antigos dos
-    participantes. «Procurar» diz quantas participações encontra, sem apagar nada.
+  - **pedido de um titular**: o e-mail ou o telefone exatos, em todas as campanhas e períodos. O
+    telefone encontra-se escrito de qualquer forma: um número português com ou sem o indicativo
+    ("912345678", "912 345 678", "+351 912 345 678" e "00351912345678" são o mesmo); os de
+    outros países comparam-se pelos dígitos e o "+". As participações do titular são as que têm o
+    e-mail ou o telefone nos dados de identificação, e são anonimizadas por inteiro. Uma lead de
+    outra pessoa com o identificador numa resposta (o e-mail de um amigo, um segundo telefone) é
+    uma **menção**: dessa só sai o campo, e o resto da lead fica. Os campos ocultos não contam (é
+    o servidor que os preenche). Saem também os dados antigos dos participantes com o
+    identificador. «Procurar» diz quantas participações e quantas menções encontra, sem apagar
+    nada; a auditoria guarda as duas contagens.
 - **Exportação dos dados de um titular** (pedido de acesso, RGPD art. 15.º, e portabilidade, art.
   20.º): no mesmo pedido de um titular, «Exportar os dados do titular» descarrega um ficheiro JSON
-  com tudo o que a organização guarda sobre esse e-mail ou telefone exatos: as mesmas participações
-  que a anonimização do titular apanha (todas as campanhas e períodos, também as de teste), cada uma
-  com a identificação, as respostas ao formulário com o nome de cada campo, os consentimentos
-  (texto, versão, resposta, data e origem), o resultado (no quiz, cada pergunta com as respostas
-  escolhidas), o prémio e o código atribuído, a origem e as UTM, o dispositivo, o IP e a sessão, e
-  quando vai ser anonimizada; os dados antigos de participante; e, por campanha, os links legais e
-  o prazo de conservação. As chaves estão em português, para o titular ler o ficheiro. Não saem o
-  token da participação nem o cookie do browser (são chaves de acesso ao jogo), nem as
-  estatísticas, que não têm dados pessoais. Só administradores (`privacy:manage`). O
-  identificador vai no corpo de um POST (`/api/privacy/subject-export`), nunca no URL, e só da
-  própria página (Origin e JSON); a auditoria regista a exportação ao começar e no fim, só com
-  contagens e o tipo de identificador.
+  com tudo o que a organização guarda sobre esse e-mail ou telefone, com as chaves por esta ordem:
+  - "Sobre esta exportação" e "Os seus direitos" (acesso, retificação, apagamento, limitação,
+    oposição, portabilidade e retirar o consentimento; como os exercer, pelo contacto de
+    privacidade da organização; e a reclamação à CNPD, www.cnpd.pt);
+  - "Campanhas": o nome público (nunca o interno) e o endereço da página pública, o aviso de
+    privacidade que o titular viu (o texto legal do ecrã inicial), os links legais e o prazo de
+    conservação;
+  - "Participações": as mesmas que a anonimização do titular apanha (todas as campanhas e
+    períodos, também as de teste), cada uma com a identificação, as respostas ao formulário com o
+    nome de cada campo, os consentimentos (texto, versão, resposta, data e origem), o resultado
+    (no quiz, cada pergunta com as respostas escolhidas), o prémio e o código atribuído, a origem e
+    as UTM, o dispositivo, o IP e a sessão, os eventos de navegação dessa sessão ("Eventos": o
+    tipo e a data, e o motivo de uma recusa; no máximo 200 por participação) e quando vai ser
+    anonimizada;
+  - "Menções noutras participações": de cada lead de outra pessoa com o identificador numa
+    resposta, só a campanha, a data, o campo e o valor — nunca a identidade, as outras respostas,
+    o IP, a sessão ou o prémio dessa pessoa;
+  - "Dados antigos de participante": só o identificador que coincidiu e a data (o mesmo registo
+    antigo de um quiosque pode juntar várias pessoas).
+
+  As chaves estão em português, para o titular ler o ficheiro. Não saem o token da participação
+  nem o cookie do browser (são chaves de acesso ao jogo), nem as estatísticas agregadas. Os
+  eventos de navegação não têm nome, e-mail nem IP, mas guardam a sessão da participação: por
+  isso saem com ela. Só administradores (`privacy:manage`). O identificador vai no corpo de um
+  POST (`/api/privacy/subject-export`), nunca no URL, e só da própria página (Origin e JSON); a
+  resposta diz nos cabeçalhos `X-Subject-Participations`, `X-Subject-Mentions` e
+  `X-Subject-Legacy` quantas encontrou ao procurar (o backoffice conta pelo ficheiro). A auditoria
+  regista a exportação ao começar e no fim, só com contagens e o tipo de identificador.
 - A lista pode ocultar as anonimizadas, e o CSV tem uma coluna nova, "Anonimizada em", sempre a
   última (depois das colunas por consentimento de uma exportação de campanha).
 - Tudo fica na auditoria como operação de privacidade, só com contagens (nunca o e-mail, o
@@ -333,8 +356,13 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_ipAddress_idx"
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_sessionId_idx" ON "Participation"("campaignId", "sessionId");
 -- O das participações por anonimizar (20261001090000_pending_anonymization_index) precisa da
 -- coluna da migração 20260930213627_data_retention, que é idempotente: criá-la antes não a
--- estraga (o ADD COLUMN é instantâneo, sem valor por omissão).
+-- estraga. Sem valor por omissão, o ADD COLUMN é instantâneo depois de obter o bloqueio, mas
+-- espera por ele atrás de qualquer transação que esteja a usar a tabela, e todas as queries a
+-- "Participation" ficam em fila atrás dele. Com o lock_timeout desiste ao fim de 5 s ("canceling
+-- statement due to lock timeout"): nesse caso, voltar a correr estas três linhas.
+SET lock_timeout = '5s';
 ALTER TABLE "Participation" ADD COLUMN IF NOT EXISTS "anonymizedAt" TIMESTAMP(3);
+RESET lock_timeout;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_pending_anonymization_idx" ON "Participation"("campaignId", "createdAt", "id") WHERE ("anonymizedAt" IS NULL);
 
 -- Tem de vir vazio. Um índice interrompido fica inválido: apagá-lo
@@ -360,28 +388,74 @@ omissão), a tarefa corre e não anonimiza nada.
 
 ### Depois do deploy
 
-A migração `20260929230000_normalize_participation_phone` normaliza os telefones já gravados. As
-participações criadas pelo código antigo entre a migração e o arranque do código novo ficam por
-normalizar. A migração é idempotente, por isso volte a corrê-la depois do arranque:
+Por esta ordem, depois de o código novo estar a servir em todas as instâncias (nenhuma do deploy
+anterior ainda a responder), com o `DATABASE_URL` de produção:
 
-```bash
-npx prisma db execute --file prisma/migrations/20260929230000_normalize_participation_phone/migration.sql
-```
+1. **Telefones.** A migração `20260929230000_normalize_participation_phone` normaliza os
+   telefones já gravados. As participações criadas pelo código antigo entre a migração e o
+   arranque do código novo ficam por normalizar. A migração é idempotente, por isso volte a
+   corrê-la:
 
-Os dados pessoais antigos dos participantes (nome, e-mail e telefone de antes da migração
-`20260928115347_participation_identity`, que os copiou para cada participação) já não são
-escritos nem lidos, mas continuam na base de dados. Depois de confirmar na lista de leads de
-produção que as leads antigas mostram a identidade certa, apagá-los (irreversível; imprime só
-contagens):
+   ```bash
+   npx prisma db execute --file prisma/migrations/20260929230000_normalize_participation_phone/migration.sql
+   ```
 
-```bash
-npm run privacy:clear-legacy                    # simulação: quantos e de que organizações
-npm run privacy:clear-legacy -- --apply         # apaga; fica na auditoria de cada organização
-```
+2. **Identidade das leads da janela do deploy.** Entre a migração
+   `20260928115347_participation_identity` e o arranque do código novo, o código antigo continuou
+   a gravar o nome, o e-mail e o telefone só no participante e nas respostas ao formulário: essas
+   leads aparecem sem identidade na lista, e a limpeza do passo 3 apagava a única cópia fora da
+   resposta. Este SQL repete a cópia da migração a partir das respostas (as mesmas regras: o
+   primeiro campo de cada tipo pela ordem do formulário, o e-mail em minúsculas e sem espaços, o
+   telefone normalizado como no código), só nas participações sem nenhum dos quatro dados e não
+   anonimizadas. É idempotente: pode correr outra vez, e não mexe nas que já têm identidade.
 
-A limpeza recusa enquanto a migração não tiver corrido e enquanto houver leads com a identidade
-só no participante (formulários que a cópia não conseguiu mapear): a simulação diz quantas.
-Para as perder na mesma, `--apply --accept-loss`. Com `--organization <id>`, só uma organização.
+   ```bash
+   npx prisma db execute --file prisma/maintenance/backfill_participation_identity.sql
+   ```
+
+   Desiste se não conseguir uma dessas participações em 5 s (um jogo a gravá-la), em vez de pôr
+   as outras gravações em fila: nesse caso ("canceling statement due to lock timeout"), voltar a
+   correr.
+
+3. **Dados pessoais antigos dos participantes.** O nome, o e-mail e o telefone de antes da
+   migração da identidade (que os copiou para cada participação) já não são escritos nem lidos,
+   mas continuam na base de dados. Depois de confirmar na lista de leads de produção que as leads
+   antigas mostram a identidade certa, apagá-los (irreversível; imprime só contagens e ids de
+   participação, nunca dados pessoais):
+
+   ```bash
+   npm run privacy:clear-legacy                    # simulação: quantos e de que organizações
+   npm run privacy:clear-legacy -- --apply         # apaga; fica na auditoria de cada organização
+   ```
+
+   A simulação conta, no total e por organização:
+
+   - `participantsWithData`: os participantes que ainda têm nome, e-mail ou telefone (os que a
+     limpeza apaga).
+   - `leadsOnlyOnParticipant`: leads reais (não de teste, não anonimizadas) a quem falta na
+     participação um dado que o participante tem e que o formulário da campanha pede (e-mail,
+     telefone, nome ou apelido), e que são a única lead desse participante — as que a migração
+     teria completado a partir do participante, e que perdiam esse dado com a limpeza. Depois do
+     passo 2 deve ser 0; `participationIds` lista até 20 por organização, para as rever.
+   - `ambiguousLeads` e `ambiguousParticipants`: o mesmo, mas de participantes com mais do que uma
+     lead (um quiosque, um browser partilhado, também com participações de teste). A migração
+     deixou-as em branco de propósito: os dados do participante são os da última submissão e
+     podiam ser de outra pessoa. A limpeza apaga-os sem recusar.
+
+   Não contam os formulários sem campos de identidade (só empresa, por exemplo), os tipos que o
+   formulário não pede nem as participações de teste.
+
+   A limpeza recusa enquanto as migrações da identidade e da conservação
+   (`20260930213627_data_retention`) não tiverem corrido — antes delas nem conta, porque as
+   colunas ainda não existem — e enquanto `leadsOnlyOnParticipant` não for 0. Para as perder na
+   mesma, `--apply --accept-loss` (a auditoria de cada organização diz se aceitou perder alguma,
+   `acceptedLoss`). Com `--organization <id>`, só uma organização.
+
+   Na auditoria de cada organização fica uma linha antes do primeiro lote (`stage: "started"`,
+   com as contagens da simulação) e outra no fim: `completed`, ou `interrupted` se falhar a meio,
+   com quantos participantes já tinham saído (cada lote de 1000 confirma à parte, e o que saiu não
+   volta). Numa falha, o terminal também imprime essas contagens; correr outra vez continua onde
+   ficou.
 
 ## Estrutura
 

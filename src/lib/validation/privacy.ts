@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { RETENTION_DAY_OPTIONS } from "@/features/privacy/retention-policy";
-import { isPlausiblePhone, normalizeEmail, normalizePhone } from "@/features/play/identity";
+import { isPlausiblePhone, normalizeEmail, normalizePhone, phoneMatchForms } from "@/features/play/identity";
 import type { SubjectIdentifier } from "@/features/leads/queries";
 
 const DAY_VALUES = RETENTION_DAY_OPTIONS.map(String) as [string, ...string[]];
@@ -41,7 +41,9 @@ export const anonymizeSelectionSchema = z
 
 /**
  * O e-mail ou o telefone de um pedido de um titular, normalizados como estão
- * gravados nas participações. Null: nem um e-mail nem um telefone completo.
+ * gravados nas participações; o telefone com as formas equivalentes (com e
+ * sem o +351, ver phoneMatchForms). Null: nem um e-mail nem um telefone
+ * completo.
  */
 export function parseSubjectIdentifier(value: string): SubjectIdentifier | null {
   const trimmed = value.trim();
@@ -51,5 +53,5 @@ export function parseSubjectIdentifier(value: string): SubjectIdentifier | null 
   }
   if (!isPlausiblePhone(trimmed)) return null;
   const phone = normalizePhone(trimmed)!;
-  return { kind: "phone", phone, digits: phone.replace("+", "") };
+  return { kind: "phone", phone, forms: phoneMatchForms(phone) };
 }

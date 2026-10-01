@@ -18,6 +18,7 @@ export async function createCampaignTheme(organizationId: string) {
       isBrandKit: false,
       sourceBrandKitId: defaultKit?.id,
       logoMediaId: defaultKit?.logoMediaId,
+      logoAltText: defaultKit?.logoAltText,
       faviconMediaId: defaultKit?.faviconMediaId,
       backgroundImageMediaId: defaultKit?.backgroundImageMediaId,
       primaryColor: defaultKit?.primaryColor,

@@ -1,7 +1,11 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
 import { retryOnDeadlock } from "@/lib/db/transaction-retry";
-import { subjectParticipantCondition, type SubjectIdentifier } from "@/features/leads/queries";
+import {
+  subjectMentionKeysSql,
+  subjectParticipantCondition,
+  type SubjectIdentifier,
+} from "@/features/leads/queries";
 
 /**
  * Anonimização de participações (§21, §24): o que se retira e o que fica.
@@ -25,6 +29,10 @@ import { subjectParticipantCondition, type SubjectIdentifier } from "@/features/
  *
  * Consequência: as participações anonimizadas deixam de contar para os
  * limites de participação por e-mail, telefone, IP, sessão ou browser.
+ *
+ * Num pedido de um titular, as leads de outras pessoas que só o mencionam
+ * numa resposta não são anonimizadas: perdem só esse campo
+ * (removeSubjectMentions).
  */
 
 export interface AnonymizationCounts {
@@ -195,10 +203,75 @@ export async function anonymizeCampaignBefore(
   }
 }
 
+export interface MentionCounts {
+  /** Campos (respostas com o identificador) retirados. */
+  mentionsCleared: number;
+}
+
+/**
+ * Pedido de um titular: o identificador sai das respostas de outras pessoas
+ * que o mencionam (o e-mail de um amigo, um segundo telefone — as menções de
+ * findSubjectParticipations). Só essas chaves saem do JSON: o resto da lead
+ * é de outra pessoa e fica, sem anonimizar.
+ *
+ * O mesmo esquema de anonymizeParticipationsByIds: por lotes, a campanha
+ * bloqueada primeiro (FOR KEY SHARE, contra o deadlock com a eliminação), as
+ * linhas FOR UPDATE SKIP LOCKED (uma a ser gravada agora fica em `skipped`),
+ * e as chaves recalculadas já com a linha bloqueada.
+ */
+export async function removeSubjectMentions(
+  organizationId: string,
+  subject: SubjectIdentifier,
+  participationIds: readonly string[],
+  /** Vai sendo somado a cada lote confirmado. */
+  progress?: MentionCounts,
+): Promise<MentionCounts & { participationsCleared: number; skipped: number }> {
+  let mentionsCleared = 0;
+  let participationsCleared = 0;
+  let skipped = 0;
+  for (const ids of chunk([...new Set(participationIds)], BATCH_SIZE)) {
+    const batch = await retryOnDeadlock(() => prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT c."id" FROM "Campaign" c
+        WHERE c."organizationId" = ${organizationId}
+          AND c."id" IN (SELECT p."campaignId" FROM "Participation" p WHERE p."id" IN (${Prisma.join(ids)}))
+        ORDER BY c."id"
+        FOR KEY SHARE`;
+      const pending = await tx.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM "Participation" p JOIN "Campaign" c ON c."id" = p."campaignId"
+        WHERE c."organizationId" = ${organizationId} AND p."id" IN (${Prisma.join(ids)}) AND p."anonymizedAt" IS NULL`;
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT p."id"
+        FROM "Participation" p JOIN "Campaign" c ON c."id" = p."campaignId"
+        WHERE c."organizationId" = ${organizationId} AND p."id" IN (${Prisma.join(ids)}) AND p."anonymizedAt" IS NULL
+        FOR UPDATE OF p SKIP LOCKED`;
+      if (locked.length === 0) return { found: pending[0]?.count ?? 0, locked: 0, removed: [] };
+      // jsonb - text[]: tira só essas chaves.
+      const removed = await tx.$queryRaw<Array<{ removed: number }>>`
+        WITH matched AS (${subjectMentionKeysSql(organizationId, subject, locked.map((row) => row.id))})
+        UPDATE "Participation" target
+        SET "leadFormResponse" = target."leadFormResponse" - matched."keys"
+        FROM matched
+        WHERE target."id" = matched."id"
+        RETURNING cardinality(matched."keys")::int AS "removed"`;
+      return { found: pending[0]?.count ?? 0, locked: locked.length, removed };
+    }, TRANSACTION_OPTIONS));
+    const cleared = batch.removed.reduce((sum, row) => sum + row.removed, 0);
+    mentionsCleared += cleared;
+    participationsCleared += batch.removed.length;
+    skipped += Math.max(0, batch.found - batch.locked);
+    if (progress) progress.mentionsCleared += cleared;
+  }
+  return { mentionsCleared, participationsCleared, skipped };
+}
+
 /**
  * Pedido de um titular: os dados pessoais antigos que ainda estejam num
  * Participant da organização com o mesmo e-mail ou telefone (de antes de a
- * identidade passar para a participação) também saem.
+ * identidade passar para a participação, escritos de qualquer das formas
+ * equivalentes) também saem — todos, porque num quiosque o mesmo registo
+ * junta dados de várias pessoas e não há como os separar.
  */
 export async function clearSubjectFromParticipants(
   organizationId: string,

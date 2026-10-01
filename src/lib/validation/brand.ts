@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { checkboxField, httpUrlField, intField, mediaIdField, requiredTextField } from "@/lib/validation/fields";
+import {
+  checkboxField,
+  httpUrlField,
+  intField,
+  mediaIdField,
+  requiredTextField,
+  textField,
+} from "@/lib/validation/fields";
 import { LEGAL_LINK_KEYS, LEGAL_LINK_LABELS, type LegalLinkKey } from "@/features/brand/legal-links";
 import { emptyToNull, readCheckbox, readOptional } from "@/lib/forms/form-data";
 import { parsePartial } from "@/lib/forms/parse-partial";
@@ -8,11 +15,19 @@ import { parsePartial } from "@/lib/forms/parse-partial";
 const hexColor = (label: string) =>
   z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, `${label}: cor inválida.`);
 
-export const BRAND_THEME_LIMITS = { name: 120, fontFamily: 60, borderRadiusMin: 0, borderRadiusMax: 48 } as const;
+export const BRAND_THEME_LIMITS = {
+  name: 120,
+  logoAltText: 200,
+  fontFamily: 60,
+  borderRadiusMin: 0,
+  borderRadiusMax: 48,
+} as const;
 
 export const brandThemeShape = {
   name: requiredTextField("Nome", BRAND_THEME_LIMITS.name),
   logoMediaId: mediaIdField,
+  // "" apaga: o jogo volta ao nome da organização.
+  logoAltText: textField("Texto alternativo do logótipo", BRAND_THEME_LIMITS.logoAltText),
   faviconMediaId: mediaIdField,
   backgroundImageMediaId: mediaIdField,
   primaryColor: hexColor("Cor primária"),
@@ -40,6 +55,7 @@ export function parseThemeForm(formData: FormData, { includeName }: { includeNam
   const parse = parsePartial(brandThemeShape, {
     name: includeName ? readOptional(formData, "name") : undefined,
     logoMediaId: readOptional(formData, "logoMediaId"),
+    logoAltText: readOptional(formData, "logoAltText"),
     faviconMediaId: readOptional(formData, "faviconMediaId"),
     backgroundImageMediaId: readOptional(formData, "backgroundImageMediaId"),
     primaryColor: readOptional(formData, "primaryColor"),
@@ -67,6 +83,7 @@ export function parseThemeForm(formData: FormData, { includeName }: { includeNam
   const update = {
     name: data.name,
     logoMediaId: emptyToNull(data.logoMediaId),
+    logoAltText: emptyToNull(data.logoAltText),
     faviconMediaId: emptyToNull(data.faviconMediaId),
     backgroundImageMediaId: emptyToNull(data.backgroundImageMediaId),
     primaryColor: data.primaryColor,

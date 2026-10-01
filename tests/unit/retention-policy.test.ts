@@ -6,7 +6,12 @@ import {
   MIN_PARTICIPATION_AGE_MS,
   retentionCutoff,
 } from "@/features/privacy/retention-policy";
-import { campaignRetentionFromForm, campaignRetentionSchema, organizationRetentionSchema } from "@/lib/validation/privacy";
+import {
+  campaignRetentionFromForm,
+  campaignRetentionSchema,
+  organizationRetentionSchema,
+  parseSubjectIdentifier,
+} from "@/lib/validation/privacy";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-10-01T12:00:00Z");
@@ -113,6 +118,18 @@ describe("validação dos formulários", () => {
     expect(organizationRetentionSchema.parse("90")).toBe(90);
     expect(organizationRetentionSchema.safeParse("45").success).toBe(false);
     expect(organizationRetentionSchema.safeParse("0").success).toBe(false);
+  });
+
+  it("pedido de um titular: o e-mail normalizado, ou o telefone com as formas equivalentes", () => {
+    expect(parseSubjectIdentifier(" Ana@Example.PT ")).toEqual({ kind: "email", email: "ana@example.pt" });
+    // As quatro maneiras de escrever o mesmo número português dão o mesmo pedido.
+    const forms = ["912345678", "912 345 678", "+351 912 345 678", "00351912345678"].map((value) => {
+      const subject = parseSubjectIdentifier(value);
+      expect(subject?.kind).toBe("phone");
+      return subject?.kind === "phone" ? [...subject.forms.normalized].sort() : [];
+    });
+    for (const normalized of forms) expect(normalized).toEqual(["+351912345678", "912345678"]);
+    for (const invalid of ["", "ana", "ana@", "12345", "+"]) expect(parseSubjectIdentifier(invalid)).toBeNull();
   });
 
   it("campanha: herdar, dias sugeridos ou uma data válida", () => {

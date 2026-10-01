@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db/client";
 import { Prisma } from "@/generated/prisma/client";
 import type { DateRange } from "@/lib/dates/range";
+import type { PhoneMatchForms } from "@/features/play/identity";
 
 export type MarketingConsentFilter = "granted" | "not_granted";
 
@@ -85,59 +86,221 @@ export function countLeadsToAnonymize(
   return prisma.participation.count({ where: toAnonymizeWhere(organizationId, range, filters, createdUpTo) });
 }
 
-export type SubjectIdentifier = { kind: "email"; email: string } | { kind: "phone"; phone: string; digits: string };
+/**
+ * O e-mail ou o telefone de um pedido de um titular (parseSubjectIdentifier):
+ * o e-mail normalizado; o telefone normalizado e as formas equivalentes
+ * (phoneMatchForms: com e sem o +351).
+ */
+export type SubjectIdentifier =
+  | { kind: "email"; email: string }
+  | { kind: "phone"; phone: string; forms: PhoneMatchForms };
 
 /**
- * As participações de um titular (pedido de acesso ou de eliminação, §24), por igualdade
- * exata do e-mail ou do telefone — nunca por "contém", que apanhava a joana
- * quando o pedido era da ana. Procura também nas respostas ao formulário:
- * um segundo campo de e-mail, ou dados antigos que não passaram para as
- * colunas de identidade. Em todas as campanhas e períodos, reais e de teste.
+ * Uma resposta mais comprida do que isto nunca é um e-mail ou um telefone:
+ * nem chega a ser normalizada. Antes, o regexp corria sobre todas as
+ * respostas da organização — também os textos longos — e a procura de um
+ * telefone levava 13 a 16 s com 150 mil leads.
  */
-export function findSubjectParticipations(organizationId: string, subject: SubjectIdentifier) {
-  const matches =
-    subject.kind === "email"
-      ? Prisma.sql`(
-          p."email" = ${subject.email}
-          OR EXISTS (
-            SELECT 1 FROM jsonb_each_text(
-              CASE WHEN jsonb_typeof(p."leadFormResponse") = 'object' THEN p."leadFormResponse" ELSE '{}'::jsonb END
-            ) AS kv
-            WHERE lower(btrim(kv.value)) = ${subject.email}
-          )
-        )`
-      : Prisma.sql`(
-          p."phone" = ${subject.phone}
-          OR EXISTS (
-            SELECT 1 FROM jsonb_each_text(
-              CASE WHEN jsonb_typeof(p."leadFormResponse") = 'object' THEN p."leadFormResponse" ELSE '{}'::jsonb END
-            ) AS kv
-            WHERE regexp_replace(kv.value, '[^0-9]', '', 'g') = ${subject.digits}
-          )
-        )`;
-  return prisma.$queryRaw<Array<{ id: string; campaignId: string; createdAt: Date }>>`
-    SELECT p."id", p."campaignId", p."createdAt"
+const EMAIL_ANSWER_MAX_BYTES = 320;
+const PHONE_ANSWER_MAX_BYTES = 40;
+/** O que o trim() do JavaScript (normalizeEmail) também tira. */
+const TRIMMED_CHARACTERS = " \t\r\n";
+
+/**
+ * Uma resposta ao formulário (ou um dado antigo do Participant), em texto, é
+ * o identificador do titular? O e-mail sem maiúsculas nem espaços à volta;
+ * o telefone pelos dígitos, com o "+" que viesse antes do primeiro dígito
+ * (writtenPhoneForm), contra as formas escritas do número.
+ *
+ * As guardas vêm antes de qualquer normalização, num CASE (o Postgres não
+ * garante a ordem de um AND): o comprimento em bytes (que não percorre o
+ * texto) e, no telefone, o número de dígitos — só um valor com tantos
+ * dígitos como uma das formas chega ao regexp.
+ */
+function answerIsSubject(subject: SubjectIdentifier, value: Prisma.Sql): Prisma.Sql {
+  if (subject.kind === "email") {
+    return Prisma.sql`(CASE
+      WHEN octet_length(${value}) > ${EMAIL_ANSWER_MAX_BYTES} OR strpos(${value}, '@') = 0 THEN false
+      ELSE lower(btrim(${value}, ${TRIMMED_CHARACTERS})) = ${subject.email}
+    END)`;
+  }
+  const written = subject.forms.written;
+  const digitCounts = [...new Set(written.map((form) => form.replace("+", "").length))];
+  return Prisma.sql`(CASE
+    WHEN octet_length(${value}) > ${PHONE_ANSWER_MAX_BYTES} THEN false
+    WHEN length(${value}) - length(translate(${value}, '0123456789', '')) <> ALL (${digitCounts}::int[]) THEN false
+    ELSE (CASE WHEN substring(${value} from '[0-9+]') = '+' THEN '+' ELSE '' END)
+      || regexp_replace(${value}, '[^0-9]', '', 'g') = ANY (${written}::text[])
+  END)`;
+}
+
+/** As colunas de identidade da participação `p` são as do titular. */
+function identityIsSubject(subject: SubjectIdentifier): Prisma.Sql {
+  return subject.kind === "email"
+    ? Prisma.sql`COALESCE(p."email" = ${subject.email}, false)`
+    : Prisma.sql`COALESCE(p."phone" = ANY (${subject.forms.normalized}::text[]), false)`;
+}
+
+/**
+ * Os campos ocultos de cada campanha da organização (CTE "hidden"): o
+ * servidor é que os preenche (um valor por omissão, por exemplo o e-mail de
+ * um concessionário), não dizem nada sobre quem respondeu.
+ */
+function hiddenFieldKeys(organizationId: string): Prisma.Sql {
+  return Prisma.sql`
+    SELECT lf."campaignId", array_agg(f."internalKey") AS "keys"
+    FROM "LeadFormField" f
+    JOIN "LeadForm" lf ON lf."id" = f."leadFormId"
+    JOIN "Campaign" hc ON hc."id" = lf."campaignId"
+    WHERE hc."organizationId" = ${organizationId} AND f."type" = 'HIDDEN'
+    GROUP BY lf."campaignId"`;
+}
+
+/**
+ * As respostas da participação `p` (com os campos ocultos da campanha em
+ * `h`) que são o identificador do titular: uma linha por campo, com a chave
+ * e o valor. Para usar num LATERAL.
+ */
+function mentionedAnswers(subject: SubjectIdentifier): Prisma.Sql {
+  return Prisma.sql`
+    SELECT kv."key", kv."value"
+    FROM jsonb_each_text(
+      CASE WHEN jsonb_typeof(p."leadFormResponse") = 'object' THEN p."leadFormResponse" ELSE '{}'::jsonb END
+    ) AS kv
+    WHERE (h."keys" IS NULL OR kv."key" <> ALL (h."keys")) AND ${answerIsSubject(subject, Prisma.sql`kv."value"`)}`;
+}
+
+export interface SubjectMatch {
+  id: string;
+  campaignId: string;
+  createdAt: Date;
+}
+
+export interface SubjectMention extends SubjectMatch {
+  /** As chaves das respostas com o identificador do titular. */
+  keys: string[];
+}
+
+export interface SubjectMatches {
+  /** As do titular: o e-mail ou o telefone nas colunas de identidade. */
+  identity: SubjectMatch[];
+  /**
+   * As de outras pessoas que o mencionam numa resposta (o e-mail de um amigo,
+   * um segundo telefone). Destas só sai o campo, nunca o resto da lead.
+   */
+  mentions: SubjectMention[];
+}
+
+/** Quantas menções (campos) há, ao todo. */
+export function countMentions(mentions: readonly SubjectMention[]): number {
+  return mentions.reduce((sum, mention) => sum + mention.keys.length, 0);
+}
+
+/**
+ * As participações de um titular (pedido de acesso ou de eliminação, §24),
+ * por igualdade exata do e-mail ou do telefone — nunca por "contém", que
+ * apanhava a joana quando o pedido era da ana. Em todas as campanhas e
+ * períodos, reais e de teste.
+ *
+ * Duas listas, porque uma resposta igual ao identificador não faz da
+ * participação dele: um campo "e-mail de um amigo", um segundo telefone ou
+ * um campo oculto com um valor fixo apanhavam a lead inteira de outra pessoa
+ * — que a exportação entregava ao titular e a anonimização apagava. Agora:
+ * - identidade: as colunas de identidade (o primeiro campo de e-mail ou de
+ *   telefone do formulário, ver identity.ts) são as do titular;
+ * - menções: outra participação com o identificador numa resposta, fora dos
+ *   campos ocultos da campanha.
+ */
+export async function findSubjectParticipations(
+  organizationId: string,
+  subject: SubjectIdentifier,
+): Promise<SubjectMatches> {
+  const identity = identityIsSubject(subject);
+  const rows = await prisma.$queryRaw<Array<SubjectMatch & { identity: boolean; keys: string[] | null }>>`
+    WITH hidden AS (${hiddenFieldKeys(organizationId)})
+    SELECT p."id", p."campaignId", p."createdAt", ${identity} AS "identity", m."keys"
     FROM "Participation" p
     JOIN "Campaign" c ON c."id" = p."campaignId"
-    WHERE c."organizationId" = ${organizationId} AND p."anonymizedAt" IS NULL AND ${matches}`;
+    LEFT JOIN hidden h ON h."campaignId" = p."campaignId"
+    CROSS JOIN LATERAL (
+      SELECT array_agg(a."key" ORDER BY a."key") AS "keys" FROM (${mentionedAnswers(subject)}) a
+    ) m
+    WHERE c."organizationId" = ${organizationId} AND p."anonymizedAt" IS NULL
+      AND (${identity} OR m."keys" IS NOT NULL)`;
+  const matches: SubjectMatches = { identity: [], mentions: [] };
+  for (const { identity: isIdentity, keys, ...match } of rows) {
+    if (isIdentity) matches.identity.push(match);
+    else if (keys && keys.length > 0) matches.mentions.push({ ...match, keys });
+  }
+  return matches;
+}
+
+/**
+ * Os campos com o identificador do titular nas participações pedidas (as
+ * menções de findSubjectParticipations), lidos de novo: uma participação
+ * anonimizada entretanto, ou um campo já retirado, não sai. Só a chave e o
+ * valor, nunca o resto da lead.
+ */
+export function findSubjectMentionAnswers(organizationId: string, subject: SubjectIdentifier, ids: readonly string[]) {
+  if (ids.length === 0) return Promise.resolve([]);
+  return prisma.$queryRaw<Array<{ id: string; campaignId: string; createdAt: Date; key: string; value: string }>>`
+    WITH hidden AS (${hiddenFieldKeys(organizationId)})
+    SELECT p."id", p."campaignId", p."createdAt", a."key", a."value"
+    FROM "Participation" p
+    JOIN "Campaign" c ON c."id" = p."campaignId"
+    LEFT JOIN hidden h ON h."campaignId" = p."campaignId"
+    CROSS JOIN LATERAL (${mentionedAnswers(subject)}) a
+    WHERE p."id" IN (${Prisma.join(ids)}) AND c."organizationId" = ${organizationId}
+      AND p."anonymizedAt" IS NULL AND NOT ${identityIsSubject(subject)}
+    ORDER BY p."createdAt", p."id", a."key"`;
+}
+
+/**
+ * SQL (um SELECT de "id" e "keys"): das participações pedidas, as que
+ * mencionam o titular, com as chaves das respostas a retirar. Recalculado
+ * na transação da anonimização (anonymize.ts), já com as linhas bloqueadas:
+ * só sai o que ainda é o identificador, nunca um campo oculto, e nunca de
+ * uma participação do próprio titular (essa é anonimizada por inteiro).
+ */
+export function subjectMentionKeysSql(
+  organizationId: string,
+  subject: SubjectIdentifier,
+  ids: readonly string[],
+): Prisma.Sql {
+  return Prisma.sql`
+    WITH hidden AS (${hiddenFieldKeys(organizationId)})
+    SELECT p."id", array_agg(a."key") AS "keys"
+    FROM "Participation" p
+    JOIN "Campaign" c ON c."id" = p."campaignId"
+    LEFT JOIN hidden h ON h."campaignId" = p."campaignId"
+    CROSS JOIN LATERAL (${mentionedAnswers(subject)}) a
+    WHERE p."id" IN (${Prisma.join(ids)}) AND c."organizationId" = ${organizationId}
+      AND p."anonymizedAt" IS NULL AND NOT ${identityIsSubject(subject)}
+    GROUP BY p."id"`;
 }
 
 /**
  * Os Participant da organização com o e-mail ou o telefone do titular nos
- * dados antigos (de antes de a identidade passar para a participação). A
- * mesma condição na exportação e na eliminação.
+ * dados antigos (de antes de a identidade passar para a participação),
+ * escritos como o visitante os escreveu. A mesma condição na exportação e
+ * na eliminação.
  */
 export function subjectParticipantCondition(subject: SubjectIdentifier): Prisma.Sql {
   return subject.kind === "email"
-    ? Prisma.sql`lower(btrim("email")) = ${subject.email}`
-    : Prisma.sql`regexp_replace(coalesce("phone", ''), '[^0-9]', '', 'g') = ${subject.digits}`;
+    ? Prisma.sql`"email" IS NOT NULL AND ${answerIsSubject(subject, Prisma.sql`"email"`)}`
+    : Prisma.sql`"phone" IS NOT NULL AND ${answerIsSubject(subject, Prisma.sql`"phone"`)}`;
 }
 
+/**
+ * Só o identificador que coincidiu e a data: num quiosque, o código antigo
+ * guardava os valores da pessoa anterior nos campos que a seguinte deixava
+ * vazios, e o mesmo Participant junta o e-mail de uma e o nome ou o telefone
+ * de outra.
+ */
 export function findSubjectLegacyParticipants(organizationId: string, subject: SubjectIdentifier) {
-  return prisma.$queryRaw<
-    Array<{ email: string | null; phone: string | null; firstName: string | null; lastName: string | null; createdAt: Date }>
-  >`
-    SELECT "email", "phone", "firstName", "lastName", "createdAt"
+  const column = subject.kind === "email" ? Prisma.sql`"email"` : Prisma.sql`"phone"`;
+  return prisma.$queryRaw<Array<{ value: string; createdAt: Date }>>`
+    SELECT ${column} AS "value", "createdAt"
     FROM "Participant"
     WHERE "organizationId" = ${organizationId} AND ${subjectParticipantCondition(subject)}
     ORDER BY "createdAt", "id"`;

@@ -531,16 +531,26 @@ describe("anonimização manual", () => {
     expect((await prisma.participation.findUniqueOrThrow({ where: { id: late.participation.id } })).anonymizedAt).toBeNull();
   });
 
-  it("pedido de um titular: o e-mail exato, em todas as campanhas e nas respostas; não os parecidos", async () => {
+  it("pedido de um titular: o e-mail exato, em todas as campanhas; de quem o menciona, só o campo", async () => {
     const one = await createCampaign(a);
     const two = await createCampaign(a);
+    // O campo oculto: o servidor preenche-o com um valor fixo (aqui, o e-mail da ana).
+    await prisma.leadFormField.create({
+      data: { leadFormId: one.campaign.leadForm!.id, type: "HIDDEN", internalKey: "concessionario", label: "Loja", order: 9, defaultValue: "ana@example.pt" },
+    });
     const mine1 = await one.lead(daysAgo(2), "ana@example.pt");
     const mine2 = await two.lead(daysAgo(300), "ANA@example.pt".toLowerCase());
-    // Noutra lead, a ana aparece só num segundo campo de e-mail (indicou uma amiga).
+    // Noutra lead, a ana aparece só num segundo campo de e-mail (a amiga indicou-a).
     const referral = await one.lead(daysAgo(1), "amiga@example.pt");
     await prisma.participation.update({
       where: { id: referral.participation.id },
-      data: { leadFormResponse: { email: "amiga@example.pt", amigo: " Ana@Example.pt " } },
+      data: { firstName: "Amiga", leadFormResponse: { email: "amiga@example.pt", nome: "Amiga", amigo: " Ana@Example.pt " } },
+    });
+    // E noutra, só no campo oculto: não é uma menção da ana.
+    const hidden = await one.lead(daysAgo(1), "rita@example.pt");
+    await prisma.participation.update({
+      where: { id: hidden.participation.id },
+      data: { leadFormResponse: { email: "rita@example.pt", concessionario: "ana@example.pt" } },
     });
     const joana = await one.lead(daysAgo(2), "joana@example.pt");
     const mariana = await two.lead(daysAgo(2), "mariana@example.pt");
@@ -551,29 +561,64 @@ describe("anonimização manual", () => {
     state.current = a.contexts.ORG_ADMIN;
 
     const preview = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: " Ana@Example.pt ", intent: "preview" }));
-    expect(preview).toMatchObject({ status: "success", message: "3 participações com este e-mail exato, em 2 campanhas." });
+    expect(preview).toMatchObject({
+      status: "success",
+      message:
+        "2 participações com este e-mail exato, em 2 campanhas, e 1 menção noutra participação (um campo do formulário de outra pessoa com este e-mail: aí só esse campo sai, o resto da lead fica).",
+    });
     expect((await prisma.participation.findUniqueOrThrow({ where: { id: mine1.participation.id } })).anonymizedAt).toBeNull();
 
     const result = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana@example.pt", intent: "anonymize" }));
-    expect(result).toMatchObject({ status: "success", message: "3 leads anonimizadas." });
-    for (const { participation } of [mine1, mine2, referral]) {
-      expect((await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).anonymizedAt).not.toBeNull();
+    expect(result).toMatchObject({
+      status: "success",
+      message:
+        "2 leads anonimizadas. E-mail retirado de 1 menção noutra participação: só esse campo saiu, o resto dessa lead, de outra pessoa, fica.",
+    });
+    for (const { participation } of [mine1, mine2]) {
+      expect(await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).toMatchObject(IDENTITY_FIELDS);
     }
+    // A lead da amiga continua dela: sai só o campo com o e-mail da ana.
+    expect(await prisma.participation.findUniqueOrThrow({ where: { id: referral.participation.id } })).toMatchObject({
+      anonymizedAt: null,
+      email: "amiga@example.pt",
+      firstName: "Amiga",
+      ipAddress: "203.0.113.7",
+      participantId: referral.participantId,
+      leadFormResponse: { email: "amiga@example.pt", nome: "Amiga" },
+    });
+    // O campo oculto fica, e a lead da rita também.
+    expect(await prisma.participation.findUniqueOrThrow({ where: { id: hidden.participation.id } })).toMatchObject({
+      anonymizedAt: null,
+      email: "rita@example.pt",
+      leadFormResponse: { email: "rita@example.pt", concessionario: "ana@example.pt" },
+    });
     for (const { participation } of [joana, mariana]) {
       expect((await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).anonymizedAt).toBeNull();
     }
     expect(await prisma.participant.findUniqueOrThrow({ where: { id: legacy.id } })).toMatchObject({ email: null, firstName: null });
 
-    // Nada do pedido (o e-mail) vai para a auditoria.
+    // Nada do pedido (o e-mail) vai para a auditoria: só contagens.
     const audits = await prisma.auditLog.findMany({
       where: { organizationId: a.id, action: "PRIVACY_OPERATION", entityType: "Participation" },
     });
     expect(audits.length).toBe(2);
     expect(JSON.stringify(audits.map((audit) => audit.metadata))).not.toContain("ana");
+    expect(audits.find((audit) => (audit.metadata as { stage: string }).stage === "started")?.metadata).toMatchObject({
+      requested: 2,
+      mentions: 1,
+      campaigns: 2,
+    });
     expect(audits.find((audit) => (audit.metadata as { stage: string }).stage === "completed")?.metadata).toMatchObject({
       scope: "subject",
       identifierKind: "email",
-      participationsAnonymized: 3,
+      participationsAnonymized: 2,
+      mentionsCleared: 1,
+      legacyParticipantsCleared: 1,
+    });
+
+    // De novo: já não há nada (o campo saiu, as leads foram anonimizadas).
+    expect(await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana@example.pt", intent: "preview" }))).toMatchObject({
+      message: "Nenhuma participação por anonimizar com este e-mail ou telefone exatos.",
     });
 
     // Um identificador incompleto é recusado.
@@ -589,6 +634,95 @@ describe("anonimização manual", () => {
     const result = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "912 345 678", intent: "anonymize" }));
     expect(result).toMatchObject({ status: "success", message: "1 lead anonimizada." });
     expect((await prisma.participation.findUniqueOrThrow({ where: { id: mine.participation.id } })).phone).toBeNull();
+  });
+
+  it("pelo telefone: com e sem +351, nas colunas, noutro campo e nos dados antigos", async () => {
+    const { lead } = await createCampaign(a);
+    const national = await lead(daysAgo(3)); // "912345678"
+    const international = await lead(daysAgo(2));
+    await prisma.participation.update({ where: { id: international.participation.id }, data: { phone: "+351912345678" } });
+    // Outra pessoa, com o número do titular num segundo campo de telefone.
+    const other = await lead(daysAgo(1), "rui@example.pt");
+    await prisma.participation.update({
+      where: { id: other.participation.id },
+      data: { phone: "+351961111111", leadFormResponse: { telefone: "+351 961 111 111", outroTelefone: "00351 912 345 678" } },
+    });
+    const stranger = await lead(daysAgo(1), "estranho@example.pt");
+    await prisma.participation.update({ where: { id: stranger.participation.id }, data: { phone: "+351912345679" } });
+    // Um registo antigo, escrito como o visitante o escreveu.
+    const legacy = await prisma.participant.create({
+      data: { organizationId: a.id, cookieId: `legacy-${randomUUID()}`, phone: "+351 912 345 678", firstName: "Ana" },
+    });
+    state.current = a.contexts.ORG_ADMIN;
+
+    const preview = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "00351912345678", intent: "preview" }));
+    expect(preview).toMatchObject({
+      status: "success",
+      message: expect.stringMatching(/^2 participações com este telefone exato, em 1 campanha, e 1 menção noutra participação/),
+    });
+
+    const result = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "912 345 678", intent: "anonymize" }));
+    expect(result).toMatchObject({ status: "success", message: expect.stringMatching(/^2 leads anonimizadas\. Telefone retirado de 1 menção/) });
+    for (const { participation } of [national, international]) {
+      expect(await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).toMatchObject(IDENTITY_FIELDS);
+    }
+    expect(await prisma.participation.findUniqueOrThrow({ where: { id: other.participation.id } })).toMatchObject({
+      anonymizedAt: null,
+      phone: "+351961111111",
+      email: "rui@example.pt",
+      leadFormResponse: { telefone: "+351 961 111 111" },
+    });
+    expect(await prisma.participation.findUniqueOrThrow({ where: { id: stranger.participation.id } })).toMatchObject({
+      anonymizedAt: null,
+      phone: "+351912345679",
+    });
+    expect(await prisma.participant.findUniqueOrThrow({ where: { id: legacy.id } })).toMatchObject({ phone: null, firstName: null });
+  });
+
+  it("uma menção numa participação a ser gravada fica por tratar, e a mensagem diz", async () => {
+    const { lead } = await createCampaign(a);
+    const other = await lead(daysAgo(1), "rui@example.pt");
+    await prisma.participation.update({
+      where: { id: other.participation.id },
+      data: { leadFormResponse: { email: "rui@example.pt", amigo: "ana@example.pt" } },
+    });
+    state.current = a.contexts.ORG_ADMIN;
+
+    // Um jogo a decorrer tem a linha bloqueada.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let locked!: () => void;
+    const lockedSignal = new Promise<void>((resolve) => (locked = resolve));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Participation" WHERE "id" = ${other.participation.id} FOR UPDATE`;
+        locked();
+        await released;
+      },
+      { timeout: 20_000 },
+    );
+    await lockedSignal;
+    try {
+      const result = await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana@example.pt", intent: "anonymize" }));
+      expect(result).toMatchObject({
+        status: "error",
+        message: "1 participação estava a ser usada (um jogo a decorrer) e ficou por tratar: tente de novo daqui a pouco.",
+      });
+    } finally {
+      release();
+      await holder;
+    }
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: other.participation.id } })).leadFormResponse).toEqual({
+      email: "rui@example.pt",
+      amigo: "ana@example.pt",
+    });
+    // Depois, à segunda, sai.
+    expect(await anonymizeLeadsAction(IDLE, form({ scope: "subject", subject: "ana@example.pt", intent: "anonymize" }))).toMatchObject({
+      status: "success",
+    });
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: other.participation.id } })).leadFormResponse).toEqual({
+      email: "rui@example.pt",
+    });
   });
 
   it("o editor e o analista não anonimizam nem mudam o prazo", async () => {

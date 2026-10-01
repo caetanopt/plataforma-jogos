@@ -46,6 +46,7 @@ const { IDLE } = await import("@/lib/forms/action-result");
 const { updateCampaignThemeAction } = await import("@/features/campaigns/steps/brand-actions");
 const { updateBrandKitAction } = await import("@/features/brand/actions");
 const { applyBrandKitAction } = await import("@/features/campaigns/steps/brand-actions");
+const { createCampaignAction, duplicateCampaignAction } = await import("@/features/campaigns/actions");
 const { updateStartScreenAction } = await import("@/features/campaigns/steps/start-screen-actions");
 const { addConsentAction, addLeadFieldAction, updateConsentAction, updateLeadFormSettingsAction } = await import(
   "@/features/campaigns/steps/lead-form-actions"
@@ -108,7 +109,6 @@ function media(org: Org, name: string) {
       url: `https://cdn.test/${org.id}/${name}.png`,
       mimeType: "image/png",
       sizeBytes: 10,
-      altText: name === "logo" ? "Marca Exemplo" : null,
     },
   });
 }
@@ -223,7 +223,7 @@ describe("tema e informação legal na página pública", () => {
     const foreignBackground = await media(b, "fundo");
     await prisma.campaignTheme.update({
       where: { id: theme.id },
-      data: { logoMediaId: logo.id, backgroundImageMediaId: foreignBackground.id },
+      data: { logoMediaId: logo.id, logoAltText: "Marca Exemplo", backgroundImageMediaId: foreignBackground.id },
     });
 
     const element = await renderPlay(campaign.slug);
@@ -236,24 +236,83 @@ describe("tema e informação legal na página pública", () => {
     expect(logoImage).toMatchObject({ src: logo.url, alt: "Marca Exemplo" });
   });
 
-  it("o logótipo de um brand kit leva o nome da marca, ou o texto alternativo gravado", async () => {
+  it("o logótipo leva o texto alternativo do tema, copiado do kit; renomear o kit não o muda", async () => {
     const { campaign, theme } = await createCampaign(a);
-    // Sem texto alternativo gravado (como sai hoje do upload).
     const logo = await media(a, "logo-kit");
     const organization = await prisma.organization.findUniqueOrThrow({ where: { id: a.id } });
     const kit = await prisma.campaignTheme.create({
-      data: { organizationId: a.id, name: "Toyota", isBrandKit: true, logoMediaId: logo.id },
+      data: {
+        organizationId: a.id,
+        name: "Toyota — Natal 2026 (rascunho)",
+        isBrandKit: true,
+        logoMediaId: logo.id,
+        logoAltText: "Toyota",
+      },
     });
-    await prisma.campaignTheme.update({ where: { id: theme.id }, data: { logoMediaId: logo.id, sourceBrandKitId: kit.id } });
     const alt = async () => findProps<{ src: string; alt: string }>(await renderPlay(campaign.slug), "src")?.alt;
 
-    // A campanha é da Toyota, feita pela organização: não o nome desta.
+    state.current = a.contexts.EDITOR;
+    expect((await applyBrandKitAction(IDLE, form({ campaignId: campaign.id, brandKitId: kit.id }))).status).toBe("success");
+    expect(await prisma.campaignTheme.findUniqueOrThrow({ where: { id: theme.id } })).toMatchObject({
+      logoMediaId: logo.id,
+      logoAltText: "Toyota",
+    });
     expect(await alt()).toBe("Toyota");
-    // O kit mudou de logótipo: este já não é o da marca do kit.
-    await prisma.campaignTheme.update({ where: { id: kit.id }, data: { logoMediaId: null } });
+
+    // O kit muda de nome e de texto: a campanha publicada tem a sua cópia.
+    state.current = a.contexts.ORG_ADMIN;
+    const renamed = await updateBrandKitAction(
+      IDLE,
+      form({ kitId: kit.id, name: "Toyota — Natal 2027", logoAltText: "Toyota Caetano Portugal" }),
+    );
+    expect(renamed.status).toBe("success");
+    expect(await prisma.campaignTheme.findUniqueOrThrow({ where: { id: kit.id } })).toMatchObject({
+      name: "Toyota — Natal 2027",
+      logoAltText: "Toyota Caetano Portugal",
+    });
+    expect(await alt()).toBe("Toyota");
+
+    // Apagado no tema da campanha: o nome da organização, nunca o do kit.
+    state.current = a.contexts.EDITOR;
+    expect((await updateCampaignThemeAction(IDLE, form({ campaignId: campaign.id, logoAltText: "   " }))).status).toBe(
+      "success",
+    );
+    expect((await prisma.campaignTheme.findUniqueOrThrow({ where: { id: theme.id } })).logoAltText).toBeNull();
     expect(await alt()).toBe(organization.name);
-    await prisma.mediaAsset.update({ where: { id: logo.id }, data: { altText: "Toyota Caetano Portugal" } });
-    expect(await alt()).toBe("Toyota Caetano Portugal");
+
+    // Escrito no tema da campanha (sem espaços à volta).
+    await updateCampaignThemeAction(IDLE, form({ campaignId: campaign.id, logoAltText: "  Toyota Portugal " }));
+    expect(await alt()).toBe("Toyota Portugal");
+  });
+
+  it("as campanhas novas e as cópias levam o texto alternativo do logótipo", async () => {
+    const logo = await media(a, "logo-kit");
+    await prisma.campaignTheme.create({
+      data: { organizationId: a.id, name: "Kit da organização", isBrandKit: true, logoMediaId: logo.id, logoAltText: "Marca A" },
+    });
+    state.current = a.contexts.EDITOR;
+    const themeOf = async (campaignId: string) =>
+      (await prisma.campaign.findUniqueOrThrow({ where: { id: campaignId }, include: { theme: true } })).theme;
+
+    // Nova campanha: cópia do brand kit predefinido. Termina com redirect.
+    await expect(createCampaignAction(form({ type: "MEMORY", workspaceId: a.workspaceId }))).rejects.toMatchObject({
+      digest: expect.stringContaining("NEXT_REDIRECT"),
+    });
+    const created = await prisma.campaign.findFirstOrThrow({ where: { organizationId: a.id }, orderBy: { createdAt: "desc" } });
+    expect(await themeOf(created.id)).toMatchObject({ isBrandKit: false, logoMediaId: logo.id, logoAltText: "Marca A" });
+
+    // Cópia de uma campanha cujo texto já foi mudado no seu próprio tema.
+    await prisma.campaignTheme.update({ where: { id: created.themeId! }, data: { logoAltText: "Marca A — Verão" } });
+    await expect(duplicateCampaignAction(form({ campaignId: created.id }))).rejects.toMatchObject({
+      digest: expect.stringContaining("NEXT_REDIRECT"),
+    });
+    const copy = await prisma.campaign.findFirstOrThrow({
+      where: { organizationId: a.id, id: { not: created.id } },
+      orderBy: { createdAt: "desc" },
+    });
+    const copyTheme = await themeOf(copy.id);
+    expect(copyTheme).toMatchObject({ logoMediaId: logo.id, logoAltText: "Marca A — Verão" });
+    expect(copyTheme?.id).not.toBe(created.themeId);
   });
 
   it("o jogo recebe o texto legal, os links legais e o contacto de privacidade", async () => {

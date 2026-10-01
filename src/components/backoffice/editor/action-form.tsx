@@ -41,7 +41,8 @@ export function ActionForm({
   messageClassName?: string;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const { result, dispatch, isPending, uploading, setUploading, idPrefix } = useFormActionState(action);
+  const { result, dispatch, isPending, uploading, setUploading, busy, setBusy, dismissResult, idPrefix } =
+    useFormActionState(action);
   const [resetKey, setResetKey] = useState(0);
   const [seenAt, setSeenAt] = useState(0);
 
@@ -67,8 +68,10 @@ export function ActionForm({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Um envio durante o upload levava o id antigo (ou nenhum).
-    if (uploading || isPending) return;
+    // Um envio durante o upload levava o id antigo (ou nenhum). Com outra
+    // tarefa do formulário a decorrer (a exportação de um titular), as duas
+    // respostas misturavam-se no mesmo sítio.
+    if (uploading || isPending || busy) return;
     focusAfterResetRef.current = resetOnSuccess && event.currentTarget.contains(document.activeElement);
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const formData = new FormData(event.currentTarget, submitter);
@@ -76,8 +79,8 @@ export function ActionForm({
   };
 
   const contextValue = useMemo<FormActionContextValue>(
-    () => ({ result, isPending, uploading, idPrefix, setUploading, notifyChange: noop }),
-    [result, isPending, uploading, idPrefix, setUploading],
+    () => ({ result, isPending, uploading, idPrefix, setUploading, notifyChange: noop, busy, setBusy, dismissResult }),
+    [result, isPending, uploading, idPrefix, setUploading, busy, setBusy, dismissResult],
   );
 
   return (

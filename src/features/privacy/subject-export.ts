@@ -1,12 +1,15 @@
-import type { CampaignType, LeadFieldType, Prisma } from "@/generated/prisma/client";
+import { Prisma, type AnalyticsEventType, type CampaignType, type LeadFieldType } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import {
+  countMentions,
   findSubjectLegacyParticipants,
+  findSubjectMentionAnswers,
   findSubjectParticipations,
   type SubjectIdentifier,
 } from "@/features/leads/queries";
 import { CONSENT_STATUS_LABELS, describePrizeAward } from "@/features/leads/format";
 import { readLegalLinks, type LegalLinks } from "@/features/brand/legal-links";
+import { publicPlayUrl } from "@/features/publishing/public-url";
 import {
   anonymizationDate,
   describeRetention,
@@ -19,12 +22,22 @@ import { CAMPAIGN_TYPE_LABELS, PARTICIPATION_STATUS_LABELS } from "@/lib/labels"
  * Exportação dos dados de um titular (direito de acesso e portabilidade,
  * RGPD arts. 15.º e 20.º; §24 "exportação do titular").
  *
- * Um ficheiro JSON com tudo o que a organização guarda sobre a pessoa:
- * as participações com o e-mail ou o telefone exatos (as mesmas que o
- * pedido de eliminação anonimiza — findSubjectParticipations), cada uma com
- * a identidade, as respostas ao formulário, os consentimentos, o resultado,
- * o prémio, a origem e o dispositivo; os dados antigos de participante; e,
- * por campanha, os links legais e o prazo de conservação (art. 15.º, n.º 1).
+ * Um ficheiro JSON com tudo o que a organização guarda sobre a pessoa, com
+ * as chaves por esta ordem:
+ * - "Sobre esta exportação" e "Os seus direitos" (texto fixo, com o
+ *   contacto de privacidade e a reclamação à CNPD);
+ * - "Campanhas": por campanha, o nome público e o endereço, o aviso de
+ *   privacidade, os links legais e o prazo de conservação (art. 15.º, n.º 1);
+ * - "Participações": as do titular (o e-mail ou o telefone nas colunas de
+ *   identidade — as mesmas que o pedido de eliminação anonimiza), cada uma
+ *   com a identidade, as respostas ao formulário, os consentimentos, o
+ *   resultado, o prémio, a origem, o dispositivo e os eventos da sessão;
+ * - "Menções noutras participações": as leads de outras pessoas com o
+ *   identificador numa resposta (o e-mail de um amigo). Só o campo — nunca a
+ *   identidade, as outras respostas, o IP, a sessão ou o prémio de quem o
+ *   escreveu, que não são dados do titular;
+ * - "Dados antigos de participante": só o identificador que coincidiu e a
+ *   data (o mesmo registo antigo pode juntar várias pessoas).
  *
  * As chaves são texto em português: o ficheiro é para ser lido pelo titular,
  * e continua a ser um formato estruturado e de leitura automática.
@@ -64,9 +77,14 @@ export type ExportedParticipationRow = Prisma.ParticipationGetPayload<{ include:
 /** O que é preciso de cada campanha para pôr nomes nas respostas. */
 export interface SubjectExportCampaign {
   id: string;
+  /** O nome que o titular viu (o da página pública), nunca o nome interno. */
   name: string;
+  /** O endereço da página pública: distingue campanhas sem título. */
+  publicUrl: string;
   type: CampaignType;
   timezone: string;
+  /** O texto legal do ecrã inicial: o aviso de privacidade que o titular viu. */
+  privacyNotice: string | null;
   legalLinks: LegalLinks;
   retention: EffectiveRetention;
   /** Campos do formulário, pela ordem do editor, por identificador interno. */
@@ -85,9 +103,21 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+/** O nome público de uma campanha: o mesmo que a página pública mostra. */
+export function publicCampaignName(campaign: { publicTitle: string | null; startTitle: string | null }): string {
+  return campaign.publicTitle?.trim() || campaign.startTitle?.trim() || "Campanha";
+}
+
+/** Uma resposta em texto: um valor que não seja texto sai em JSON, e nunca fica por definir. */
+function answerText(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : (JSON.stringify(value) ?? "");
+}
+
 /**
  * As respostas ao formulário com o nome de cada campo. Um campo removido
  * do formulário depois da participação fica com o identificador interno.
+ * Só as chaves que a resposta tem (Object.hasOwn): com `in`, um campo
+ * "constructor" apanhava o do protótipo e saía uma resposta fantasma.
  */
 export function formAnswers(response: unknown, campaign: SubjectExportCampaign): Json {
   const values = asRecord(response);
@@ -95,14 +125,14 @@ export function formAnswers(response: unknown, campaign: SubjectExportCampaign):
   const known = new Set(campaign.fields.map((field) => field.internalKey));
   const answers: Json[] = [];
   const answer = (label: string, value: unknown, type?: LeadFieldType) => {
-    const text = typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
+    const text = answerText(value);
     answers.push({
       Campo: label,
       Resposta: type === "CHECKBOX" || type === "TERMS_ACCEPTANCE" ? (text === "true" ? "Sim" : text === "false" ? "Não" : text) : text,
     });
   };
   for (const field of campaign.fields) {
-    if (field.internalKey in values) answer(field.label, values[field.internalKey], field.type);
+    if (Object.hasOwn(values, field.internalKey)) answer(field.label, values[field.internalKey], field.type);
   }
   for (const [key, value] of Object.entries(values)) {
     if (!known.has(key)) answer(key, value);
@@ -188,11 +218,57 @@ function prize(participation: ExportedParticipationRow, now: Date): Json {
   };
 }
 
-/** Uma participação, com os nomes dos campos e das perguntas. */
+/** Os eventos de cada participação no ficheiro (os mais antigos primeiro). */
+export const EVENTS_PER_PARTICIPATION = 200;
+
+const EVENT_LABELS: Record<AnalyticsEventType, string> = {
+  CAMPAIGN_VIEWED: "Campanha vista",
+  START_CLICKED: "Clique em começar",
+  LEAD_FORM_VIEWED: "Formulário visto",
+  LEAD_FORM_SUBMITTED: "Formulário enviado",
+  GAME_STARTED: "Jogo iniciado",
+  GAME_COMPLETED: "Jogo concluído",
+  GAME_ABANDONED: "Jogo abandonado",
+  RESULT_VIEWED: "Resultado visto",
+  CTA_CLICKED: "Clique no botão final",
+  PARTICIPATION_BLOCKED: "Participação recusada",
+  PRIZE_AWARDED: "Prémio atribuído",
+};
+
+/**
+ * Os motivos de uma participação recusada que o jogo grava (play/actions):
+ * só estes saem. Outros metadados nunca vão para o ficheiro.
+ */
+const BLOCKED_REASON_LABELS: Record<string, string> = {
+  limit: "Limite de participações atingido",
+  age_unverifiable: "Idade mínima sem verificação possível",
+  honeypot: "Recusada pela proteção contra envios automáticos",
+  no_eligible_segments: "Sem prémios disponíveis nesse momento",
+};
+
+export interface SubjectExportEvent {
+  type: AnalyticsEventType;
+  occurredAt: Date;
+  metadata: unknown;
+}
+
+/** Um evento de navegação: o tipo, a data e, numa recusa, o motivo. */
+export function exportEvent(event: SubjectExportEvent): Json {
+  const reason = asRecord(event.metadata)?.reason;
+  const label = typeof reason === "string" && Object.hasOwn(BLOCKED_REASON_LABELS, reason) ? BLOCKED_REASON_LABELS[reason] : undefined;
+  return {
+    Evento: EVENT_LABELS[event.type] ?? event.type,
+    Data: iso(event.occurredAt),
+    ...(label ? { Motivo: label } : {}),
+  };
+}
+
+/** Uma participação, com os nomes dos campos e das perguntas, e os eventos da sessão. */
 export function exportParticipation(
   participation: ExportedParticipationRow,
   campaign: SubjectExportCampaign,
   now: Date,
+  events: readonly SubjectExportEvent[] = [],
 ): Json {
   return {
     ID: participation.id,
@@ -234,7 +310,22 @@ export function exportParticipation(
       "Endereço IP": participation.ipAddress,
       Sessão: participation.sessionId,
     },
+    Eventos: events.map(exportEvent),
     "Anonimização prevista": iso(anonymizationDate(campaign.retention, participation.createdAt)),
+  };
+}
+
+/** Uma menção: só o campo de outra lead com o identificador do titular. */
+export function exportMention(
+  mention: { createdAt: Date; key: string; value: string },
+  campaign: SubjectExportCampaign,
+): Json {
+  return {
+    Campanha: campaign.name,
+    "ID da campanha": campaign.id,
+    Data: iso(mention.createdAt),
+    Campo: campaign.fields.find((field) => field.internalKey === mention.key)?.label ?? mention.key,
+    Valor: mention.value,
   };
 }
 
@@ -242,12 +333,40 @@ function campaignSummary(campaign: SubjectExportCampaign, now: Date): Json {
   return {
     ID: campaign.id,
     Nome: campaign.name,
+    "Endereço público": campaign.publicUrl,
     Tipo: CAMPAIGN_TYPE_LABELS[campaign.type],
     "Fuso horário": campaign.timezone,
+    "Aviso de privacidade": campaign.privacyNotice,
     "Política de privacidade": campaign.legalLinks.privacyPolicyUrl,
     "Termos e condições": campaign.legalLinks.termsUrl,
     "Política de cookies": campaign.legalLinks.cookiesUrl,
     "Conservação dos dados": describeRetention(campaign.retention, campaign.timezone, now),
+  };
+}
+
+/**
+ * Os direitos do titular (RGPD arts. 15.º a 22.º e 77.º), em texto fixo, e
+ * como os exercer: pelo contacto de privacidade da organização, se houver.
+ */
+export function subjectRights(organization: { name: string; privacyContactEmail: string | null }): Json {
+  const contact = organization.privacyContactEmail?.trim();
+  return {
+    Acesso: "Saber se a organização trata dados pessoais seus e receber uma cópia, como este ficheiro (RGPD, art. 15.º).",
+    Retificação: "Pedir a correção dos dados inexatos e que os incompletos sejam completados (art. 16.º).",
+    Apagamento:
+      "Pedir que os seus dados sejam apagados, por exemplo quando já não forem necessários para a finalidade com que foram recolhidos ou quando retirar o consentimento (art. 17.º).",
+    "Limitação do tratamento":
+      "Pedir que os seus dados fiquem guardados mas sem outro uso, por exemplo enquanto se verifica se estão corretos (art. 18.º).",
+    Oposição: "Opor-se ao tratamento dos seus dados e, a qualquer momento, ao uso para marketing direto (art. 21.º).",
+    Portabilidade:
+      "Receber os dados que forneceu num formato estruturado e de leitura automática, como este ficheiro, e transmiti-los a outra entidade (art. 20.º).",
+    "Retirar o consentimento":
+      "Retirar a qualquer momento um consentimento que tenha dado, por exemplo para receber novidades, sem afetar o tratamento feito antes (art. 7.º, n.º 3).",
+    "Como exercer": contact
+      ? `Contacte ${organization.name} pelo contacto de privacidade: ${contact}.`
+      : `Contacte ${organization.name}, responsável pelo tratamento, pelos contactos indicados nas campanhas ou na política de privacidade.`,
+    Reclamação:
+      "Pode apresentar reclamação à Comissão Nacional de Proteção de Dados (CNPD), a autoridade de controlo em Portugal: www.cnpd.pt (art. 77.º).",
   };
 }
 
@@ -261,11 +380,14 @@ async function loadCampaigns(organizationId: string, campaignIds: string[]): Pro
   const rows = await prisma.campaign.findMany({
     // Também pela organização: um id de outra nunca entra.
     where: { id: { in: campaignIds }, organizationId },
+    // Por ordem de criação (o id desempata): a ordem do ficheiro não muda de uma exportação para a outra.
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
+      slug: true,
       publicTitle: true,
       startTitle: true,
-      internalName: true,
+      legalText: true,
       type: true,
       timezone: true,
       dataRetentionDays: true,
@@ -289,10 +411,11 @@ async function loadCampaigns(organizationId: string, campaignIds: string[]): Pro
       row.id,
       {
         id: row.id,
-        // O nome que o titular viu: o título público, se houver.
-        name: row.publicTitle?.trim() || row.startTitle?.trim() || row.internalName,
+        name: publicCampaignName(row),
+        publicUrl: publicPlayUrl(row.slug),
         type: row.type,
         timezone: row.timezone,
+        privacyNotice: row.legalText?.trim() || null,
         legalLinks: readLegalLinks(row.theme?.legalLinks),
         retention: effectiveRetention({
           campaign: row,
@@ -317,20 +440,85 @@ async function loadCampaigns(organizationId: string, campaignIds: string[]): Pro
   );
 }
 
+/**
+ * Os eventos de navegação das participações do lote: os da mesma campanha e
+ * da mesma sessão (o id que o ficheiro também leva), no máximo
+ * EVENTS_PER_PARTICIPATION por participação — a sessão vem do browser, e uma
+ * rajada de eventos não faz o ficheiro crescer sem limite.
+ */
+async function loadEvents(rows: readonly ExportedParticipationRow[]): Promise<Map<string, SubjectExportEvent[]>> {
+  const sessions = [
+    ...new Map(
+      rows.flatMap((row) => (row.sessionId ? [[`${row.campaignId}\u0000${row.sessionId}`, row] as const] : [])),
+    ).values(),
+  ];
+  const byKey = new Map<string, SubjectExportEvent[]>();
+  if (sessions.length === 0) return byKey;
+  const events = await prisma.$queryRaw<Array<SubjectExportEvent & { campaignId: string; sessionId: string }>>`
+    SELECT e."campaignId", e."sessionId", e."type", e."occurredAt", e."metadata"
+    FROM (
+      SELECT e.*, row_number() OVER (PARTITION BY e."campaignId", e."sessionId" ORDER BY e."occurredAt", e."id") AS n
+      FROM "AnalyticsEvent" e
+      WHERE (e."campaignId", e."sessionId") IN (${Prisma.join(
+        sessions.map((row) => Prisma.sql`(${row.campaignId}, ${row.sessionId})`),
+      )})
+    ) e
+    WHERE e.n <= ${EVENTS_PER_PARTICIPATION}
+    ORDER BY e."occurredAt", e."id"`;
+  for (const event of events) {
+    const key = `${event.campaignId}\u0000${event.sessionId}`;
+    const list = byKey.get(key) ?? [];
+    list.push({ type: event.type, occurredAt: event.occurredAt, metadata: event.metadata });
+    byKey.set(key, list);
+  }
+  return byKey;
+}
+
 export interface SubjectExportProgress {
-  /** Participações encontradas com o identificador (antes de as ler). */
+  /** Participações do titular (identidade) encontradas, antes de as ler. */
   matched: number;
+  /** Menções (campos de outras leads) encontradas, antes de as ler. */
+  mentionsMatched: number;
   /** Participações escritas no ficheiro até agora. */
   participations: number;
+  /** Menções escritas no ficheiro até agora. */
+  mentions: number;
   campaigns: number;
   legacyParticipants: number;
 }
 
+export function emptySubjectExportProgress(): SubjectExportProgress {
+  return { matched: 0, mentionsMatched: 0, participations: 0, mentions: 0, campaigns: 0, legacyParticipants: 0 };
+}
+
 /**
- * O ficheiro, por partes: o cabeçalho e as campanhas primeiro, depois as
- * participações por lotes (um titular com milhares de participações — um
- * endereço de testes — não fica todo em memória). `progress` diz quanto já
- * saiu, para a auditoria.
+ * Uma lista do ficheiro (que nunca é a última chave), por lotes: `read`
+ * devolve os itens já em JSON (os que ainda existem). Um lote vazio —
+ * anonimizado a meio da exportação — não parte as vírgulas.
+ */
+async function* jsonList(
+  key: string,
+  ids: readonly string[],
+  read: (ids: string[]) => Promise<Json[]>,
+  count: (written: number) => void,
+): AsyncGenerator<string> {
+  yield `  ${JSON.stringify(key)}: [`;
+  let first = true;
+  for (let index = 0; index < ids.length; index += BATCH_SIZE) {
+    const items = await read(ids.slice(index, index + BATCH_SIZE));
+    if (items.length === 0) continue;
+    yield items.map((item, position) => `${first && position === 0 ? "" : ","}\n    ${indented(item, 2)}`).join("");
+    first = false;
+    count(items.length);
+  }
+  yield `${first ? "" : "\n  "}],\n`;
+}
+
+/**
+ * O ficheiro, por partes: o cabeçalho, os direitos e as campanhas primeiro,
+ * depois as participações e as menções por lotes (um titular com milhares
+ * de participações — um endereço de testes — não fica todo em memória).
+ * `progress` diz quanto já saiu, para a auditoria.
  */
 export async function* subjectExportChunks(
   organizationId: string,
@@ -338,7 +526,7 @@ export async function* subjectExportChunks(
   options: { now?: Date; progress?: SubjectExportProgress } = {},
 ): AsyncGenerator<string> {
   const now = options.now ?? new Date();
-  const progress = options.progress ?? { matched: 0, participations: 0, campaigns: 0, legacyParticipants: 0 };
+  const progress = options.progress ?? emptySubjectExportProgress();
 
   const [organization, matches, legacy] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
@@ -349,59 +537,77 @@ export async function* subjectExportChunks(
     findSubjectLegacyParticipants(organizationId, subject),
   ]);
   // Por ordem cronológica: é assim que o titular as reconhece.
-  matches.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-  const campaigns = await loadCampaigns(organizationId, [...new Set(matches.map((match) => match.campaignId))]);
-  progress.matched = matches.length;
+  const chronological = <T extends { createdAt: Date; id: string }>(items: T[]) =>
+    items.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  const identity = chronological(matches.identity);
+  const mentions = chronological(matches.mentions);
+  const campaigns = await loadCampaigns(organizationId, [
+    ...new Set([...identity, ...mentions].map((match) => match.campaignId)),
+  ]);
+  progress.matched = identity.length;
+  progress.mentionsMatched = countMentions(mentions);
   progress.campaigns = campaigns.size;
   progress.legacyParticipants = legacy.length;
 
+  const identifier = subject.kind === "email" ? "E-mail" : "Telefone";
   const about: Json = {
     "Responsável pelo tratamento": organization.name,
     "Contacto de privacidade": organization.privacyContactEmail,
     "Gerada em": now.toISOString(),
-    Pedido: { [subject.kind === "email" ? "E-mail" : "Telefone"]: subject.kind === "email" ? subject.email : subject.phone },
-    Âmbito:
-      "As participações nas campanhas desta organização com este e-mail ou telefone exatos (nos dados de identificação ou nas respostas ao formulário), em todas as campanhas e períodos, incluindo as de teste. As participações já anonimizadas deixaram de ter dados pessoais e não aparecem.",
+    Pedido: { [identifier]: subject.kind === "email" ? subject.email : subject.phone },
+    Âmbito: [
+      `Em «Participações», as participações nas campanhas desta organização em que este ${identifier.toLowerCase()} é o de identificação${subject.kind === "phone" ? " (um número português com ou sem o indicativo +351)" : ""}, em todas as campanhas e períodos, incluindo as de teste, com tudo o que cada uma guarda.`,
+      "Em «Menções noutras participações», os campos do formulário de outras pessoas em que este identificador aparece (por exemplo, quem o indicou como amigo): só esse campo, porque o resto dessas participações não é sobre si.",
+      "Em «Dados antigos de participante», os registos antigos de um browser com este identificador: só o identificador e a data, porque o mesmo registo pode ter dados de outras pessoas que usaram o mesmo browser.",
+      "As participações já anonimizadas deixaram de ter dados pessoais e não aparecem.",
+    ].join(" "),
     Datas: "Em UTC (ISO 8601). Cada campanha indica o seu fuso horário.",
     "Não incluído":
-      "Estatísticas e eventos de navegação, que não guardam dados pessoais; e as chaves técnicas de acesso ao jogo (o token da participação e o cookie do browser), que serviriam para retomar a participação.",
+      "As estatísticas agregadas, que não identificam ninguém; e as chaves técnicas de acesso ao jogo (o token da participação e o cookie do browser), que serviriam para retomar a participação. Os eventos de navegação de cada participação (quando viu a campanha, começou ou concluiu o jogo) estão em «Eventos», ligados pela sessão.",
   };
 
   yield `{\n  "Sobre esta exportação": ${indented(about, 1)},\n`;
+  yield `  "Os seus direitos": ${indented(subjectRights(organization), 1)},\n`;
   yield `  "Campanhas": ${indented([...campaigns.values()].map((campaign) => campaignSummary(campaign, now)), 1)},\n`;
-  yield `  "Dados antigos de participante": ${indented(
-    legacy.map((row) => ({
-      Nome: row.firstName,
-      Apelido: row.lastName,
-      "E-mail": row.email,
-      Telefone: row.phone,
-      "Criado em": iso(row.createdAt),
-    })),
-    1,
-  )},\n`;
-  yield `  "Participações": [`;
 
-  let first = true;
-  for (let index = 0; index < matches.length; index += BATCH_SIZE) {
-    const ids = matches.slice(index, index + BATCH_SIZE).map((match) => match.id);
-    const rows = await prisma.participation.findMany({
-      // Anonimizada entretanto: já não tem dados pessoais.
-      where: { id: { in: ids }, anonymizedAt: null, campaign: { organizationId } },
-      include: participationInclude,
-    });
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const lines: string[] = [];
-    for (const id of ids) {
-      const row = byId.get(id);
-      const campaign = row && campaigns.get(row.campaignId);
-      if (!row || !campaign) continue;
-      lines.push(`${first ? "" : ","}\n    ${indented(exportParticipation(row, campaign, now), 2)}`);
-      first = false;
-    }
-    if (lines.length > 0) {
-      yield lines.join("");
-      progress.participations += lines.length;
-    }
-  }
-  yield `${first ? "" : "\n  "}]\n}\n`;
+  yield* jsonList(
+    "Participações",
+    identity.map((match) => match.id),
+    async (ids) => {
+      const rows = await prisma.participation.findMany({
+        // Anonimizada entretanto: já não tem dados pessoais.
+        where: { id: { in: ids }, anonymizedAt: null, campaign: { organizationId } },
+        include: participationInclude,
+      });
+      const events = await loadEvents(rows);
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      return ids.flatMap((id) => {
+        const row = byId.get(id);
+        const campaign = row && campaigns.get(row.campaignId);
+        if (!row || !campaign) return [];
+        const sessionEvents = row.sessionId ? (events.get(`${row.campaignId}\u0000${row.sessionId}`) ?? []) : [];
+        return [exportParticipation(row, campaign, now, sessionEvents)];
+      });
+    },
+    (written) => (progress.participations += written),
+  );
+
+  yield* jsonList(
+    "Menções noutras participações",
+    mentions.map((mention) => mention.id),
+    async (ids) => {
+      // Lidas de novo, com a mesma condição: uma anonimizada entretanto, ou um campo já retirado, não sai.
+      const answers = await findSubjectMentionAnswers(organizationId, subject, ids);
+      return answers.flatMap((answer) => {
+        const campaign = campaigns.get(answer.campaignId);
+        return campaign ? [exportMention(answer, campaign)] : [];
+      });
+    },
+    (written) => (progress.mentions += written),
+  );
+
+  yield `  "Dados antigos de participante": ${indented(
+    legacy.map((row) => ({ [identifier]: row.value, "Criado em": iso(row.createdAt) })),
+    1,
+  )}\n}\n`;
 }

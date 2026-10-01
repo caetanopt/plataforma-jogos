@@ -121,6 +121,7 @@ export async function duplicateCampaignAction(formData: FormData): Promise<void>
           isBrandKit: false,
           sourceBrandKitId: original.theme.sourceBrandKitId,
           logoMediaId: original.theme.logoMediaId,
+          logoAltText: original.theme.logoAltText,
           faviconMediaId: original.theme.faviconMediaId,
           backgroundImageMediaId: original.theme.backgroundImageMediaId,
           primaryColor: original.theme.primaryColor,

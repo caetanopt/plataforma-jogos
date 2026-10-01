@@ -33,6 +33,17 @@ interface ConfirmSubmitButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
  * Usa o `<dialog>` nativo com `showModal()`: traz de origem o foco preso, o
  * fecho com Esc e o fundo inerte — comportamentos que uma reimplementação em
  * React quase sempre acaba por fazer pela metade.
+ *
+ * O clique no botão nunca submete: abre o diálogo, e só o "Confirmar"
+ * submete (`requestSubmit`, que não passa por um clique). Antes uma marca de
+ * "já confirmado" ficava ligada depois do envio — o `requestSubmit` não a
+ * consumia — e, num formulário que não se remonta (o pedido de um titular),
+ * o clique seguinte anonimizava outra pessoa sem perguntar. O `onClick` de
+ * quem o usa corre no clique; se cancelar o evento, o diálogo não abre.
+ *
+ * Enquanto o formulário envia (ou faz um upload, ou outra tarefa dele
+ * decorre) fica com `aria-disabled`, não `disabled` — o foco não cai no
+ * `<body>` —, e o clique não abre o diálogo.
  */
 export function ConfirmSubmitButton({
   confirmMessage,
@@ -44,17 +55,18 @@ export function ConfirmSubmitButton({
   className,
   children,
   onClick,
+  disabled,
   ...props
 }: ConfirmSubmitButtonProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const confirmedRef = useRef(false);
   const [open, setOpen] = useState(false);
   const status = useFormStatus();
   // Num ActionForm o envio não passa pelo `action=` do `<form>`: o estado vem
   // do contexto.
   const form = useFormAction();
   const pending = status.pending || Boolean(form?.isPending);
+  const blocked = pending || Boolean(form?.uploading) || Boolean(form?.busy);
   // Há vários destes por página: um id fixo criava duplicados no documento.
   const titleId = useId();
 
@@ -66,19 +78,18 @@ export function ConfirmSubmitButton({
   }, [open]);
 
   function handleTriggerClick(event: React.MouseEvent<HTMLButtonElement>) {
-    // Segunda passagem, já confirmada: deixa a submissão seguir.
-    if (confirmedRef.current) {
-      confirmedRef.current = false;
-      onClick?.(event);
+    if (blocked) {
+      event.preventDefault();
       return;
     }
+    onClick?.(event);
+    const cancelled = event.defaultPrevented;
     event.preventDefault();
-    setOpen(true);
+    if (!cancelled) setOpen(true);
   }
 
   function handleConfirm() {
     setOpen(false);
-    confirmedRef.current = true;
     const trigger = triggerRef.current;
     // `requestSubmit` com o próprio botão como submitter mantém o name/value
     // do botão no FormData, tal como um clique normal.
@@ -90,7 +101,11 @@ export function ConfirmSubmitButton({
       <button
         ref={triggerRef}
         type="submit"
-        disabled={pending || props.disabled}
+        // O `disabled` de quem o usa (nada selecionado) e o envio em curso são
+        // coisas diferentes: antes o `{...props}` repunha o primeiro por cima
+        // do segundo, e o botão ficava ativo a meio do envio.
+        disabled={disabled}
+        aria-disabled={blocked || undefined}
         aria-busy={pending || undefined}
         className={buttonVariants({ variant, size, className })}
         {...props}

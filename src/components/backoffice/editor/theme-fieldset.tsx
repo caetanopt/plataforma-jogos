@@ -15,6 +15,7 @@ const FIELD_CLASS =
 
 export interface ThemeFieldsetValues {
   logoMediaId: string | null;
+  logoAltText: string | null;
   faviconMediaId: string | null;
   backgroundImageMediaId: string | null;
   primaryColor: string;
@@ -78,6 +79,22 @@ export function ThemeFieldset({
         defaultKind={media.logo?.kind}
         accept="image/jpeg,image/png,image/webp,image/svg+xml"
       />
+      {/* Junto ao logótipo: é o que os leitores de ecrã dizem dele no jogo.
+          Fica no tema (copiado com ele), não no ficheiro nem no nome do kit. */}
+      <div>
+        <Label htmlFor={fieldId("logoAltText")}>Texto alternativo do logótipo</Label>
+        <SyncedInput
+          id={fieldId("logoAltText")}
+          name="logoAltText"
+          maxLength={BRAND_THEME_LIMITS.logoAltText}
+          defaultValue={theme.logoAltText ?? ""}
+          aria-describedby={fieldId("logoAltText-help")}
+          className={FIELD_CLASS}
+        />
+        <p id={fieldId("logoAltText-help")} className="mt-1 text-xs text-caetano-anthracite-80">
+          O nome da marca, tal como aparece no logótipo. Vazio, o jogo usa o nome da organização.
+        </p>
+      </div>
       <MediaUploadField
         name="faviconMediaId"
         label="Favicon"

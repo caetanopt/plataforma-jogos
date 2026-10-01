@@ -641,6 +641,7 @@ async function createThemedCampaign(target: Org) {
       organizationId: target.id,
       name: "Tema da campanha",
       logoMediaId: logo.id,
+      logoAltText: "Marca da campanha",
       faviconMediaId: favicon.id,
       backgroundImageMediaId: background.id,
       primaryColor: "#111111",
@@ -672,7 +673,7 @@ function createBrandKit(
   target: Org,
   values: Pick<
     Partial<CampaignTheme>,
-    "logoMediaId" | "faviconMediaId" | "backgroundImageMediaId"
+    "logoMediaId" | "logoAltText" | "faviconMediaId" | "backgroundImageMediaId"
   > = {},
 ) {
   return prisma.campaignTheme.create({
@@ -680,6 +681,7 @@ function createBrandKit(
       organizationId: target.id,
       name: `Kit ${randomUUID().slice(0, 6)}`,
       isBrandKit: true,
+      logoAltText: "Marca do kit",
       primaryColor: "#AA0000",
       secondaryColor: "#00AA00",
       backgroundColor: "#0000AA",
@@ -705,6 +707,7 @@ function themeFields(
 ): Record<string, string> {
   return {
     logoMediaId: theme.logoMediaId ?? "",
+    logoAltText: theme.logoAltText ?? "",
     faviconMediaId: theme.faviconMediaId ?? "",
     backgroundImageMediaId: theme.backgroundImageMediaId ?? "",
     primaryColor: theme.primaryColor,
@@ -756,6 +759,7 @@ describe("tema da campanha (gravação automática)", () => {
           borderRadiusPx: "",
           secondaryColor: "#ABCDEF",
           fontFamily: "Arial",
+          logoAltText: "x".repeat(201),
         },
         false,
       ),
@@ -765,6 +769,7 @@ describe("tema da campanha (gravação automática)", () => {
     expect(fieldErrors(result)).toEqual({
       primaryColor: "Cor primária: cor inválida.",
       borderRadiusPx: "Border radius: obrigatório.",
+      logoAltText: "Texto alternativo do logótipo: máximo 200 caracteres.",
     });
     const saved = await reloadTheme(theme.id);
     expect(saved).toMatchObject({
@@ -775,9 +780,30 @@ describe("tema da campanha (gravação automática)", () => {
       fontFamily: "Arial",
       shadowEnabled: false,
       logoMediaId: theme.logoMediaId,
+      logoAltText: "Marca da campanha",
       faviconMediaId: theme.faviconMediaId,
       backgroundImageMediaId: theme.backgroundImageMediaId,
     });
+  });
+
+  it("texto alternativo do logótipo: grava sem espaços à volta; vazio apaga; sem o campo, fica", async () => {
+    const { campaign, theme } = await createThemedCampaign(org);
+    session.current = org.editor;
+
+    expect(
+      await updateCampaignThemeAction(
+        IDLE,
+        campaignThemeForm(campaign.id, theme, { logoAltText: "  Toyota Caetano  " }),
+      ),
+    ).toMatchObject({ status: "success" });
+    expect((await reloadTheme(theme.id)).logoAltText).toBe("Toyota Caetano");
+
+    // Um envio sem o campo (outro formulário) não o apaga.
+    await updateCampaignThemeAction(IDLE, toForm({ campaignId: campaign.id, primaryColor: "#002E5D" }));
+    expect((await reloadTheme(theme.id)).logoAltText).toBe("Toyota Caetano");
+
+    await updateCampaignThemeAction(IDLE, campaignThemeForm(campaign.id, theme, { logoAltText: " " }));
+    expect((await reloadTheme(theme.id)).logoAltText).toBeNull();
   });
 
   it("imagem de fundo removida grava null; o nome enviado por engano não muda o tema", async () => {
@@ -843,6 +869,7 @@ describe("brand kits", () => {
       sourceBrandKitId: kit.id,
       name: "Tema da campanha",
       logoMediaId: kitLogo.id,
+      logoAltText: "Marca do kit",
       faviconMediaId: null,
       backgroundImageMediaId: null,
       primaryColor: "#AA0000",
@@ -899,6 +926,7 @@ describe("brand kits", () => {
     expect(kit).toMatchObject({
       isBrandKit: true,
       logoMediaId: theme.logoMediaId,
+      logoAltText: "Marca da campanha",
       primaryColor: theme.primaryColor,
       fontFamily: theme.fontFamily,
       borderRadiusPx: theme.borderRadiusPx,
@@ -946,7 +974,7 @@ describe("brand kits", () => {
 
     const result = await updateBrandKitAction(
       IDLE,
-      brandKitForm(kit, { name: " ", buttonColor: "#FFA931" }, true),
+      brandKitForm(kit, { name: " ", buttonColor: "#FFA931", logoAltText: " Marca nova " }, true),
     );
 
     expect(result).toMatchObject({ status: "error", message: PARTIAL_SAVE_MESSAGE });
@@ -955,6 +983,7 @@ describe("brand kits", () => {
     expect(saved).toMatchObject({
       name: kit.name,
       buttonColor: "#FFA931",
+      logoAltText: "Marca nova",
       shadowEnabled: true,
       fontFamily: "Roboto",
     });

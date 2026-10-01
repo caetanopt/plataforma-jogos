@@ -20,13 +20,27 @@ import {
 import {
   anonymizeParticipationsByIds,
   clearSubjectFromParticipants,
+  removeSubjectMentions,
   type AnonymizationCounts,
 } from "@/features/privacy/anonymize";
-import { countLeadsToAnonymize, findSubjectParticipations, iterateLeadIdsToAnonymize } from "@/features/leads/queries";
+import {
+  countLeadsToAnonymize,
+  countMentions,
+  findSubjectParticipations,
+  iterateLeadIdsToAnonymize,
+  type SubjectIdentifier,
+} from "@/features/leads/queries";
 import { leadsFiltersFromParams, type LeadsQueryParams } from "@/features/leads/filters";
 import { RETENTION_WARNING_DAYS } from "@/features/privacy/retention-policy";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Contagens da auditoria (só números, nunca o pedido). */
+type AuditedCounts = AnonymizationCounts & Record<string, number>;
+
+function emptyCounts() {
+  return { participationsAnonymized: 0, participantsDeleted: 0 };
+}
 
 function leads(count: number): string {
   return count === 1 ? "1 lead" : `${count} leads`;
@@ -169,11 +183,16 @@ export async function updateCampaignRetentionAction(_previous: ActionResult, for
   });
 }
 
-/** Um registo antes de começar e outro no fim, também quando falha a meio. */
-async function audited<T extends AnonymizationCounts>(
+/**
+ * Um registo antes de começar e outro no fim, também quando falha a meio.
+ * `progress` (só contagens) vai sendo somado por quem corre, e entra no
+ * registo final.
+ */
+async function audited<T, P extends AuditedCounts>(
   context: OrgContext,
   details: { scope: string; entityId?: string | null; metadata: Record<string, string | number | boolean | null> },
-  run: (progress: AnonymizationCounts) => Promise<T>,
+  progress: P,
+  run: (progress: P) => Promise<T>,
 ): Promise<T> {
   const base = {
     organizationId: context.organizationId,
@@ -183,7 +202,6 @@ async function audited<T extends AnonymizationCounts>(
     entityId: details.entityId ?? null,
   };
   await logAudit({ ...base, result: "SUCCESS", metadata: { operation: "anonymize", stage: "started", scope: details.scope, ...details.metadata } });
-  const progress: AnonymizationCounts = { participationsAnonymized: 0, participantsDeleted: 0 };
   let outcome: "completed" | "interrupted" = "interrupted";
   try {
     const result = await run(progress);
@@ -212,6 +230,63 @@ function resultMessage(counts: AnonymizationCounts & { skipped: number }): Actio
   return ok(`${anonymizedLeads(counts.participationsAnonymized)}.`);
 }
 
+function participations(count: number): string {
+  return count === 1 ? "1 participação" : `${count} participações`;
+}
+
+function mentionsIn(count: number): string {
+  return count === 1 ? "1 menção noutra participação" : `${count} menções noutras participações`;
+}
+
+/** "e-mail" ou "telefone", para as mensagens do pedido de um titular. */
+function identifierLabel(subject: SubjectIdentifier): string {
+  return subject.kind === "email" ? "e-mail" : "telefone";
+}
+
+/**
+ * «Procurar» no pedido de um titular: as participações dele e, à parte, as
+ * menções em leads de outras pessoas — dessas só sai o campo.
+ */
+function subjectPreviewMessage(subject: SubjectIdentifier, identity: number, campaigns: number, mentions: number): string {
+  const label = identifierLabel(subject);
+  const mentionText =
+    mentions > 0
+      ? `${mentionsIn(mentions)} (um campo do formulário de outra pessoa com este ${label}: aí só esse campo sai, o resto da lead fica)`
+      : "";
+  if (identity === 0) {
+    return mentions === 0
+      ? "Nenhuma participação por anonimizar com este e-mail ou telefone exatos."
+      : `Nenhuma participação com este ${label} exato; ${mentionText}.`;
+  }
+  const own = `${participations(identity)} com este ${label} exato, em ${campaigns === 1 ? "1 campanha" : `${campaigns} campanhas`}`;
+  return mentions === 0 ? `${own}.` : `${own}, e ${mentionText}.`;
+}
+
+/** O resultado do pedido de um titular: as leads dele e os campos retirados das de outras pessoas. */
+function subjectResultMessage(
+  subject: SubjectIdentifier,
+  counts: AnonymizationCounts & { skipped: number; mentionsCleared: number; mentionsSkipped: number },
+): ActionResult {
+  const label = identifierLabel(subject);
+  const parts: string[] = [];
+  if (counts.participationsAnonymized > 0) parts.push(`${anonymizedLeads(counts.participationsAnonymized)}.`);
+  if (counts.mentionsCleared > 0) {
+    parts.push(
+      `${label === "e-mail" ? "E-mail retirado" : "Telefone retirado"} de ${mentionsIn(counts.mentionsCleared)}: só esse campo saiu, o resto ${counts.mentionsCleared === 1 ? "dessa lead, de outra pessoa," : "dessas leads, de outras pessoas,"} fica.`,
+    );
+  }
+  const skipped = counts.skipped + counts.mentionsSkipped;
+  if (skipped > 0) {
+    // Fica no ecrã (é uma falha parcial): as de um jogo a decorrer ficaram.
+    const busy =
+      skipped === 1
+        ? "1 participação estava a ser usada (um jogo a decorrer) e ficou por tratar"
+        : `${skipped} participações estavam a ser usadas (um jogo a decorrer) e ficaram por tratar`;
+    return fail(`${parts.join(" ")}${parts.length > 0 ? " " : ""}${busy}: tente de novo daqui a pouco.`);
+  }
+  return ok(parts.length > 0 ? parts.join(" ") : "Não havia leads por anonimizar.");
+}
+
 const FILTER_KEYS = [
   "campaignId",
   "search",
@@ -234,7 +309,9 @@ const FILTER_KEYS = [
  *   Sem pesquisa: a pesquisa da lista procura partes do texto e apanhava
  *   outras pessoas;
  * - "subject": um pedido de um titular, pelo e-mail ou telefone exatos, em
- *   todas as campanhas. Com intent "preview", só diz quantas encontra.
+ *   todas as campanhas. As participações dele são anonimizadas por inteiro;
+ *   nas de outras pessoas que o mencionam numa resposta (o e-mail de um
+ *   amigo) só sai esse campo. Com intent "preview", só diz quantas encontra.
  */
 export async function anonymizeLeadsAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
   return runAction("anonymizeLeads", async () => {
@@ -247,7 +324,7 @@ export async function anonymizeLeadsAction(_previous: ActionResult, formData: Fo
     if (scope === "selection") {
       const parsed = anonymizeSelectionSchema.safeParse(readMultiple(formData, "participationId") ?? []);
       if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Selecione pelo menos uma lead.");
-      const counts = await audited(context, { scope, metadata: { requested: parsed.data.length } }, (progress) =>
+      const counts = await audited(context, { scope, metadata: { requested: parsed.data.length } }, emptyCounts(), (progress) =>
         anonymizeParticipationsByIds(context.organizationId, parsed.data, now, progress),
       );
       revalidatePath("/leads");
@@ -285,7 +362,7 @@ export async function anonymizeLeadsAction(_previous: ActionResult, formData: Fo
         to: range.to.toISOString(),
         createdUpTo: createdUpTo.toISOString(),
       };
-      const counts = await audited(context, { scope, entityId: filters.campaignId ?? null, metadata }, async (progress) => {
+      const counts = await audited(context, { scope, entityId: filters.campaignId ?? null, metadata }, emptyCounts(), async (progress) => {
         const total = { participationsAnonymized: 0, participantsDeleted: 0, skipped: 0 };
         for await (const ids of iterateLeadIdsToAnonymize(context.organizationId, range, filters, { createdUpTo })) {
           const batch = await anonymizeParticipationsByIds(context.organizationId, ids, now, progress);
@@ -306,31 +383,40 @@ export async function anonymizeLeadsAction(_previous: ActionResult, formData: Fo
           subject: "Pedido de um titular: e-mail ou telefone completo.",
         });
       }
-      const matches = await findSubjectParticipations(context.organizationId, subject);
-      const campaigns = new Set(matches.map((match) => match.campaignId)).size;
+      const { identity, mentions } = await findSubjectParticipations(context.organizationId, subject);
+      const campaigns = new Set(identity.map((match) => match.campaignId)).size;
+      const mentionCount = countMentions(mentions);
       if (getField(formData, "intent") === "preview") {
-        return ok(
-          matches.length === 0
-            ? "Nenhuma participação por anonimizar com este e-mail ou telefone exatos."
-            : `${matches.length === 1 ? "1 participação" : `${matches.length} participações`} com este ${subject.kind === "email" ? "e-mail" : "telefone"} exato, em ${campaigns === 1 ? "1 campanha" : `${campaigns} campanhas`}.`,
-        );
+        return ok(subjectPreviewMessage(subject, identity.length, campaigns, mentionCount));
       }
+      const progress = { ...emptyCounts(), mentionsCleared: 0, legacyParticipantsCleared: 0 };
       const counts = await audited(
         context,
-        { scope, metadata: { identifierKind: subject.kind, requested: matches.length, campaigns } },
+        {
+          scope,
+          metadata: { identifierKind: subject.kind, requested: identity.length, campaigns, mentions: mentionCount },
+        },
+        progress,
         async (progress) => {
+          // As do titular por inteiro; das de outras pessoas, só o campo.
           const result = await anonymizeParticipationsByIds(
             context.organizationId,
-            matches.map((match) => match.id),
+            identity.map((match) => match.id),
             now,
             progress,
           );
-          await clearSubjectFromParticipants(context.organizationId, subject, now);
-          return result;
+          const cleared = await removeSubjectMentions(
+            context.organizationId,
+            subject,
+            mentions.map((mention) => mention.id),
+            progress,
+          );
+          progress.legacyParticipantsCleared = await clearSubjectFromParticipants(context.organizationId, subject, now);
+          return { ...result, mentionsCleared: cleared.mentionsCleared, mentionsSkipped: cleared.skipped };
         },
       );
       revalidatePath("/leads");
-      return resultMessage(counts);
+      return subjectResultMessage(subject, counts);
     }
 
     return fail("Pedido inválido.");

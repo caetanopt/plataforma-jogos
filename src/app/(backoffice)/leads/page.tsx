@@ -281,7 +281,11 @@ export default async function LeadsPage({
           </div>
           <ActionForm action={anonymizeLeadsAction} resetOnSuccess={false} className="flex flex-wrap items-end gap-2" messageClassName="basis-full">
             <input type="hidden" name="scope" value="subject" />
-            <div className="min-w-0 flex-1 sm:max-w-sm">
+            {/* Uma largura própria: com `flex-1` e sem mínimo, os três botões
+                espremiam o campo até ~26 px em algumas larguras. No telemóvel
+                fica sozinho na linha; daí para cima nunca abaixo de 18rem, e
+                os botões passam para a linha seguinte. */}
+            <div className="basis-full sm:min-w-72 sm:max-w-sm sm:flex-1">
               <Label htmlFor="subject">Pedido de um titular: e-mail ou telefone</Label>
               <Input
                 id="subject"
@@ -300,7 +304,7 @@ export default async function LeadsPage({
               name="intent"
               value="anonymize"
               confirmTitle="Anonimizar os dados deste titular?"
-              confirmMessage={`Todas as participações com este e-mail ou telefone exatos, em todas as campanhas e períodos (também nas respostas ao formulário). ${ANONYMIZE_WARNING}`}
+              confirmMessage={`Todas as participações com este e-mail ou telefone exatos, em todas as campanhas e períodos. Nas menções (a participação de outra pessoa que o tem numa resposta ao formulário), sai só essa resposta. ${ANONYMIZE_WARNING}`}
               confirmLabel="Anonimizar"
               variant="outline"
             >
@@ -308,8 +312,11 @@ export default async function LeadsPage({
             </ConfirmSubmitButton>
             <p id="subject-help" className="basis-full text-xs text-caetano-anthracite-80">
               Só o e-mail ou o telefone exatos (não partes do texto), em todas as campanhas. «Procurar» diz
-              quantas participações encontra; «Exportar» descarrega um ficheiro (JSON) com todos os dados do
-              titular, para lhe enviar (pedido de acesso). Nenhum dos dois apaga nada.
+              quantas participações e menções encontra; «Exportar os dados do titular» descarrega um ficheiro
+              (JSON) com os dados dele, para lhe enviar (pedido de acesso). Nenhum dos dois apaga nada. Uma
+              menção é a participação de outra pessoa em que este e-mail ou telefone aparece numa resposta ao
+              formulário: o ficheiro leva só essa resposta, e «Anonimizar os dados do titular» apaga só essa
+              resposta.
             </p>
           </ActionForm>
         </section>

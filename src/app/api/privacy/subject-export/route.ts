@@ -5,13 +5,15 @@ import { can } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { isSameOriginRequest } from "@/lib/security/same-origin";
 import { parseSubjectIdentifier } from "@/lib/validation/privacy";
-import { subjectExportChunks, type SubjectExportProgress } from "@/features/privacy/subject-export";
+import { emptySubjectExportProgress, subjectExportChunks } from "@/features/privacy/subject-export";
 
 const bodySchema = z.object({ subject: z.string().max(254) });
 
 /**
  * Exportação dos dados de um titular (§24, RGPD art. 15.º): um JSON com
- * tudo o que a organização guarda sobre o e-mail ou o telefone pedidos.
+ * tudo o que a organização guarda sobre o e-mail ou o telefone pedidos (ver
+ * subject-export.ts: as participações dele, as menções noutras e os dados
+ * antigos de participante).
  *
  * POST com o identificador no corpo, nunca na query: um e-mail no URL ficava
  * nos logs de pedidos da plataforma e no histórico do browser. O corpo é
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Indique o e-mail ou o telefone completo do titular." }, { status: 400 });
   }
 
-  const progress: SubjectExportProgress = { matched: 0, participations: 0, campaigns: 0, legacyParticipants: 0 };
+  const progress = emptySubjectExportProgress();
   const audit = (outcome: "SUCCESS" | "FAILURE", extra: Record<string, string>) =>
     logAudit({
       ...base,
@@ -121,8 +123,11 @@ export async function POST(request: Request) {
       // Sem o identificador no nome: fica na lista de transferências.
       "Content-Disposition": `attachment; filename="dados-titular-${new Date().toISOString().slice(0, 10)}.json"`,
       "Cache-Control": "no-store",
-      // Para a mensagem no backoffice; o ficheiro tem a lista.
+      // Contados ao procurar, antes de escrever o ficheiro (uma participação
+      // anonimizada entretanto já não sai): o backoffice conta pelo ficheiro.
       "X-Subject-Participations": String(progress.matched),
+      "X-Subject-Mentions": String(progress.mentionsMatched),
+      "X-Subject-Legacy": String(progress.legacyParticipants),
     },
   });
 }

@@ -210,6 +210,10 @@ model CampaignTheme {
   isBrandKit             Boolean  @default(false)
   sourceBrandKitId       String?
   logoMediaId            String?
+  // Texto alternativo do logótipo no jogo público (§27). Copia-se com o resto
+  // do tema (§10): renomear ou mudar o kit de origem não mexe nas campanhas.
+  // Sem ele, o jogo usa o nome da organização.
+  logoAltText            String?
   faviconMediaId         String?
   backgroundImageMediaId String?
   primaryColor           String   @default("#002E5D")
