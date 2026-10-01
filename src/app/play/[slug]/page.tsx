@@ -134,12 +134,12 @@ export default async function PublicPlayPage({
         </div>
       )}
       {brandLogo && (
-        <header className="flex justify-center px-4 pt-6">
+        <header className="flex justify-center px-4 pt-6 sm:pt-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={brandLogo.url}
             alt={brandLogoAlt}
-            className="h-10 max-w-[60%] object-contain"
+            className="h-10 max-w-[60%] object-contain motion-safe:animate-fade-in sm:h-12"
           />
         </header>
       )}
@@ -274,8 +274,10 @@ export default async function PublicPlayPage({
 
 function StateMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col items-center justify-center px-4 py-16 text-center">
-      <p className="rounded-game-lg bg-game-surface px-6 py-4 text-lg text-game-text">{children}</p>
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-4 py-16 text-center">
+      <p className="rounded-game-lg border border-game-border bg-game-surface px-6 py-5 text-lg text-game-text shadow-lg motion-safe:animate-scale-in">
+        {children}
+      </p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Download, ShieldCheck } from "lucide-react";
 import { requirePagePermission } from "@/server/auth/page-guard";
 import { firstValues } from "@/lib/forms/search-params";
 import { can } from "@/server/permissions";
@@ -17,7 +18,9 @@ import { SubjectExportButton } from "@/components/backoffice/leads/subject-expor
 import { Alert } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
-import { Input } from "@/components/ui/input";
+import { controlClass, Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CAMPAIGN_TYPE_LABELS, PARTICIPATION_STATUS_LABELS } from "@/lib/labels";
@@ -116,17 +119,18 @@ export default async function LeadsPage({
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-caetano-anthracite">Leads</h1>
-          <p className="mt-1 text-caetano-anthracite-80">Participações e leads angariados nas suas campanhas.</p>
-        </div>
-        {canExport && (
-          <a href={`/api/leads/export?${exportQuery}`} className={buttonVariants({ variant: "outline" })}>
-            Exportar CSV
-          </a>
-        )}
-      </div>
+      <PageHeader
+        title="Leads"
+        description="Participações e leads angariados nas suas campanhas."
+        actions={
+          canExport && (
+            <a href={`/api/leads/export?${exportQuery}`} className={buttonVariants({ variant: "outline" })}>
+              <Download size={16} aria-hidden="true" />
+              Exportar CSV
+            </a>
+          )
+        }
+      />
 
       {upcomingTotal > 0 && (
         <div className="mb-6">
@@ -158,14 +162,18 @@ export default async function LeadsPage({
         </div>
       )}
 
-      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+      <form
+        method="get"
+        aria-label="Filtros das leads"
+        className="mb-6 grid gap-4 rounded-2xl border border-caetano-medium-gray-40 bg-white p-4 shadow-xs sm:grid-cols-2 sm:p-5 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto_auto_minmax(0,1fr)]"
+      >
         <div>
           <Label htmlFor="campaignId">Campanha</Label>
           <select
             id="campaignId"
             name="campaignId"
             defaultValue={params.campaignId ?? ""}
-            className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm"
+            className={cn("w-full", controlClass)}
           >
             <option value="">Todas</option>
             {campaigns.map((campaign) => (
@@ -181,7 +189,7 @@ export default async function LeadsPage({
         </div>
         <div>
           <Label htmlFor="period">Período</Label>
-          <select id="period" name="period" defaultValue={range.preset} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm">
+          <select id="period" name="period" defaultValue={range.preset} className={cn("w-full", controlClass)}>
             <option value="today">Hoje</option>
             <option value="7d">Últimos 7 dias</option>
             <option value="30d">Últimos 30 dias</option>
@@ -192,11 +200,11 @@ export default async function LeadsPage({
         </div>
         <div>
           <Label htmlFor="from">De</Label>
-          <input id="from" type="date" name="from" defaultValue={params.from} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm" />
+          <input id="from" type="date" name="from" defaultValue={params.from} className={cn("w-full", controlClass)} />
         </div>
         <div>
           <Label htmlFor="to">Até</Label>
-          <input id="to" type="date" name="to" defaultValue={params.to} className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm" />
+          <input id="to" type="date" name="to" defaultValue={params.to} className={cn("w-full", controlClass)} />
         </div>
         <div>
           <Label htmlFor="marketingConsent">Consentimento de marketing</Label>
@@ -204,7 +212,7 @@ export default async function LeadsPage({
             id="marketingConsent"
             name="marketingConsent"
             defaultValue={marketingConsent ?? ""}
-            className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm"
+            className={cn("w-full", controlClass)}
           >
             <option value="">Todos</option>
             {/* "Com" inclui as leads «Parcial» (aceitaram pelo menos um). */}
@@ -212,36 +220,54 @@ export default async function LeadsPage({
             <option value="not_granted">Sem consentimento aceite</option>
           </select>
         </div>
-        <label className="flex h-10 items-center gap-2 text-sm text-caetano-anthracite">
-          <input type="checkbox" name="excludeTest" value="true" defaultChecked={excludeTest} className="h-4 w-4 rounded border-caetano-medium-gray" />
-          Excluir participações de teste
-        </label>
-        {/* Desmarcada, a caixa não vai no pedido e o filtro voltava a ligado:
-            este "false" chega em segundo lugar e só conta quando ela não vai. */}
-        <input type="hidden" name="excludeTest" value="false" />
-        <label className="flex h-10 items-center gap-2 text-sm text-caetano-anthracite">
-          <input
-            type="checkbox"
-            name="hideAnonymized"
-            value="true"
-            defaultChecked={filters.hideAnonymized}
-            className="h-4 w-4 rounded border-caetano-medium-gray"
-          />
-          Ocultar anonimizadas
-        </label>
-        <Button type="submit" variant="outline">
-          Aplicar filtros
-        </Button>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:col-span-2 lg:col-span-5">
+          <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-caetano-anthracite">
+            <input
+              type="checkbox"
+              name="excludeTest"
+              value="true"
+              defaultChecked={excludeTest}
+              className="h-4 w-4 rounded border-caetano-anthracite-60 accent-caetano-deep-blue"
+            />
+            Excluir participações de teste
+          </label>
+          {/* Desmarcada, a caixa não vai no pedido e o filtro voltava a ligado:
+              este "false" chega em segundo lugar e só conta quando ela não vai. */}
+          <input type="hidden" name="excludeTest" value="false" />
+          <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-caetano-anthracite">
+            <input
+              type="checkbox"
+              name="hideAnonymized"
+              value="true"
+              defaultChecked={filters.hideAnonymized}
+              className="h-4 w-4 rounded border-caetano-anthracite-60 accent-caetano-deep-blue"
+            />
+            Ocultar anonimizadas
+          </label>
+        </div>
+        <div className="flex items-end sm:col-span-2 lg:col-span-1 lg:justify-end">
+          <Button type="submit" variant="primary" className="w-full lg:w-auto">
+            Aplicar filtros
+          </Button>
+        </div>
       </form>
 
       {canManagePrivacy && (
         <section
           aria-labelledby="privacy-actions-heading"
-          className="mb-3 space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+          className="mb-6 space-y-4 rounded-2xl border border-caetano-medium-gray-40 bg-white p-4 shadow-xs sm:p-5"
         >
-          <h2 id="privacy-actions-heading" className="text-sm font-bold text-caetano-anthracite">
-            Dados pessoais
-          </h2>
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-caetano-cyan-20 text-caetano-deep-blue"
+            >
+              <ShieldCheck size={18} />
+            </span>
+            <h2 id="privacy-actions-heading" className="text-base font-bold text-caetano-deep-blue sm:text-lg">
+              Dados pessoais
+            </h2>
+          </div>
           <div className="flex flex-wrap items-start gap-3">
             {/* As caixas de cada linha pertencem a este formulário (form="…"). */}
             <ActionForm
@@ -279,7 +305,12 @@ export default async function LeadsPage({
               )}
             </ActionForm>
           </div>
-          <ActionForm action={anonymizeLeadsAction} resetOnSuccess={false} className="flex flex-wrap items-end gap-2" messageClassName="basis-full">
+          <ActionForm
+            action={anonymizeLeadsAction}
+            resetOnSuccess={false}
+            className="flex flex-wrap items-end gap-2 border-t border-caetano-medium-gray-40 pt-4"
+            messageClassName="basis-full"
+          >
             <input type="hidden" name="scope" value="subject" />
             {/* Uma largura própria: com `flex-1` e sem mínimo, os três botões
                 espremiam o campo até ~26 px em algumas larguras. No telemóvel
@@ -326,12 +357,12 @@ export default async function LeadsPage({
         tabIndex={0}
         role="region"
         aria-label="Tabela de leads"
-        className="overflow-x-auto rounded-xl border border-caetano-medium-gray-40 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+        className="overflow-x-auto rounded-2xl border border-caetano-medium-gray-40 bg-white shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
       >
         <table className="w-full text-sm">
           <caption className="sr-only">Participações e leads recolhidos</caption>
-          <thead>
-            <tr className="border-b border-caetano-medium-gray-20 text-left text-xs uppercase text-caetano-anthracite-80">
+          <thead className="bg-caetano-medium-gray-20">
+            <tr className="border-b border-caetano-medium-gray-40 text-left text-xs uppercase tracking-[0.08em] text-caetano-anthracite-80">
               {canManagePrivacy && (
                 <th scope="col" className="px-4 py-3">
                   <SelectAllCheckbox formId={SELECTION_FORM_ID} name="participationId" label="Selecionar todas as leads desta página" />
@@ -348,7 +379,7 @@ export default async function LeadsPage({
               <th scope="col" className="px-4 py-3">Origem</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-caetano-medium-gray-20">
+          <tbody className="divide-y divide-caetano-medium-gray-40">
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={canManagePrivacy ? 10 : 9} className="px-4 py-8 text-center text-caetano-anthracite-80">
@@ -357,7 +388,7 @@ export default async function LeadsPage({
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="transition-colors hover:bg-caetano-medium-gray-20">
                   {canManagePrivacy && (
                     <td className="px-4 py-3">
                       {/* A chave muda com a anonimização: a caixa volta desmarcada. */}

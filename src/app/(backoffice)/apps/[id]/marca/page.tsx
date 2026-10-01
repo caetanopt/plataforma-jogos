@@ -12,7 +12,8 @@ import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
 import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { ThemeFieldset } from "@/components/backoffice/editor/theme-fieldset";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { controlClass, Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 export default async function BrandStepPage({ params }: { params: Promise<{ id: string }> }) {
@@ -46,7 +47,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
   return (
     <div className="max-w-2xl space-y-8">
       <div>
-        <h2 className="text-lg font-bold text-caetano-anthracite">Marca e design</h2>
+        <h2 className="text-lg font-bold text-caetano-deep-blue sm:text-xl">Marca e design</h2>
         <p className="mt-1 text-sm text-caetano-anthracite-80">
           Personalize a identidade visual desta campanha. Cada campanha guarda a sua própria
           cópia — alterações aqui não afetam outras campanhas nem o brand kit de origem.
@@ -58,7 +59,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
         <ActionForm
           action={applyBrandKitAction}
           resetOnSuccess={false}
-          className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+          className="flex flex-wrap items-end gap-2 rounded-2xl border border-caetano-medium-gray-40 bg-white p-4 shadow-xs sm:p-5"
           messageClassName="w-full"
         >
           <input type="hidden" name="campaignId" value={campaign.id} />
@@ -68,7 +69,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
               id="brandKitId"
               name="brandKitId"
               defaultValue={campaign.theme.sourceBrandKitId ?? undefined}
-              className="h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm text-caetano-anthracite focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
+              className={cn("w-full", controlClass)}
             >
               {brandKits.map((kit) => (
                 <option key={kit.id} value={kit.id}>
@@ -82,7 +83,10 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
       )}
 
       {/* Sem o nome do tema: não se edita aqui, e a ação mantém o gravado. */}
-      <AutoSaveForm action={updateCampaignThemeAction} className="space-y-4">
+      <AutoSaveForm
+        action={updateCampaignThemeAction}
+        className="space-y-4 rounded-2xl border border-caetano-medium-gray-40 bg-white p-4 shadow-xs sm:p-6"
+      >
         <input type="hidden" name="campaignId" value={campaign.id} />
         <ThemeFieldset
           theme={campaign.theme}
@@ -93,7 +97,7 @@ export default async function BrandStepPage({ params }: { params: Promise<{ id: 
       {canManageBrand && (
         <ActionForm
           action={saveAsBrandKitAction}
-          className="flex flex-wrap items-end gap-2 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
+          className="flex flex-wrap items-end gap-2 rounded-2xl border border-caetano-medium-gray-40 bg-white p-4 shadow-xs sm:p-5"
           messageClassName="w-full"
         >
           <input type="hidden" name="campaignId" value={campaign.id} />
