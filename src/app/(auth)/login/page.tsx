@@ -22,8 +22,8 @@ export default async function LoginPage({
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Entrar</h1>
-      <p className="mb-6 text-sm text-caetano-anthracite-80">
+      <h1 className="mb-1.5 text-2xl font-bold tracking-tight text-caetano-deep-blue sm:text-[2rem]">Entrar</h1>
+      <p className="mb-8 text-base font-light text-caetano-anthracite-80">
         Acesso à plataforma de jogos interativos.
       </p>
 
@@ -49,14 +49,14 @@ export default async function LoginPage({
             required
           />
         </div>
-        <SubmitButton pendingLabel="A entrar…" className="w-full">
+        <SubmitButton pendingLabel="A entrar…" size="lg" className="w-full">
           Entrar
         </SubmitButton>
       </form>
 
       <Link
         href="/forgot-password"
-        className="mt-4 block text-center text-sm text-caetano-deep-blue hover:underline"
+        className="mt-6 block rounded text-center text-sm font-medium text-caetano-deep-blue underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
       >
         Esqueceu a password?
       </Link>

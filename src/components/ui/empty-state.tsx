@@ -15,17 +15,28 @@ export function EmptyState({
   title,
   description,
   action,
+  icon,
   className,
 }: {
   title: string;
   description?: string;
   /** Botão ou link que resolve o vazio. */
   action?: ReactNode;
+  /** Ícone decorativo (lucide), mostrado num círculo do azul cyan. */
+  icon?: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("px-6 py-10 text-center", className)}>
-      <p className="text-sm font-medium text-caetano-anthracite">{title}</p>
+    <div className={cn("animate-enter px-6 py-12 text-center", className)}>
+      {icon && (
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-caetano-cyan-20 text-caetano-deep-blue"
+        >
+          {icon}
+        </div>
+      )}
+      <p className="text-base font-bold text-caetano-deep-blue">{title}</p>
       {description && (
         <p className="mx-auto mt-1 max-w-sm text-sm text-caetano-anthracite-80">{description}</p>
       )}

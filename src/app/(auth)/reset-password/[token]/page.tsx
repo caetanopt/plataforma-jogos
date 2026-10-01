@@ -11,8 +11,8 @@ export default async function LegacyResetPasswordPage({ params }: { params: Prom
   const { token } = await params;
   return (
     <div>
-      <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Definir password</h1>
-      <p className="mb-6 text-sm text-caetano-anthracite-80">Escolha uma nova password para a sua conta.</p>
+      <h1 className="mb-1.5 text-2xl font-bold tracking-tight text-caetano-deep-blue sm:text-[2rem]">Definir password</h1>
+      <p className="mb-8 text-base font-light text-caetano-anthracite-80">Escolha uma nova password para a sua conta.</p>
       <ResetPasswordForm legacyToken={token} />
     </div>
   );

@@ -1,10 +1,5 @@
-"use client";
-
-import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "@/components/backoffice/nav-items";
-import { ProgressLink } from "@/components/backoffice/navigation-progress";
 import { BrandLogo } from "@/components/backoffice/brand-logo";
-import { cn } from "@/lib/utils";
+import { BrandClaim, NavList } from "@/components/backoffice/nav-list";
 
 export function Sidebar({
   visibleHrefs,
@@ -16,37 +11,19 @@ export function Sidebar({
   organizationName: string;
   logoUrl?: string | null;
 }) {
-  const pathname = usePathname();
-
   return (
     <nav
       aria-label="Navegação principal"
-      className="hidden w-60 flex-col gap-1 border-r border-caetano-medium-gray-40 bg-white p-4 md:flex"
+      // Fixa à altura do ecrã: a navegação fica à mão numa página longa.
+      className="surface-sidebar sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto px-4 pb-5 pt-6 md:flex"
     >
-      <div className="mb-6 flex items-center px-2">
-        <BrandLogo logoUrl={logoUrl} organizationName={organizationName} />
+      <div className="mb-8 flex min-h-10 items-center px-3">
+        <BrandLogo logoUrl={logoUrl} organizationName={organizationName} onDark />
       </div>
-      {NAV_ITEMS.filter((item) => visibleHrefs.includes(item.href)).map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const Icon = item.icon;
-        return (
-          <ProgressLink
-            key={item.href}
-            href={item.href}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan",
-              isActive
-                ? "bg-caetano-deep-blue text-white"
-                : "text-caetano-anthracite hover:bg-caetano-medium-gray-20 active:bg-caetano-medium-gray-40",
-            )}
-          >
-            <Icon size={18} aria-hidden="true" />
-            {item.label}
-          </ProgressLink>
-        );
-      })}
+      <NavList visibleHrefs={visibleHrefs} />
+      <div className="mt-auto px-3 pt-8">
+        <BrandClaim />
+      </div>
     </nav>
   );
 }

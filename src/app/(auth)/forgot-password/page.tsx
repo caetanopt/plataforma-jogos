@@ -14,8 +14,8 @@ export default async function ForgotPasswordPage({
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-bold text-caetano-anthracite">Recuperar password</h1>
-      <p className="mb-6 text-sm text-caetano-anthracite-80">
+      <h1 className="mb-1.5 text-2xl font-bold tracking-tight text-caetano-deep-blue sm:text-[2rem]">Recuperar password</h1>
+      <p className="mb-8 text-base font-light text-caetano-anthracite-80">
         Introduza o seu e-mail para receber um link de recuperação.
       </p>
 

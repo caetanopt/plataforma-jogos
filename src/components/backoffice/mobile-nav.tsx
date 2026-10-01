@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { NAV_ITEMS } from "@/components/backoffice/nav-items";
-import { ProgressLink } from "@/components/backoffice/navigation-progress";
 import { BrandLogo } from "@/components/backoffice/brand-logo";
-import { cn } from "@/lib/utils";
+import { BrandClaim, NavList } from "@/components/backoffice/nav-list";
 
 export function MobileNav({
   visibleHrefs,
@@ -19,7 +16,6 @@ export function MobileNav({
   logoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const openButtonRef = useRef<HTMLButtonElement>(null);
@@ -66,7 +62,7 @@ export function MobileNav({
         onClick={() => setOpen(true)}
         aria-label="Abrir menu de navegação"
         aria-expanded={open}
-        className="flex h-10 w-10 cursor-pointer touch-manipulation items-center justify-center rounded-lg text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
+        className="flex h-10 w-10 cursor-pointer touch-manipulation items-center justify-center rounded-xl text-caetano-deep-blue transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
       >
         <Menu size={22} aria-hidden="true" />
       </button>
@@ -75,51 +71,35 @@ export function MobileNav({
         <div className="fixed inset-0 z-50 flex">
           <div
             ref={dialogRef}
-            className="w-64 bg-white p-4 shadow-lg"
+            // Desliza da esquerda, de onde vem o botão (parado com movimento reduzido).
+            className="surface-sidebar flex w-72 max-w-[85vw] flex-col overflow-y-auto px-4 pb-5 pt-5 shadow-lg motion-safe:animate-[slide-in-left_var(--duration-base)_var(--ease-out-expo)]"
             role="dialog"
             aria-modal="true"
             aria-label="Navegação"
           >
-            <div className="mb-6 flex items-center justify-between px-2">
-              <BrandLogo logoUrl={logoUrl} organizationName={organizationName} />
+            <div className="mb-6 flex items-center justify-between px-3">
+              <BrandLogo logoUrl={logoUrl} organizationName={organizationName} onDark />
               <button
                 ref={closeButtonRef}
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Fechar menu"
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
+                className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-white transition-colors hover:bg-caetano-deep-blue-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-deep-blue"
               >
-                <X size={18} aria-hidden="true" />
+                <X size={20} aria-hidden="true" />
               </button>
             </div>
-            <nav aria-label="Navegação principal" className="flex flex-col gap-1">
-              {NAV_ITEMS.filter((item) => visibleHrefs.includes(item.href)).map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                const Icon = item.icon;
-                return (
-                  <ProgressLink
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
-                      isActive
-                        ? "bg-caetano-deep-blue text-white"
-                        : "text-caetano-anthracite hover:bg-caetano-medium-gray-20",
-                    )}
-                  >
-                    <Icon size={18} aria-hidden="true" />
-                    {item.label}
-                  </ProgressLink>
-                );
-              })}
+            <nav aria-label="Navegação principal">
+              <NavList visibleHrefs={visibleHrefs} onNavigate={() => setOpen(false)} />
             </nav>
+            <div className="mt-auto px-3 pt-8">
+              <BrandClaim />
+            </div>
           </div>
           <button
             type="button"
             aria-label="Fechar menu"
-            className="flex-1 bg-black/40"
+            className="flex-1 bg-caetano-anthracite/50 motion-safe:animate-fade-in"
             onClick={() => setOpen(false)}
           />
         </div>

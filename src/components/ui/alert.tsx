@@ -54,7 +54,12 @@ export function Alert({
   return (
     <div
       role={live ? (isUrgent ? "alert" : "status") : undefined}
-      className={cn("flex items-start gap-2 rounded-lg border px-4 py-3 text-sm", variantClasses[variant])}
+      className={cn(
+        "flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm",
+        // Uma resposta a uma ação entra; um aviso que já lá estava não se mexe.
+        live && "animate-enter",
+        variantClasses[variant],
+      )}
     >
       <Icon size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
       <div>

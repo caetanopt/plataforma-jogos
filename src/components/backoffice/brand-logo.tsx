@@ -42,7 +42,10 @@ export function BrandLogo({
       <img
         src={logoUrl}
         alt={organizationName || PRODUCT_NAME}
-        className={`${SIZE_CLASSES[size]} w-auto object-contain`}
+        // Sobre o azul profundo, a versão negativa do manual (04.3): o
+        // ficheiro oficial a branco. É o mesmo desenho, só na cor que o
+        // manual prevê para fundos escuros — nunca outra cor.
+        className={`${SIZE_CLASSES[size]} w-auto object-contain ${onDark ? "brightness-0 invert" : ""}`}
       />
     );
   }

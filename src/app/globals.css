@@ -74,6 +74,33 @@
   --color-danger: #b3261e;
   --color-danger-strong: #8c1d18;
   --color-danger-surface: #fbeae9;
+
+  /*
+    Claim "Your favourite way to move" (Brand Book 07.1): Montserrat Medium,
+    #2aa8e0 sobre fundo claro; branco sobre fundo escuro (07.2). Só para o
+    claim — não é uma cor da paleta.
+  */
+  --color-caetano-claim: #2aa8e0;
+
+  /*
+    Elevação. As sombras são do azul profundo, não de preto: num fundo da
+    paleta, uma sombra preta acinzenta a cor oficial à volta do cartão. São a
+    única transparência do sistema — uma sombra não é uma superfície.
+  */
+  --shadow-xs: 0 1px 2px rgb(0 46 93 / 0.06);
+  --shadow-sm: 0 1px 2px rgb(0 46 93 / 0.06), 0 2px 6px rgb(0 46 93 / 0.06);
+  --shadow-md: 0 2px 4px rgb(0 46 93 / 0.06), 0 8px 20px -4px rgb(0 46 93 / 0.12);
+  --shadow-lg: 0 4px 8px rgb(0 46 93 / 0.06), 0 20px 40px -12px rgb(0 46 93 / 0.22);
+
+  /*
+    Movimento (§27): rápido a sair, suave a assentar, como a fluidez da marca
+    (02.1). Tudo o que anima desliga-se com prefers-reduced-motion (no fim).
+  */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 450ms;
 }
 
 @theme inline {
@@ -128,6 +155,19 @@
   --color-danger: var(--color-danger);
   --color-danger-strong: var(--color-danger-strong);
   --color-danger-surface: var(--color-danger-surface);
+  --color-caetano-claim: var(--color-caetano-claim);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --ease-out-expo: var(--ease-out-expo);
+  --ease-in-out-soft: var(--ease-in-out-soft);
+
+  --animate-enter: enter var(--duration-slow) var(--ease-out-expo) backwards;
+  --animate-fade-in: fade-in var(--duration-base) ease-out backwards;
+  --animate-scale-in: scale-in var(--duration-base) var(--ease-out-expo) backwards;
+  --animate-shimmer: shimmer 1.6s linear infinite;
 
   /*
     Jogo público: as cores do tema da campanha (Marca e design), definidas no
@@ -200,6 +240,156 @@ body {
 @media (max-width: 480px) {
   .memory-grid {
     grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr));
+  }
+}
+
+/*
+  Entrada de conteúdo: aparece e assenta 8 px. "backwards" e não "both": no
+  fim da animação não fica nenhum transform no elemento — um transform
+  permanente passava a ser o contentor dos elementos fixos lá dentro.
+*/
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/*
+  Entrada em cascata: cada filho direto entra um pouco depois do anterior
+  (até ao 12.º; os seguintes entram com ele). O conteúdo nunca espera mais
+  de ~0,4 s para aparecer.
+*/
+.stagger > * {
+  animation: var(--animate-enter);
+}
+.stagger > :nth-child(2) { animation-delay: 30ms; }
+.stagger > :nth-child(3) { animation-delay: 60ms; }
+.stagger > :nth-child(4) { animation-delay: 90ms; }
+.stagger > :nth-child(5) { animation-delay: 120ms; }
+.stagger > :nth-child(6) { animation-delay: 150ms; }
+.stagger > :nth-child(7) { animation-delay: 180ms; }
+.stagger > :nth-child(8) { animation-delay: 210ms; }
+.stagger > :nth-child(9) { animation-delay: 240ms; }
+.stagger > :nth-child(10) { animation-delay: 270ms; }
+.stagger > :nth-child(11) { animation-delay: 300ms; }
+.stagger > :nth-child(n + 12) { animation-delay: 330ms; }
+
+/*
+  Superfície de marca: o azul profundo com a luz do azul cyan e do azul céu,
+  como nos fundos do Brand Book (08.9 Comunicação indoor, 09.4 Fundo Teams).
+  Só cores da paleta; a transição entre elas é o próprio gradiente.
+*/
+.surface-brand {
+  background-color: var(--color-caetano-deep-blue);
+  background-image:
+    radial-gradient(70% 60% at 90% 0%, rgb(0 174 239 / 0.6), transparent 70%),
+    radial-gradient(55% 45% at 0% 100%, rgb(0 174 239 / 0.4), transparent 70%);
+  color: #ffffff;
+}
+
+/*
+  Luz que se move devagar sobre a superfície de marca: a "mobilidade" do
+  manual, sem nunca competir com o texto. Decorativa (aria-hidden) e parada
+  com movimento reduzido.
+*/
+@keyframes aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-6%, 4%, 0) scale(1.08);
+  }
+}
+
+@keyframes streak {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+.brand-aurora {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(35% 45% at 70% 30%, rgb(0 174 239 / 0.45), transparent 70%),
+    radial-gradient(30% 40% at 30% 75%, rgb(102 206 245 / 0.3), transparent 70%);
+  animation: aurora 18s var(--ease-in-out-soft) infinite;
+  pointer-events: none;
+}
+
+.brand-streak {
+  position: absolute;
+  left: 0;
+  height: 1px;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: streak 7s var(--ease-in-out-soft) infinite;
+  pointer-events: none;
+}
+
+/*
+  Barra lateral: o azul profundo, com a luz do azul cyan a nascer em baixo,
+  atrás do claim (só lá: o texto da navegação fica sobre o azul liso).
+*/
+.surface-sidebar {
+  background-color: var(--color-caetano-deep-blue);
+  background-image: radial-gradient(120% 40% at 0% 100%, rgb(0 174 239 / 0.35), transparent 70%);
+  color: #ffffff;
+}
+
+/* Esqueleto: uma luz que passa, em vez do piscar do pulse. */
+.skeleton {
+  background-color: var(--color-caetano-medium-gray-40);
+  background-image: linear-gradient(
+    90deg,
+    var(--color-caetano-medium-gray-40) 0%,
+    var(--color-caetano-medium-gray-20) 50%,
+    var(--color-caetano-medium-gray-40) 100%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-aurora,
+  .brand-streak {
+    animation: none;
+  }
+  .brand-streak {
+    display: none;
   }
 }
 

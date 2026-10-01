@@ -33,7 +33,7 @@ export function FolderCard({
   sort: FolderSort;
 }) {
   return (
-    <div className="relative">
+    <div className="group/folder relative">
       {/*
         Efeito de "papéis empilhados" por baixo do cartão: duas faixas
         decorativas, cada vez mais estreitas, que só espreitam na base. São
@@ -41,16 +41,17 @@ export function FolderCard({
       */}
       <div
         aria-hidden="true"
-        className="absolute inset-x-6 -bottom-2 h-3 rounded-b-xl border border-t-0 border-caetano-medium-gray-40 bg-caetano-medium-gray-20"
+        className="absolute inset-x-6 -bottom-2 h-3 rounded-b-2xl border border-t-0 border-caetano-medium-gray-40 bg-caetano-medium-gray-20 transition-[translate] duration-300 ease-(--ease-out-expo) group-hover/folder:translate-y-0.5"
       />
       <div
         aria-hidden="true"
-        className="absolute inset-x-3 -bottom-1 h-3 rounded-b-xl border border-t-0 border-caetano-medium-gray-40 bg-white"
+        className="absolute inset-x-3 -bottom-1 h-3 rounded-b-2xl border border-t-0 border-caetano-medium-gray-40 bg-white"
       />
 
-      <article className="relative flex items-start gap-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4 transition-shadow focus-within:shadow-md hover:shadow-md">
+      <article className="relative flex items-start gap-3.5 rounded-2xl border border-caetano-medium-gray-40 bg-white p-4 shadow-xs transition-[box-shadow,translate,border-color] duration-300 ease-(--ease-out-expo) focus-within:shadow-md hover:border-caetano-medium-gray-60 hover:shadow-md motion-safe:group-hover/folder:-translate-y-0.5">
+        {/* O ícone na superfície de marca: do azul profundo ao azul cyan. */}
         <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-caetano-cyan-20 text-caetano-deep-blue"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linear-135 from-caetano-deep-blue to-caetano-cyan text-white shadow-sm"
           aria-hidden="true"
         >
           <FolderIcon size={20} />
@@ -62,12 +63,12 @@ export function FolderCard({
             "Target Size"), mas fica por baixo do menu "..." em z-index para
             que as ações continuem a ser acionáveis.
           */}
-          <h3 className="truncate text-sm font-bold text-caetano-anthracite">
+          <h3 className="truncate text-sm font-bold text-caetano-deep-blue">
             <Link
               href={`/apps?folderId=${id}`}
               // O anel é desenhado pelo pseudo-elemento que cobre o cartão,
               // para o foco envolver o cartão inteiro e não só o texto.
-              className="outline-none before:absolute before:inset-0 before:rounded-xl focus-visible:before:ring-2 focus-visible:before:ring-caetano-cyan focus-visible:before:ring-offset-2"
+              className="outline-none before:absolute before:inset-0 before:rounded-2xl focus-visible:before:ring-2 focus-visible:before:ring-caetano-cyan focus-visible:before:ring-offset-2"
             >
               {name}
             </Link>

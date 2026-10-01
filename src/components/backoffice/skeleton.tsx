@@ -32,7 +32,7 @@ function Bar({ className = "" }: { className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`block rounded bg-caetano-medium-gray-40 motion-safe:animate-pulse ${className}`}
+      className={`skeleton block rounded-md ${className}`}
     />
   );
 }

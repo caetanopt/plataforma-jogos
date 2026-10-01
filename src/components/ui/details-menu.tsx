@@ -68,8 +68,10 @@ export function DetailsMenu({
       </summary>
       <div
         className={cn(
-          "absolute z-20 mt-1 w-56 rounded-lg border border-caetano-medium-gray-40 bg-white p-1 shadow-lg",
-          align === "right" ? "right-0" : "left-0",
+          "absolute z-20 mt-1.5 w-56 rounded-xl border border-caetano-medium-gray-40 bg-white p-1.5 shadow-lg",
+          // Abre a partir do botão (o canto de onde sai), parado com movimento reduzido.
+          "motion-safe:animate-scale-in",
+          align === "right" ? "right-0 origin-top-right" : "left-0 origin-top-left",
           panelClassName,
         )}
       >
@@ -81,7 +83,7 @@ export function DetailsMenu({
 
 /** Estilo partilhado dos `<summary>` usados como botão de menu. */
 export const summaryClass = cn(
-  "flex h-8 w-8 cursor-pointer list-none select-none items-center justify-center rounded-lg",
+  "flex h-8 w-8 cursor-pointer list-none select-none items-center justify-center rounded-lg [[open]>&]:bg-caetano-medium-gray-20",
   "text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 active:bg-caetano-medium-gray-40",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan",
   // O Safari continua a desenhar o triângulo sem isto.
@@ -90,7 +92,7 @@ export const summaryClass = cn(
 
 /** Estilo partilhado dos itens dentro de um menu. */
 export const menuItemClass = cn(
-  "block w-full cursor-pointer rounded-md px-3 py-1.5 text-left text-sm text-caetano-anthracite",
+  "block w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm text-caetano-anthracite",
   "transition-colors hover:bg-caetano-medium-gray-20 active:bg-caetano-medium-gray-40",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan",
 );

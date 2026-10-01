@@ -33,7 +33,7 @@ function pageList(current: number, total: number): Array<number | "gap"> {
 }
 
 const itemClass =
-  "inline-flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan";
+  "inline-flex h-9 min-w-9 items-center justify-center rounded-xl px-2.5 text-sm transition-[background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan";
 
 export function Pagination({
   page,
@@ -93,7 +93,7 @@ export function Pagination({
                 className={cn(
                   itemClass,
                   item === page
-                    ? "bg-caetano-deep-blue font-bold text-white"
+                    ? "bg-caetano-deep-blue font-bold text-white shadow-sm"
                     : "text-caetano-anthracite hover:bg-caetano-medium-gray-20",
                 )}
               >

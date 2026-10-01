@@ -1,6 +1,13 @@
 import { LogOut } from "lucide-react";
 import { MobileNav } from "@/components/backoffice/mobile-nav";
 
+/** As iniciais do nome (duas no máximo), para o círculo do utilizador. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? [parts[0]![0], parts[parts.length - 1]![0]] : [parts[0]?.[0]];
+  return letters.filter(Boolean).join("").toUpperCase();
+}
+
 export function Topbar({
   organizationName,
   userName,
@@ -13,17 +20,26 @@ export function Topbar({
   logoUrl?: string | null;
 }) {
   return (
-    <header className="flex h-16 items-center justify-between border-b border-caetano-medium-gray-40 bg-white px-4 md:px-6">
-      <div className="flex items-center gap-3">
+    // Fixa ao fazer scroll, opaca: o conteúdo passa por baixo sem se ver.
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-caetano-medium-gray-40 bg-white px-4 md:px-8">
+      <div className="flex min-w-0 items-center gap-3">
         <MobileNav visibleHrefs={visibleHrefs} organizationName={organizationName} logoUrl={logoUrl} />
-        <span className="text-sm font-medium text-caetano-anthracite">{organizationName}</span>
+        <span className="truncate text-sm font-medium text-caetano-anthracite">{organizationName}</span>
       </div>
-      <div className="flex items-center gap-4">
-        <span className="hidden text-sm text-caetano-anthracite sm:inline">{userName}</span>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <span className="hidden items-center gap-2.5 sm:flex">
+          <span
+            aria-hidden="true"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-caetano-deep-blue text-xs font-bold text-white ring-2 ring-caetano-cyan-20"
+          >
+            {initials(userName)}
+          </span>
+          <span className="text-sm text-caetano-anthracite">{userName}</span>
+        </span>
         <form action="/api/logout" method="post">
           <button
             type="submit"
-            className="flex cursor-pointer touch-manipulation items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
+            className="flex min-h-10 cursor-pointer touch-manipulation items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
           >
             <LogOut size={16} aria-hidden="true" />
             <span className="hidden sm:inline">Sair</span>
