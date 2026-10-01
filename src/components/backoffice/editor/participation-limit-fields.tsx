@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { SyncedSelect } from "@/components/forms/synced-fields";
+import { HELP_CLASS, SELECT_CLASS, SelectShell } from "@/components/backoffice/editor/editor-ui";
 
 const CUSTOM_MAX = "CUSTOM_MAX";
 
@@ -54,23 +55,26 @@ export function ParticipationLimitFields({
 
   const customMaxEnabled = type === CUSTOM_MAX;
 
+  // Um por baixo do outro: a ajuda do máximo fala do "limite acima".
   return (
     <>
       <div>
         <Label htmlFor="participationLimitType">Limite de participação</Label>
-        <SyncedSelect
-          id="participationLimitType"
-          name="participationLimitType"
-          defaultValue={defaultType}
-          onChange={handleTypeChange}
-          className="h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </SyncedSelect>
+        <SelectShell>
+          <SyncedSelect
+            id="participationLimitType"
+            name="participationLimitType"
+            defaultValue={defaultType}
+            onChange={handleTypeChange}
+            className={SELECT_CLASS}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </SyncedSelect>
+        </SelectShell>
       </div>
 
       <div>
@@ -87,8 +91,9 @@ export function ParticipationLimitFields({
           disabled={!customMaxEnabled}
           aria-required={customMaxEnabled}
           aria-describedby="participationCustomMax-help"
+          className="disabled:bg-caetano-medium-gray-20 sm:max-w-xs"
         />
-        <p id="participationCustomMax-help" className="mt-1 text-xs text-caetano-anthracite-80">
+        <p id="participationCustomMax-help" className={HELP_CLASS}>
           {customMaxEnabled
             ? `Obrigatório: número de participações por pessoa (${customMaxMin} a ${groupThousands(customMaxMax)}).`
             : "Só aplicável quando o limite acima é «Máximo personalizado»."}

@@ -9,6 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { SubmitButton } from "@/components/ui/submit-button";
+import {
+  CHECKBOX_INPUT_CLASS,
+  CHECKBOX_LABEL_CLASS,
+  HELP_CLASS,
+  TEXTAREA_CLASS,
+} from "@/components/backoffice/editor/editor-ui";
+import { Plus } from "lucide-react";
 
 /** Valores gravados de um prémio; as datas já vêm em hora local da campanha. */
 export interface PrizeFormValues {
@@ -39,8 +46,6 @@ interface PrizeFormProps {
   prize?: PrizeFormValues;
 }
 
-const TEXTAREA_CLASS =
-  "w-full rounded-lg border border-caetano-medium-gray bg-white px-3 py-2 text-sm text-caetano-anthracite focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan aria-invalid:border-danger";
 
 /**
  * Formulário de um prémio (§13), o mesmo para adicionar e editar.
@@ -58,12 +63,12 @@ export function PrizeForm({ action, campaignId, timeZone, prize }: PrizeFormProp
       action={action}
       // Só o de adicionar limpa (e o reset também esvazia a imagem).
       resetOnSuccess={!prize}
-      className="space-y-3"
+      className="space-y-4"
     >
       <input type="hidden" name="campaignId" value={campaignId} />
       {prize && <input type="hidden" name="prizeId" value={prize.id} />}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor={fieldId("internalName")}>Nome interno</Label>
           <Input
@@ -107,7 +112,7 @@ export function PrizeForm({ action, campaignId, timeZone, prize }: PrizeFormProp
         accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor={fieldId("totalQuantity")}>Quantidade total (opcional)</Label>
           <Input
@@ -122,7 +127,7 @@ export function PrizeForm({ action, campaignId, timeZone, prize }: PrizeFormProp
             defaultValue={prize?.totalQuantity ?? ""}
             aria-describedby={`${fieldId("totalQuantity")}-help`}
           />
-          <p id={`${fieldId("totalQuantity")}-help`} className="mt-1 text-xs text-caetano-anthracite-80">
+          <p id={`${fieldId("totalQuantity")}-help`} className={HELP_CLASS}>
             {prize ? `Vazio = sem limite. Já atribuídos ou reservados: ${awarded}.` : "Vazio = sem limite."}
           </p>
         </div>
@@ -165,9 +170,9 @@ export function PrizeForm({ action, campaignId, timeZone, prize }: PrizeFormProp
         />
       </div>
 
-      <fieldset className="space-y-1">
-        <legend className="text-sm font-medium text-caetano-anthracite">Período (opcional)</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="mb-2 text-sm font-medium text-caetano-anthracite">Período (opcional)</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor={fieldId("startAt")} className="font-normal">
               Início
@@ -181,20 +186,26 @@ export function PrizeForm({ action, campaignId, timeZone, prize }: PrizeFormProp
             <Input id={fieldId("endAt")} name="endAt" type="datetime-local" defaultValue={prize?.endAt ?? ""} />
           </div>
         </div>
-        <p className="text-xs text-caetano-anthracite-80">Horas no fuso horário da campanha ({timeZone}).</p>
+        <p className="text-xs leading-relaxed text-caetano-anthracite-80">Horas no fuso horário da campanha ({timeZone}).</p>
       </fieldset>
 
-      <div>
-        <CheckboxField name="isActive" defaultChecked={prize?.isActive ?? true}>
+      <div className="border-t border-caetano-medium-gray-40 pt-4">
+        <CheckboxField
+          name="isActive"
+          defaultChecked={prize?.isActive ?? true}
+          className={CHECKBOX_INPUT_CLASS}
+          labelClassName={CHECKBOX_LABEL_CLASS}
+        >
           Ativo
         </CheckboxField>
-        <p className="mt-1 text-xs text-caetano-anthracite-80">
+        <p className="text-xs leading-relaxed text-caetano-anthracite-80">
           Desativar um prémio ou terminar o seu período retira-o do sorteio: a probabilidade dos outros segmentos
           aumenta.
         </p>
       </div>
 
-      <SubmitButton variant="outline" size="sm">
+      <SubmitButton variant="outline">
+        {!prize && <Plus size={16} aria-hidden="true" />}
         {prize ? "Guardar prémio" : "Adicionar prémio"}
       </SubmitButton>
     </ActionForm>

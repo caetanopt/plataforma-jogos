@@ -7,7 +7,15 @@ import { ParticipationLimitFields } from "@/components/backoffice/editor/partici
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import {
+  FieldGroup,
+  HELP_CLASS,
+  STEP_CARD_CLASS,
+  STEP_CONTENT_CLASS,
+  StepHeader,
+} from "@/components/backoffice/editor/editor-ui";
 import { PARTICIPATION_LIMIT_TYPE_LABELS } from "@/lib/labels";
+import { cn } from "@/lib/utils";
 import { PARTICIPATION_LIMITS } from "@/lib/validation/campaign";
 import { isLiveStatus } from "@/features/campaigns/live-status";
 import { isAgeVerifiable, LIVE_AGE_BLOCKED_WARNING } from "@/features/publishing/age-check";
@@ -39,13 +47,11 @@ export default async function ParticipationRulesStepPage({
     );
 
   return (
-    <div className="max-w-2xl space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-caetano-anthracite">Regras de participação</h2>
-        <p className="mt-1 text-sm text-caetano-anthracite-80">
-          Defina quantas vezes cada pessoa pode participar e requisitos de idade.
-        </p>
-      </div>
+    <div className={STEP_CONTENT_CLASS}>
+      <StepHeader
+        title="Regras de participação"
+        description="Defina quantas vezes cada pessoa pode participar e requisitos de idade."
+      />
 
       <Alert variant="info">
         O controlo de duplicados por e-mail, telefone, cookie, sessão ou código é definido na
@@ -55,37 +61,39 @@ export default async function ParticipationRulesStepPage({
 
       {ageBlocked ? <Alert variant="warning" live={false}>{LIVE_AGE_BLOCKED_WARNING}</Alert> : null}
 
-      <AutoSaveForm
-        action={updateParticipationRulesAction}
-        className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
-      >
+      <AutoSaveForm action={updateParticipationRulesAction} className={cn(STEP_CARD_CLASS, "space-y-6")}>
         <input type="hidden" name="campaignId" value={campaign.id} />
 
-        <ParticipationLimitFields
-          options={LIMIT_TYPE_OPTIONS}
-          defaultType={campaign.participationLimitType}
-          defaultCustomMax={campaign.participationCustomMax}
-          customMaxMin={PARTICIPATION_LIMITS.customMaxMin}
-          customMaxMax={PARTICIPATION_LIMITS.customMaxMax}
-        />
-
-        <div>
-          <Label htmlFor="minAge">Idade mínima (opcional)</Label>
-          <Input
-            id="minAge"
-            name="minAge"
-            type="number"
-            inputMode="numeric"
-            min={PARTICIPATION_LIMITS.minAgeMin}
-            max={PARTICIPATION_LIMITS.minAgeMax}
-            step={1}
-            defaultValue={campaign.minAge ?? ""}
-            aria-describedby="minAge-help"
+        <FieldGroup title="Limite por pessoa">
+          <ParticipationLimitFields
+            options={LIMIT_TYPE_OPTIONS}
+            defaultType={campaign.participationLimitType}
+            defaultCustomMax={campaign.participationCustomMax}
+            customMaxMin={PARTICIPATION_LIMITS.customMaxMin}
+            customMaxMax={PARTICIPATION_LIMITS.customMaxMax}
           />
-          <p id="minAge-help" className="mt-1 text-xs text-caetano-anthracite-80">
-            Vazio: sem idade mínima. Só se verifica com o campo «Data de nascimento» no formulário de leads.
-          </p>
-        </div>
+        </FieldGroup>
+
+        <FieldGroup title="Idade">
+          <div>
+            <Label htmlFor="minAge">Idade mínima (opcional)</Label>
+            <Input
+              id="minAge"
+              name="minAge"
+              type="number"
+              inputMode="numeric"
+              min={PARTICIPATION_LIMITS.minAgeMin}
+              max={PARTICIPATION_LIMITS.minAgeMax}
+              step={1}
+              defaultValue={campaign.minAge ?? ""}
+              aria-describedby="minAge-help"
+              className="sm:max-w-xs"
+            />
+            <p id="minAge-help" className={HELP_CLASS}>
+              Vazio: sem idade mínima. Só se verifica com o campo «Data de nascimento» no formulário de leads.
+            </p>
+          </div>
+        </FieldGroup>
       </AutoSaveForm>
     </div>
   );

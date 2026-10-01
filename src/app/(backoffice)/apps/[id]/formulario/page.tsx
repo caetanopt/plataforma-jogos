@@ -13,8 +13,28 @@ import {
 } from "@/features/campaigns/steps/lead-form-actions";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
 import { ActionForm } from "@/components/backoffice/editor/action-form";
+import {
+  ADD_PANEL_CLASS,
+  CHECKBOX_INPUT_CLASS,
+  CHECKBOX_LABEL_CLASS,
+  CHECKBOX_TILE_CLASS,
+  FieldGroup,
+  HELP_CLASS,
+  ICON_BUTTON_CLASS,
+  LIST_ITEM_CLASS,
+  ListEmpty,
+  SectionHeading,
+  SELECT_CLASS,
+  SelectShell,
+  STEP_CARD_CLASS,
+  STEP_CONTENT_CLASS,
+  StepHeader,
+  SUMMARY_CLASS,
+  SummaryChevron,
+  TEXTAREA_CLASS,
+} from "@/components/backoffice/editor/editor-ui";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { controlClass, Input } from "@/components/ui/input";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
@@ -38,12 +58,11 @@ import {
 } from "@/features/privacy/retention-policy";
 import { utcToZonedDateTimeLocal } from "@/lib/dates/timezone";
 import type { DedupStrategy, LeadFieldType } from "@/generated/prisma/client";
+import { cn } from "@/lib/utils";
+import { ArrowDown, ArrowUp, Plus, ShieldCheck, TextCursorInput } from "lucide-react";
 
-const MOVE_BUTTON_CLASS =
-  "flex h-8 w-8 cursor-pointer items-center justify-center rounded text-caetano-anthracite-80 transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40 disabled:pointer-events-none disabled:cursor-default disabled:opacity-30";
-const SUMMARY_CLASS =
-  "cursor-pointer list-none select-none rounded text-sm text-caetano-deep-blue transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan";
-const TEXTAREA_CLASS = "w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm aria-invalid:border-danger";
+/** "Remover" numa linha: discreto até ao rato, sempre no vermelho funcional de destruição. */
+const REMOVE_BUTTON_CLASS = "text-danger hover:bg-danger-surface hover:text-danger-strong active:bg-danger-surface";
 
 export default async function LeadFormStepPage({
   params,
@@ -103,336 +122,398 @@ export default async function LeadFormStepPage({
   );
 
   return (
-    <div className="max-w-3xl space-y-8">
-      <div>
-        <h2 className="text-lg font-bold text-caetano-anthracite">Formulário de leads</h2>
-        <p className="mt-1 text-sm text-caetano-anthracite-80">
-          Configure onde e que dados recolher dos participantes.
-        </p>
-      </div>
+    <div className={STEP_CONTENT_CLASS}>
+      <StepHeader title="Formulário de leads" description="Configure onde e que dados recolher dos participantes." />
 
       {privacyNoticeMissing ? <Alert variant="warning" live={false}>{LIVE_PRIVACY_NOTICE_MISSING_WARNING}</Alert> : null}
 
-      <AutoSaveForm action={updateLeadFormSettingsAction} className="space-y-4 rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
+      <AutoSaveForm action={updateLeadFormSettingsAction} className={cn(STEP_CARD_CLASS, "space-y-6")}>
         <input type="hidden" name="campaignId" value={campaign.id} />
-        <div>
-          <Label htmlFor="position">Posição do formulário</Label>
-          <select
-            id="position"
-            name="position"
-            defaultValue={leadForm.position}
-            aria-describedby="position-help"
-            className="h-10 w-full max-w-sm rounded-lg border border-caetano-medium-gray px-3 text-sm"
+        <FieldGroup title="Posição e proteção">
+          <div>
+            <Label htmlFor="position">Posição do formulário</Label>
+            <SelectShell className="sm:max-w-sm">
+              <select
+                id="position"
+                name="position"
+                defaultValue={leadForm.position}
+                aria-describedby="position-help"
+                className={SELECT_CLASS}
+              >
+                {Object.entries(LEAD_FORM_POSITION_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </SelectShell>
+            {/* Ajuda contextual (§7): o que cada posição retém até à lead. */}
+            <ul
+              id="position-help"
+              className="mt-3 list-disc space-y-1.5 rounded-xl bg-caetano-medium-gray-20 py-3 pr-4 pl-8 text-xs leading-relaxed text-caetano-anthracite-80"
+            >
+              <li>
+                Na Roda da Sorte, com o formulário depois do jogo, o prémio sorteado fica reservado até a lead ser
+                aceite: o código só é mostrado depois do formulário. Uma lead recusada (duplicada, bot) ou um
+                formulário abandonado devolve o prémio ao stock.
+              </li>
+              <li>
+                Mudar a posição só afeta quem começar a jogar a partir de agora. Escolher «Sem formulário» (ou não
+                ter campos nem consentimentos) deixa de pedir o formulário também a quem já está a jogar.
+              </li>
+            </ul>
+          </div>
+
+          <CheckboxField
+            name="honeypotEnabled"
+            defaultChecked={leadForm.honeypotEnabled}
+            className={CHECKBOX_INPUT_CLASS}
+            labelClassName={cn(CHECKBOX_TILE_CLASS, "sm:max-w-sm")}
           >
-            {Object.entries(LEAD_FORM_POSITION_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          {/* Ajuda contextual (§7): o que cada posição retém até à lead. */}
-          <ul id="position-help" className="mt-2 list-disc space-y-1 pl-5 text-xs text-caetano-anthracite-80">
-            <li>
-              Na Roda da Sorte, com o formulário depois do jogo, o prémio sorteado fica reservado até a lead ser
-              aceite: o código só é mostrado depois do formulário. Uma lead recusada (duplicada, bot) ou um
-              formulário abandonado devolve o prémio ao stock.
-            </li>
-            <li>
-              Mudar a posição só afeta quem começar a jogar a partir de agora. Escolher «Sem formulário» (ou não
-              ter campos nem consentimentos) deixa de pedir o formulário também a quem já está a jogar.
-            </li>
-          </ul>
-        </div>
+            Ativar honeypot anti-bot
+          </CheckboxField>
+        </FieldGroup>
 
-        <CheckboxField name="honeypotEnabled" defaultChecked={leadForm.honeypotEnabled}>
-          Ativar honeypot anti-bot
-        </CheckboxField>
-
-        <fieldset>
-          <legend className="mb-1 text-sm font-medium text-caetano-anthracite">
-            Controlo de duplicados
-          </legend>
+        <FieldGroup title="Controlo de duplicados">
           {/* Sentinela do grupo: sem nenhuma marcada, o envio diz "nenhuma". */}
           <input type="hidden" name="dedupStrategies" value="" />
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3">
             {(Object.entries(DEDUP_STRATEGY_LABELS) as [DedupStrategy, string][]).map(
               ([value, label]) => (
-                <label key={value} className="flex items-center gap-1.5 text-sm text-caetano-anthracite">
+                <label key={value} className={CHECKBOX_TILE_CLASS}>
                   <input
                     type="checkbox"
                     name="dedupStrategies"
                     value={value}
                     defaultChecked={campaign.dedupStrategies.includes(value)}
-                    className="h-4 w-4 rounded border-caetano-medium-gray"
+                    className={CHECKBOX_INPUT_CLASS}
                   />
                   {label}
                 </label>
               ),
             )}
           </div>
-        </fieldset>
+        </FieldGroup>
       </AutoSaveForm>
 
       {leadForm.position !== "NONE" && (
-        <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
-          <h3 className="mb-3 text-sm font-bold text-caetano-anthracite">Campos</h3>
+        <section aria-labelledby="lead-fields-heading" className={cn(STEP_CARD_CLASS, "space-y-4")}>
+          <SectionHeading id="lead-fields-heading" title="Campos" />
 
-          <ul className="space-y-2">
-            {leadForm.fields.map((field, index) => (
-              <li key={field.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0 break-words">
-                    <span className="font-medium text-caetano-anthracite">{field.label}</span>
-                    <span className="ml-2 text-xs text-caetano-anthracite-80">
-                      {LEAD_FIELD_TYPE_LABELS[field.type]}
-                      {field.required && field.type !== "HIDDEN" ? " · obrigatório" : ""}
-                    </span>
-                    {field.type === "HIDDEN" && !field.defaultValue && (
-                      <span className="mt-1 block text-xs text-danger">
-                        Sem valor predefinido: este campo não grava nada. Indique-o em «Editar campo».
+          {leadForm.fields.length === 0 ? (
+            <ListEmpty icon={<TextCursorInput size={20} />}>Ainda não há campos. Adicione o primeiro abaixo.</ListEmpty>
+          ) : (
+            <ul className="space-y-2">
+              {leadForm.fields.map((field, index) => (
+                <li key={field.id} className={LIST_ITEM_CLASS}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-caetano-medium-gray-20 text-xs font-bold text-caetano-deep-blue"
+                      >
+                        {index + 1}
                       </span>
-                    )}
+                      <div className="min-w-0 break-words">
+                        <span className="font-medium text-caetano-anthracite">{field.label}</span>
+                        <span className="ml-2 inline-flex rounded-full bg-caetano-medium-gray-20 px-2 py-0.5 text-xs text-caetano-anthracite-80">
+                          {LEAD_FIELD_TYPE_LABELS[field.type]}
+                          {field.required && field.type !== "HIDDEN" ? " · obrigatório" : ""}
+                        </span>
+                        {field.type === "HIDDEN" && !field.defaultValue && (
+                          <span className="mt-1 block text-xs text-danger">
+                            Sem valor predefinido: este campo não grava nada. Indique-o em «Editar campo».
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="ml-auto flex items-center gap-1">
+                      {/* Sem reset: remontar o botão tirava-lhe o foco a meio de uma reordenação. */}
+                      <ActionForm action={moveLeadFieldAction} resetOnSuccess={false}>
+                        <input type="hidden" name="campaignId" value={campaign.id} />
+                        <input type="hidden" name="fieldId" value={field.id} />
+                        <input type="hidden" name="direction" value="up" />
+                        <button
+                          type="submit"
+                          disabled={index === 0}
+                          className={ICON_BUTTON_CLASS}
+                          aria-label={`Mover ${field.label} para cima`}
+                        >
+                          <ArrowUp size={16} aria-hidden="true" />
+                        </button>
+                      </ActionForm>
+                      <ActionForm action={moveLeadFieldAction} resetOnSuccess={false}>
+                        <input type="hidden" name="campaignId" value={campaign.id} />
+                        <input type="hidden" name="fieldId" value={field.id} />
+                        <input type="hidden" name="direction" value="down" />
+                        <button
+                          type="submit"
+                          disabled={index === leadForm.fields.length - 1}
+                          className={ICON_BUTTON_CLASS}
+                          aria-label={`Mover ${field.label} para baixo`}
+                        >
+                          <ArrowDown size={16} aria-hidden="true" />
+                        </button>
+                      </ActionForm>
+                      <ActionForm action={removeLeadFieldAction} resetOnSuccess={false}>
+                        <input type="hidden" name="campaignId" value={campaign.id} />
+                        <input type="hidden" name="fieldId" value={field.id} />
+                        <ConfirmSubmitButton
+                          confirmMessage={`Remover o campo "${field.label}"?`}
+                          variant="ghost"
+                          size="md"
+                          className={REMOVE_BUTTON_CLASS}
+                        >
+                          Remover
+                        </ConfirmSubmitButton>
+                      </ActionForm>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    {/* Sem reset: remontar o botão tirava-lhe o foco a meio de uma reordenação. */}
-                    <ActionForm action={moveLeadFieldAction} resetOnSuccess={false}>
+
+                  {/* Abre por baixo da linha, com a largura do cartão: o antigo
+                      popover de 20rem saía do ecrã no telemóvel. */}
+                  <details className="group mt-2 border-t border-caetano-medium-gray-20 pt-1">
+                    <summary className={SUMMARY_CLASS}>
+                      <SummaryChevron />
+                      Editar campo<span className="sr-only"> {field.label}</span>
+                    </summary>
+                    {/* Sem expressão de validação: não vai no envio e fica como
+                        está. O valor predefinido só nos campos ocultos, onde é
+                        o único valor que o campo grava. */}
+                    <AutoSaveForm action={updateLeadFieldAction} className={cn(ADD_PANEL_CLASS, "mt-2 space-y-4")}>
                       <input type="hidden" name="campaignId" value={campaign.id} />
                       <input type="hidden" name="fieldId" value={field.id} />
-                      <input type="hidden" name="direction" value="up" />
-                      <button
-                        type="submit"
-                        disabled={index === 0}
-                        className={MOVE_BUTTON_CLASS}
-                        aria-label={`Mover ${field.label} para cima`}
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Label htmlFor={`label-${field.id}`}>Label</Label>
+                          <Input
+                            id={`label-${field.id}`}
+                            name="label"
+                            maxLength={LEAD_FIELD_LIMITS.label}
+                            defaultValue={field.label}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`placeholder-${field.id}`}>Placeholder</Label>
+                          <Input
+                            id={`placeholder-${field.id}`}
+                            name="placeholder"
+                            maxLength={LEAD_FIELD_LIMITS.placeholder}
+                            defaultValue={field.placeholder ?? ""}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor={`helpText-${field.id}`}>Texto de ajuda</Label>
+                        <Input
+                          id={`helpText-${field.id}`}
+                          name="helpText"
+                          maxLength={LEAD_FIELD_LIMITS.helpText}
+                          defaultValue={field.helpText ?? ""}
+                        />
+                      </div>
+                      {fieldTypeHasOptions(field.type) && (
+                        <div>
+                          <Label htmlFor={`options-${field.id}`}>Opções (uma por linha)</Label>
+                          <textarea
+                            id={`options-${field.id}`}
+                            name="options"
+                            rows={3}
+                            maxLength={LEAD_FIELD_LIMITS.options}
+                            defaultValue={
+                              Array.isArray(field.options)
+                                ? field.options.filter((option) => typeof option === "string").join("\n")
+                                : ""
+                            }
+                            className={TEXTAREA_CLASS}
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <Label htmlFor={`exportMapping-${field.id}`}>Mapeamento de exportação</Label>
+                        <Input
+                          id={`exportMapping-${field.id}`}
+                          name="exportMapping"
+                          maxLength={LEAD_FIELD_LIMITS.exportMapping}
+                          defaultValue={field.exportMapping ?? ""}
+                        />
+                      </div>
+                      {field.type === "HIDDEN" ? (
+                        <div>
+                          <Label htmlFor={`defaultValue-${field.id}`}>Valor predefinido</Label>
+                          <Input
+                            id={`defaultValue-${field.id}`}
+                            name="defaultValue"
+                            maxLength={LEAD_FIELD_LIMITS.defaultValue}
+                            defaultValue={field.defaultValue ?? ""}
+                            aria-describedby={`defaultValue-help-${field.id}`}
+                          />
+                          <p id={`defaultValue-help-${field.id}`} className={HELP_CLASS}>
+                            O participante não vê este campo: cada lead grava este valor (por exemplo, a origem da
+                            campanha).
+                          </p>
+                        </div>
+                      ) : (
+                        <CheckboxField
+                          name="required"
+                          defaultChecked={field.required}
+                          className={CHECKBOX_INPUT_CLASS}
+                          labelClassName={CHECKBOX_LABEL_CLASS}
+                        >
+                          Obrigatório
+                        </CheckboxField>
+                      )}
+                    </AutoSaveForm>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <ActionForm
+            action={addLeadFieldAction}
+            className={cn(ADD_PANEL_CLASS, "flex flex-wrap items-end gap-3")}
+            messageClassName="basis-full"
+          >
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <div className="w-full min-w-0 sm:w-auto sm:min-w-48">
+              <Label htmlFor="newFieldType">Tipo de campo</Label>
+              <SelectShell>
+                <select id="newFieldType" name="type" className={SELECT_CLASS}>
+                  {(Object.entries(LEAD_FIELD_TYPE_LABELS) as [LeadFieldType, string][]).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </SelectShell>
+            </div>
+            <div className="min-w-0 flex-1 basis-48">
+              <Label htmlFor="newFieldLabel">Label</Label>
+              <Input id="newFieldLabel" name="label" maxLength={LEAD_FIELD_LIMITS.label} required />
+            </div>
+            <SubmitButton variant="outline">
+              <Plus size={16} aria-hidden="true" />
+              Adicionar campo
+            </SubmitButton>
+          </ActionForm>
+        </section>
+      )}
+
+      <section aria-labelledby="consents-heading" className={cn(STEP_CARD_CLASS, "space-y-4")}>
+        <SectionHeading
+          id="consents-heading"
+          title="Consentimentos"
+          description="Consentimentos de marketing nunca aparecem pré-selecionados aos participantes e não podem ser obrigatórios."
+        />
+
+        {leadForm.consentDefinitions.length === 0 ? (
+          <ListEmpty icon={<ShieldCheck size={20} />}>Ainda não há consentimentos.</ListEmpty>
+        ) : (
+          <ul className="space-y-2">
+            {leadForm.consentDefinitions.map((consent) => (
+              <li key={consent.id} className={LIST_ITEM_CLASS}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 basis-56 items-start gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-caetano-cyan-20 text-caetano-deep-blue"
+                    >
+                      <ShieldCheck size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p id={`consent-${consent.id}`} className="whitespace-pre-line break-words text-sm text-caetano-anthracite">
+                        {consent.text}
+                      </p>
+                      <p className="mt-1 text-xs text-caetano-anthracite-80">
+                        Versão {consent.version}
+                        {consent.isMarketing ? " · marketing" : ""}
+                        {consent.required ? " · obrigatório" : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {/* O registo de cada aceitação aponta para esta definição. */}
+                  {consentsInUse.has(consent.id) ? (
+                    <span className="text-xs text-caetano-anthracite-80 sm:ml-auto sm:max-w-40 sm:text-right">
+                      Já aceite por participantes, não pode ser removido.
+                    </span>
+                  ) : (
+                    <ActionForm action={removeConsentAction} resetOnSuccess={false} messageClassName="max-w-40" className="ml-auto">
+                      <input type="hidden" name="campaignId" value={campaign.id} />
+                      <input type="hidden" name="consentId" value={consent.id} />
+                      <ConfirmSubmitButton
+                        confirmMessage="Remover este consentimento?"
+                        variant="ghost"
+                        size="md"
+                        className={REMOVE_BUTTON_CLASS}
                       >
-                        ↑
-                      </button>
-                    </ActionForm>
-                    <ActionForm action={moveLeadFieldAction} resetOnSuccess={false}>
-                      <input type="hidden" name="campaignId" value={campaign.id} />
-                      <input type="hidden" name="fieldId" value={field.id} />
-                      <input type="hidden" name="direction" value="down" />
-                      <button
-                        type="submit"
-                        disabled={index === leadForm.fields.length - 1}
-                        className={MOVE_BUTTON_CLASS}
-                        aria-label={`Mover ${field.label} para baixo`}
-                      >
-                        ↓
-                      </button>
-                    </ActionForm>
-                    <ActionForm action={removeLeadFieldAction} resetOnSuccess={false}>
-                      <input type="hidden" name="campaignId" value={campaign.id} />
-                      <input type="hidden" name="fieldId" value={field.id} />
-                      <ConfirmSubmitButton confirmMessage={`Remover o campo "${field.label}"?`} size="sm">
                         Remover
                       </ConfirmSubmitButton>
                     </ActionForm>
-                  </div>
+                  )}
                 </div>
 
-                {/* Abre por baixo da linha, com a largura do cartão: o antigo
-                    popover de 20rem saía do ecrã no telemóvel. */}
-                <details className="mt-2">
-                  <summary className={SUMMARY_CLASS}>
-                    Editar campo<span className="sr-only"> {field.label}</span>
+                <details className="group mt-2 border-t border-caetano-medium-gray-20 pt-1">
+                  {/* Há vários "Editar consentimento": o texto diz qual. */}
+                  <summary className={SUMMARY_CLASS} aria-describedby={`consent-${consent.id}`}>
+                    <SummaryChevron />
+                    Editar consentimento
                   </summary>
-                  {/* Sem expressão de validação: não vai no envio e fica como
-                      está. O valor predefinido só nos campos ocultos, onde é
-                      o único valor que o campo grava. */}
-                  <AutoSaveForm action={updateLeadFieldAction} className="mt-2 space-y-2">
+                  <ActionForm
+                    action={updateConsentAction}
+                    resetOnSuccess={false}
+                    className={cn(ADD_PANEL_CLASS, "mt-2 space-y-3")}
+                  >
                     <input type="hidden" name="campaignId" value={campaign.id} />
-                    <input type="hidden" name="fieldId" value={field.id} />
+                    <input type="hidden" name="consentId" value={consent.id} />
                     <div>
-                      <Label htmlFor={`label-${field.id}`}>Label</Label>
-                      <Input
-                        id={`label-${field.id}`}
-                        name="label"
-                        maxLength={LEAD_FIELD_LIMITS.label}
-                        defaultValue={field.label}
+                      <Label htmlFor={`consent-text-${consent.id}`}>Texto do consentimento</Label>
+                      <textarea
+                        id={`consent-text-${consent.id}`}
+                        name="text"
+                        defaultValue={consent.text}
+                        rows={3}
+                        maxLength={CONSENT_LIMITS.text}
                         required
+                        aria-describedby={`consent-version-${consent.id}`}
+                        className={TEXTAREA_CLASS}
                       />
+                      <p id={`consent-version-${consent.id}`} className={HELP_CLASS}>
+                        Mudar o texto cria uma nova versão; as aceitações anteriores ficam com o texto que foi mostrado.
+                      </p>
                     </div>
-                    <div>
-                      <Label htmlFor={`placeholder-${field.id}`}>Placeholder</Label>
-                      <Input
-                        id={`placeholder-${field.id}`}
-                        name="placeholder"
-                        maxLength={LEAD_FIELD_LIMITS.placeholder}
-                        defaultValue={field.placeholder ?? ""}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`helpText-${field.id}`}>Texto de ajuda</Label>
-                      <Input
-                        id={`helpText-${field.id}`}
-                        name="helpText"
-                        maxLength={LEAD_FIELD_LIMITS.helpText}
-                        defaultValue={field.helpText ?? ""}
-                      />
-                    </div>
-                    {fieldTypeHasOptions(field.type) && (
-                      <div>
-                        <Label htmlFor={`options-${field.id}`}>Opções (uma por linha)</Label>
-                        <textarea
-                          id={`options-${field.id}`}
-                          name="options"
-                          rows={3}
-                          maxLength={LEAD_FIELD_LIMITS.options}
-                          defaultValue={
-                            Array.isArray(field.options)
-                              ? field.options.filter((option) => typeof option === "string").join("\n")
-                              : ""
-                          }
-                          className={TEXTAREA_CLASS}
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <Label htmlFor={`exportMapping-${field.id}`}>Mapeamento de exportação</Label>
-                      <Input
-                        id={`exportMapping-${field.id}`}
-                        name="exportMapping"
-                        maxLength={LEAD_FIELD_LIMITS.exportMapping}
-                        defaultValue={field.exportMapping ?? ""}
-                      />
-                    </div>
-                    {field.type === "HIDDEN" ? (
-                      <div>
-                        <Label htmlFor={`defaultValue-${field.id}`}>Valor predefinido</Label>
-                        <Input
-                          id={`defaultValue-${field.id}`}
-                          name="defaultValue"
-                          maxLength={LEAD_FIELD_LIMITS.defaultValue}
-                          defaultValue={field.defaultValue ?? ""}
-                          aria-describedby={`defaultValue-help-${field.id}`}
-                        />
-                        <p id={`defaultValue-help-${field.id}`} className="mt-1 text-xs text-caetano-anthracite-80">
-                          O participante não vê este campo: cada lead grava este valor (por exemplo, a origem da
-                          campanha).
-                        </p>
-                      </div>
-                    ) : (
-                      <CheckboxField name="required" defaultChecked={field.required}>
+                    <div className="flex flex-wrap gap-x-5 gap-y-1">
+                      <CheckboxField
+                        name="isMarketing"
+                        defaultChecked={consent.isMarketing}
+                        className={CHECKBOX_INPUT_CLASS}
+                        labelClassName={CHECKBOX_LABEL_CLASS}
+                      >
+                        Marketing
+                      </CheckboxField>
+                      <CheckboxField
+                        name="required"
+                        defaultChecked={consent.required}
+                        className={CHECKBOX_INPUT_CLASS}
+                        labelClassName={CHECKBOX_LABEL_CLASS}
+                      >
                         Obrigatório
                       </CheckboxField>
-                    )}
-                  </AutoSaveForm>
+                    </div>
+                    <SubmitButton size="sm" variant="outline">
+                      Guardar
+                    </SubmitButton>
+                  </ActionForm>
                 </details>
               </li>
             ))}
           </ul>
+        )}
 
-          <ActionForm
-            action={addLeadFieldAction}
-            className="mt-4 flex flex-wrap items-end gap-2"
-            messageClassName="basis-full"
-          >
-            <input type="hidden" name="campaignId" value={campaign.id} />
-            <div>
-              <Label htmlFor="newFieldType">Tipo de campo</Label>
-              <select
-                id="newFieldType"
-                name="type"
-                className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm"
-              >
-                {(Object.entries(LEAD_FIELD_TYPE_LABELS) as [LeadFieldType, string][]).map(
-                  ([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ),
-                )}
-              </select>
-            </div>
-            <div className="min-w-0 flex-1 sm:flex-none">
-              <Label htmlFor="newFieldLabel">Label</Label>
-              <Input id="newFieldLabel" name="label" maxLength={LEAD_FIELD_LIMITS.label} required />
-            </div>
-            <SubmitButton variant="outline">Adicionar campo</SubmitButton>
-          </ActionForm>
-        </div>
-      )}
-
-      <div className="rounded-xl border border-caetano-medium-gray-40 bg-white p-4">
-        <h3 className="mb-1 text-sm font-bold text-caetano-anthracite">Consentimentos</h3>
-        <p className="mb-3 text-xs text-caetano-anthracite-80">
-          Consentimentos de marketing nunca aparecem pré-selecionados aos participantes e não podem ser
-          obrigatórios.
-        </p>
-
-        <ul className="space-y-2">
-          {leadForm.consentDefinitions.map((consent) => (
-            <li key={consent.id} className="rounded-lg border border-caetano-medium-gray-20 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p id={`consent-${consent.id}`} className="whitespace-pre-line break-words text-sm text-caetano-anthracite">
-                    {consent.text}
-                  </p>
-                  <p className="text-xs text-caetano-anthracite-80">
-                    Versão {consent.version}
-                    {consent.isMarketing ? " · marketing" : ""}
-                    {consent.required ? " · obrigatório" : ""}
-                  </p>
-                </div>
-                {/* O registo de cada aceitação aponta para esta definição. */}
-                {consentsInUse.has(consent.id) ? (
-                  <span className="max-w-40 text-right text-xs text-caetano-anthracite-80">
-                    Já aceite por participantes, não pode ser removido.
-                  </span>
-                ) : (
-                  <ActionForm action={removeConsentAction} resetOnSuccess={false} messageClassName="max-w-40">
-                    <input type="hidden" name="campaignId" value={campaign.id} />
-                    <input type="hidden" name="consentId" value={consent.id} />
-                    <ConfirmSubmitButton confirmMessage="Remover este consentimento?" size="sm">
-                      Remover
-                    </ConfirmSubmitButton>
-                  </ActionForm>
-                )}
-              </div>
-
-              <details className="mt-2">
-                {/* Há vários "Editar consentimento": o texto diz qual. */}
-                <summary className={SUMMARY_CLASS} aria-describedby={`consent-${consent.id}`}>
-                  Editar consentimento
-                </summary>
-                <ActionForm action={updateConsentAction} resetOnSuccess={false} className="mt-2 space-y-2">
-                  <input type="hidden" name="campaignId" value={campaign.id} />
-                  <input type="hidden" name="consentId" value={consent.id} />
-                  <div>
-                    <Label htmlFor={`consent-text-${consent.id}`}>Texto do consentimento</Label>
-                    <textarea
-                      id={`consent-text-${consent.id}`}
-                      name="text"
-                      defaultValue={consent.text}
-                      rows={3}
-                      maxLength={CONSENT_LIMITS.text}
-                      required
-                      aria-describedby={`consent-version-${consent.id}`}
-                      className={TEXTAREA_CLASS}
-                    />
-                    <p id={`consent-version-${consent.id}`} className="mt-1 text-xs text-caetano-anthracite-80">
-                      Mudar o texto cria uma nova versão; as aceitações anteriores ficam com o texto que foi mostrado.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2">
-                    <CheckboxField name="isMarketing" defaultChecked={consent.isMarketing}>
-                      Marketing
-                    </CheckboxField>
-                    <CheckboxField name="required" defaultChecked={consent.required}>
-                      Obrigatório
-                    </CheckboxField>
-                  </div>
-                  <SubmitButton size="sm" variant="outline">
-                    Guardar
-                  </SubmitButton>
-                </ActionForm>
-              </details>
-            </li>
-          ))}
-        </ul>
-
-        <ActionForm action={addConsentAction} className="mt-4 space-y-2">
+        <ActionForm action={addConsentAction} className={cn(ADD_PANEL_CLASS, "space-y-3")}>
           <input type="hidden" name="campaignId" value={campaign.id} />
           <div>
             <Label htmlFor="newConsentText">Novo consentimento</Label>
@@ -446,76 +527,72 @@ export default async function LeadFormStepPage({
               className={TEXTAREA_CLASS}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <CheckboxField name="isMarketing">Marketing</CheckboxField>
-            <CheckboxField name="required">Obrigatório</CheckboxField>
-            <SubmitButton variant="outline" size="sm">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <CheckboxField name="isMarketing" className={CHECKBOX_INPUT_CLASS} labelClassName={CHECKBOX_LABEL_CLASS}>
+              Marketing
+            </CheckboxField>
+            <CheckboxField name="required" className={CHECKBOX_INPUT_CLASS} labelClassName={CHECKBOX_LABEL_CLASS}>
+              Obrigatório
+            </CheckboxField>
+            <SubmitButton variant="outline" size="md" className="sm:ml-auto">
+              <Plus size={16} aria-hidden="true" />
               Adicionar consentimento
             </SubmitButton>
           </div>
         </ActionForm>
-      </div>
+      </section>
 
-      <section
-        aria-labelledby="retention-heading"
-        className="space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
-      >
-        <div>
-          <h3 id="retention-heading" className="text-sm font-bold text-caetano-anthracite">
-            Conservação dos dados
-          </h3>
-          <p className="mt-1 text-xs text-caetano-anthracite-80">
-            Ao fim do prazo, os dados pessoais de cada participação (nome, e-mail, telefone, respostas ao
-            formulário, IP) são anonimizados por uma tarefa diária. Ficam o resultado, o prémio e as estatísticas.
-            As participações anonimizadas deixam de contar para os limites de participação.
-          </p>
-        </div>
+      <section aria-labelledby="retention-heading" className={cn(STEP_CARD_CLASS, "space-y-4")}>
+        <SectionHeading
+          id="retention-heading"
+          title="Conservação dos dados"
+          description="Ao fim do prazo, os dados pessoais de cada participação (nome, e-mail, telefone, respostas ao formulário, IP) são anonimizados por uma tarefa diária. Ficam o resultado, o prémio e as estatísticas. As participações anonimizadas deixam de contar para os limites de participação."
+        />
 
         {canManagePrivacy ? (
-          <AutoSaveForm action={updateCampaignRetentionAction} className="space-y-3">
+          <AutoSaveForm action={updateCampaignRetentionAction} className="space-y-4">
             <input type="hidden" name="campaignId" value={campaign.id} />
-            <div>
-              <Label htmlFor="retention">Prazo de conservação</Label>
-              <select
-                id="retention"
-                name="retention"
-                defaultValue={retentionValue}
-                className="h-10 w-full max-w-sm rounded-lg border border-caetano-medium-gray px-3 text-sm"
-              >
-                <option value="inherit">
-                  {organizationDays
-                    ? `O da organização (${organizationDays} dias)`
-                    : "O da organização (sem prazo)"}
-                </option>
-                {RETENTION_DAY_OPTIONS.map((days) => (
-                  <option key={days} value={days}>
-                    {days} dias depois de cada participação
-                  </option>
-                ))}
-                <option value="until">Numa data (todas as participações)</option>
-              </select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="retention">Prazo de conservação</Label>
+                <SelectShell>
+                  <select id="retention" name="retention" defaultValue={retentionValue} className={SELECT_CLASS}>
+                    <option value="inherit">
+                      {organizationDays
+                        ? `O da organização (${organizationDays} dias)`
+                        : "O da organização (sem prazo)"}
+                    </option>
+                    {RETENTION_DAY_OPTIONS.map((days) => (
+                      <option key={days} value={days}>
+                        {days} dias depois de cada participação
+                      </option>
+                    ))}
+                    <option value="until">Numa data (todas as participações)</option>
+                  </select>
+                </SelectShell>
+              </div>
+              <div>
+                <Label htmlFor="retentionUntil">Data de anonimização (só para «Numa data»)</Label>
+                <input
+                  id="retentionUntil"
+                  name="retentionUntil"
+                  type="date"
+                  defaultValue={
+                    campaign.dataRetentionUntil
+                      ? utcToZonedDateTimeLocal(campaign.dataRetentionUntil, campaign.timezone).slice(0, 10)
+                      : ""
+                  }
+                  aria-describedby="retentionUntil-help"
+                  className={cn("w-full", controlClass)}
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="retentionUntil">Data de anonimização (só para «Numa data»)</Label>
-              <input
-                id="retentionUntil"
-                name="retentionUntil"
-                type="date"
-                defaultValue={
-                  campaign.dataRetentionUntil
-                    ? utcToZonedDateTimeLocal(campaign.dataRetentionUntil, campaign.timezone).slice(0, 10)
-                    : ""
-                }
-                aria-describedby="retentionUntil-help"
-                className="h-10 rounded-lg border border-caetano-medium-gray px-3 text-sm aria-invalid:border-danger"
-              />
-              <p id="retentionUntil-help" className="mt-1 text-xs text-caetano-anthracite-80">
-                Pelo menos {RETENTION_WARNING_DAYS} dias depois de hoje. A partir das 00:00 desse dia (
-                {campaign.timezone}), todas as participações da campanha são anonimizadas, e as que chegarem depois
-                também, um dia depois de criadas.
-              </p>
-            </div>
-            <p className="text-xs text-caetano-anthracite-80">
+            <p id="retentionUntil-help" className={cn(HELP_CLASS, "-mt-2")}>
+              Pelo menos {RETENTION_WARNING_DAYS} dias depois de hoje. A partir das 00:00 desse dia (
+              {campaign.timezone}), todas as participações da campanha são anonimizadas, e as que chegarem depois
+              também, um dia depois de criadas.
+            </p>
+            <p className="rounded-lg bg-caetano-medium-gray-20 px-3 py-2 text-xs leading-relaxed text-caetano-anthracite-80">
               Em vigor: {describeRetention(retention, campaign.timezone)} Um prazo novo ou alterado só começa a
               anonimizar {RETENTION_WARNING_DAYS} dias depois da alteração.
             </p>

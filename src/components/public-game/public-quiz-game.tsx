@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ForwardArrow, gameButtonClass } from "@/components/public-game/game-ui";
 import {
   QuizGamePlayer,
   type QuizPlayerQuestion,
@@ -44,9 +45,10 @@ export function PublicQuizGame({
         <button
           type="button"
           onClick={onContinue}
-          className="w-full rounded-game bg-game-button px-4 py-2.5 font-medium text-game-button-text"
+          className={gameButtonClass({ size: "lg", className: "group w-full motion-safe:animate-enter" })}
         >
           Continuar
+          <ForwardArrow />
         </button>
       )}
     </div>

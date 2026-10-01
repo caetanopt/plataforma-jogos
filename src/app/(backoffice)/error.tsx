@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { RotateCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { CalmState } from "@/components/backoffice/admin/calm-state";
 
 /**
  * Fronteira de erro do backoffice.
@@ -28,25 +30,34 @@ export default function BackofficeError({
   }, [error.digest]);
 
   return (
-    <div className="p-6 md:p-8">
-      <h1 className="text-2xl font-bold text-caetano-anthracite">Algo correu mal</h1>
-      <p className="mt-1 text-caetano-anthracite-80">
-        Não foi possível carregar esta página. A operação não foi concluída.
-      </p>
-
-      <div className="mt-6 max-w-xl space-y-4">
+    <CalmState
+      icon={<TriangleAlert size={28} strokeWidth={1.75} />}
+      title="Algo correu mal"
+      description="Não foi possível carregar esta página. A operação não foi concluída."
+    >
+      <div className="w-full max-w-md text-left">
         <Alert variant="error">
           Tente novamente. Se o problema persistir, indique a referência abaixo a quem der apoio.
         </Alert>
-
-        {error.digest && (
-          <p className="text-xs text-caetano-anthracite-80">
-            Referência: <code className="font-mono">{error.digest}</code>
-          </p>
-        )}
-
-        <Button onClick={reset}>Tentar novamente</Button>
       </div>
-    </div>
+
+      {error.digest && (
+        <p className="text-xs text-caetano-anthracite-80">
+          Referência:{" "}
+          <code className="rounded-md bg-caetano-medium-gray-20 px-1.5 py-0.5 font-mono text-caetano-anthracite ring-1 ring-caetano-medium-gray-40 select-all">
+            {error.digest}
+          </code>
+        </p>
+      )}
+
+      <Button onClick={reset} size="lg" className="group/retry">
+        <RotateCw
+          size={18}
+          aria-hidden="true"
+          className="transition-transform duration-300 ease-(--ease-out-expo) motion-safe:group-hover/retry:rotate-90"
+        />
+        Tentar novamente
+      </Button>
+    </CalmState>
   );
 }

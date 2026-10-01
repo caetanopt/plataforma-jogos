@@ -8,6 +8,8 @@ import { MediaUploadField } from "@/components/backoffice/editor/media-upload-fi
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { SELECT_CLASS, SelectShell } from "@/components/backoffice/editor/editor-ui";
+import { Plus } from "lucide-react";
 
 const KIND_LABELS: Record<MemoryPairKind, string> = {
   SAME_IMAGE: "Pares de imagens iguais",
@@ -35,25 +37,27 @@ export function MemoryPairForm({ action, campaignId }: { action: FormAction; cam
   const [kind, setKind] = useState<MemoryPairKind>("SAME_IMAGE");
 
   return (
-    <ActionForm action={action} className="space-y-3 rounded-lg border border-caetano-medium-gray-20 p-3">
+    <ActionForm action={action} className="space-y-4">
       <input type="hidden" name="campaignId" value={campaignId} />
       <div>
         <Label htmlFor="kind">Tipo de par</Label>
-        <select
-          id="kind"
-          name="kind"
-          value={kind}
-          onChange={(event) => {
-            if (isKind(event.target.value)) setKind(event.target.value);
-          }}
-          className="h-10 w-full max-w-xs rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm text-caetano-anthracite focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
-        >
-          {(Object.entries(KIND_LABELS) as [MemoryPairKind, string][]).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <SelectShell className="sm:max-w-xs">
+          <select
+            id="kind"
+            name="kind"
+            value={kind}
+            onChange={(event) => {
+              if (isKind(event.target.value)) setKind(event.target.value);
+            }}
+            className={SELECT_CLASS}
+          >
+            {(Object.entries(KIND_LABELS) as [MemoryPairKind, string][]).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </SelectShell>
       </div>
 
       {kind === "SAME_IMAGE" && (
@@ -61,14 +65,14 @@ export function MemoryPairForm({ action, campaignId }: { action: FormAction; cam
       )}
 
       {kind === "DIFFERENT_IMAGE_MATCH" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <MediaUploadField name="cardAMediaId" label="Imagem da carta A" accept={IMAGE_ACCEPT} />
           <MediaUploadField name="cardBMediaId" label="Imagem da carta B" accept={IMAGE_ACCEPT} />
         </div>
       )}
 
       {kind === "IMAGE_TEXT" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <MediaUploadField name="cardAMediaId" label="Imagem da carta A" accept={IMAGE_ACCEPT} />
           <div>
             <Label htmlFor="cardBText">Texto da carta B</Label>
@@ -78,7 +82,7 @@ export function MemoryPairForm({ action, campaignId }: { action: FormAction; cam
       )}
 
       {kind === "TEXT_TEXT" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="cardAText">Texto da carta A</Label>
             <Input id="cardAText" name="cardAText" maxLength={MEMORY_PAIR_LIMITS.text} required />
@@ -92,7 +96,7 @@ export function MemoryPairForm({ action, campaignId }: { action: FormAction; cam
 
       {/* O texto alternativo descreve uma imagem: as cartas de texto não o têm. */}
       {kind !== "TEXT_TEXT" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="cardAAltText">Texto alternativo da carta A</Label>
             <Input id="cardAAltText" name="cardAAltText" maxLength={MEMORY_PAIR_LIMITS.altText} />
@@ -106,7 +110,8 @@ export function MemoryPairForm({ action, campaignId }: { action: FormAction; cam
         </div>
       )}
 
-      <SubmitButton variant="outline" size="sm">
+      <SubmitButton variant="outline">
+        <Plus size={16} aria-hidden="true" />
         Adicionar par
       </SubmitButton>
     </ActionForm>

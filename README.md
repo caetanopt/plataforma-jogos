@@ -139,6 +139,25 @@ para "desmarcada" se distinguir de "ausente".
   para funcionar dentro de um iframe noutro domínio; em HTTP numa rede local (por exemplo, a
   testar num telemóvel) fica `Lax`.
 
+### Design do backoffice (Brand Book Caetano, abril 2026)
+
+- Tokens em `src/app/globals.css`: só os tons oficiais da paleta (04.2), sombras do azul
+  profundo (`shadow-xs/sm/md/lg`), a superfície de marca `surface-brand` (azul profundo com a luz
+  do azul cyan, como os fundos digitais do manual, 08.9 e 09.4) com a luz decorativa
+  `brand-aurora`/`brand-streak`, e o movimento (`animate-enter`, `animate-scale-in`, a cascata
+  `stagger`, `skeleton`). Tudo o que se mexe para com `prefers-reduced-motion`.
+- Componentes: `PageHeader` (título Bold no azul profundo e uma linha leve, a hierarquia do
+  manual), `Card` (com `interactive`), `Button` (com `inverse` sobre a superfície de marca),
+  `Select`/`SelectShell`/`controlClass` (campos e seletores com borda a 3:1), `StatCard`,
+  `EmptyState` com ícone. As classes dos menus estão em `ui/menu-classes.ts` (sem "use client",
+  para os Server Components).
+- Barra lateral no azul profundo, com o claim "Your favourite way to move" (07.2). O logótipo
+  oficial carregado em Identidade visual aparece lá na versão negativa (branco, 04.3); sem
+  ficheiro, só o nome do produto — o wordmark nunca é composto com uma fonte.
+- O jogo público continua a usar só as cores do tema de cada campanha (`game-*`), nunca as da
+  Caetano; as sombras seguem a opção do tema.
+- Verificação: axe (WCAG 2.2 AA) e scroll horizontal em todas as páginas a 1440, 390 e 320 px.
+
 ### Marca, textos legais e consentimentos
 
 - O jogo público e a pré-visualização aplicam o tema da campanha (Marca e design): cores,

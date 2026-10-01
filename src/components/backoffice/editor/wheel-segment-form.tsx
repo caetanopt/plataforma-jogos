@@ -10,6 +10,16 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { SubmitButton } from "@/components/ui/submit-button";
+import {
+  ADD_PANEL_CLASS,
+  CHECKBOX_INPUT_CLASS,
+  CHECKBOX_LABEL_CLASS,
+  HELP_CLASS,
+  SELECT_CLASS,
+  SelectShell,
+} from "@/components/backoffice/editor/editor-ui";
+import { cn } from "@/lib/utils";
+import { Plus } from "lucide-react";
 
 export interface SegmentPrizeOption {
   id: string;
@@ -47,8 +57,6 @@ interface WheelSegmentFormProps {
   segment?: WheelSegmentFormValues;
 }
 
-const SELECT_CLASS =
-  "h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm text-caetano-anthracite focus-visible:border-caetano-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan aria-invalid:border-danger";
 
 /**
  * Formulário de um segmento da roda, o mesmo para adicionar e editar.
@@ -63,7 +71,7 @@ export function WheelSegmentForm({ action, campaignId, prizes, timeZone, segment
       action={action}
       // Só o de adicionar limpa: o de edição fica com os valores gravados.
       resetOnSuccess={!segment}
-      className="space-y-3 rounded-lg border border-caetano-medium-gray-20 p-3"
+      className={cn(ADD_PANEL_CLASS, "space-y-4")}
     >
       <input type="hidden" name="campaignId" value={campaignId} />
       {segment && <input type="hidden" name="segmentId" value={segment.id} />}
@@ -92,7 +100,7 @@ function SegmentFields({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
         <div>
           <Label htmlFor={fieldId("name")}>Nome</Label>
           <Input
@@ -110,7 +118,12 @@ function SegmentFields({
             name="colorHex"
             type="color"
             defaultValue={segment?.colorHex ?? "#00AEEF"}
-            className="h-10 w-full cursor-pointer rounded-lg border border-caetano-medium-gray"
+            className={cn(
+              "h-10 w-full cursor-pointer rounded-lg border border-caetano-anthracite-60 bg-white p-1 shadow-xs",
+              "transition-[border-color,box-shadow] duration-200 hover:border-caetano-anthracite-80",
+              "focus-visible:border-caetano-deep-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan",
+              "[&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-moz-color-swatch]:rounded-md [&::-moz-color-swatch]:border-0",
+            )}
           />
         </div>
       </div>
@@ -124,19 +137,21 @@ function SegmentFields({
         accept="image/jpeg,image/png,image/webp,image/svg+xml"
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor={fieldId("outcome")}>Resultado</Label>
-          <select
-            id={fieldId("outcome")}
-            name="outcome"
-            value={outcome}
-            onChange={(event) => setOutcome(event.target.value === "NO_WIN" ? "NO_WIN" : "WIN")}
-            className={SELECT_CLASS}
-          >
-            <option value="WIN">Vencedor</option>
-            <option value="NO_WIN">Não vencedor</option>
-          </select>
+          <SelectShell>
+            <select
+              id={fieldId("outcome")}
+              name="outcome"
+              value={outcome}
+              onChange={(event) => setOutcome(event.target.value === "NO_WIN" ? "NO_WIN" : "WIN")}
+              className={SELECT_CLASS}
+            >
+              <option value="WIN">Vencedor</option>
+              <option value="NO_WIN">Não vencedor</option>
+            </select>
+          </SelectShell>
         </div>
         <div>
           <Label htmlFor={fieldId("weight")}>Peso (probabilidade relativa)</Label>
@@ -152,7 +167,7 @@ function SegmentFields({
             aria-describedby={`${fieldId("weight")}-help`}
             required
           />
-          <p id={`${fieldId("weight")}-help`} className="mt-1 text-xs text-caetano-anthracite-80">
+          <p id={`${fieldId("weight")}-help`} className={HELP_CLASS}>
             De {WHEEL_SEGMENT_LIMITS.weightMin} a {WHEEL_SEGMENT_LIMITS.weightMax}. O tamanho do segmento na roda não
             conta.
           </p>
@@ -163,23 +178,25 @@ function SegmentFields({
       {outcome === "WIN" && (
         <div>
           <Label htmlFor={fieldId("prizeId")}>Prémio associado</Label>
-          <select
-            id={fieldId("prizeId")}
-            name="prizeId"
-            defaultValue={segment?.prizeId ?? ""}
-            className={SELECT_CLASS}
-          >
-            <option value="">Sem prémio</option>
-            {prizes.map((prize) => (
-              <option key={prize.id} value={prize.id}>
-                {prize.isActive ? prize.publicName : `${prize.publicName} (inativo)`}
-              </option>
-            ))}
-          </select>
+          <SelectShell>
+            <select
+              id={fieldId("prizeId")}
+              name="prizeId"
+              defaultValue={segment?.prizeId ?? ""}
+              className={SELECT_CLASS}
+            >
+              <option value="">Sem prémio</option>
+              {prizes.map((prize) => (
+                <option key={prize.id} value={prize.id}>
+                  {prize.isActive ? prize.publicName : `${prize.publicName} (inativo)`}
+                </option>
+              ))}
+            </select>
+          </SelectShell>
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor={fieldId("totalQuantity")}>Stock do segmento (opcional)</Label>
           <Input
@@ -193,7 +210,7 @@ function SegmentFields({
             defaultValue={segment?.totalQuantity ?? ""}
             aria-describedby={`${fieldId("totalQuantity")}-help`}
           />
-          <p id={`${fieldId("totalQuantity")}-help`} className="mt-1 text-xs text-caetano-anthracite-80">
+          <p id={`${fieldId("totalQuantity")}-help`} className={HELP_CLASS}>
             {segment?.totalQuantity != null
               ? `Restam ${segment.remainingQuantity ?? 0} de ${segment.totalQuantity}. Vazio = sem limite.`
               : "Vazio = sem limite."}
@@ -210,9 +227,9 @@ function SegmentFields({
         </div>
       </div>
 
-      <fieldset className="space-y-1">
-        <legend className="text-sm font-medium text-caetano-anthracite">Período (opcional)</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="mb-2 text-sm font-medium text-caetano-anthracite">Período (opcional)</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor={fieldId("periodStart")} className="font-normal">
               Início
@@ -236,7 +253,7 @@ function SegmentFields({
             />
           </div>
         </div>
-        <p className="text-xs text-caetano-anthracite-80">Horas no fuso horário da campanha ({timeZone}).</p>
+        <p className="text-xs leading-relaxed text-caetano-anthracite-80">Horas no fuso horário da campanha ({timeZone}).</p>
       </fieldset>
 
       <div>
@@ -249,13 +266,21 @@ function SegmentFields({
         />
       </div>
 
-      <CheckboxField name="isActive" defaultChecked={segment?.isActive ?? true}>
-        Ativo
-      </CheckboxField>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-caetano-medium-gray-40 pt-4">
+        <CheckboxField
+          name="isActive"
+          defaultChecked={segment?.isActive ?? true}
+          className={CHECKBOX_INPUT_CLASS}
+          labelClassName={CHECKBOX_LABEL_CLASS}
+        >
+          Ativo
+        </CheckboxField>
 
-      <SubmitButton variant="outline" size="sm">
-        {segment ? "Guardar segmento" : "Adicionar segmento"}
-      </SubmitButton>
+        <SubmitButton variant="outline">
+          {!segment && <Plus size={16} aria-hidden="true" />}
+          {segment ? "Guardar segmento" : "Adicionar segmento"}
+        </SubmitButton>
+      </div>
     </>
   );
 }

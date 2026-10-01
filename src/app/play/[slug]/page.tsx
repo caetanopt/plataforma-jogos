@@ -275,7 +275,7 @@ export default async function PublicPlayPage({
 function StateMessage({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-4 py-16 text-center">
-      <p className="rounded-game-lg border border-game-border bg-game-surface px-6 py-5 text-lg text-game-text shadow-lg motion-safe:animate-scale-in">
+      <p className="rounded-game-lg border border-game-border bg-game-surface px-6 py-5 text-lg text-game-text shadow-(--game-elevation-lg) motion-safe:animate-scale-in">
         {children}
       </p>
     </div>

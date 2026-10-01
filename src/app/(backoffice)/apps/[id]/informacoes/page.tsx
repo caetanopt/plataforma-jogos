@@ -6,10 +6,21 @@ import { prisma } from "@/server/db/client";
 import { AutoSaveForm } from "@/components/backoffice/editor/autosave-form";
 import { WorkspaceFolderFields } from "@/components/backoffice/workspace-folder-fields";
 import { SyncedSelect } from "@/components/forms/synced-fields";
+import {
+  FieldGroup,
+  HELP_CLASS,
+  SELECT_CLASS,
+  SelectShell,
+  STEP_CARD_CLASS,
+  STEP_CONTENT_CLASS,
+  StepHeader,
+  TEXTAREA_CLASS,
+} from "@/components/backoffice/editor/editor-ui";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/labels";
 import { PROJECT_INFO_LIMITS } from "@/lib/validation/campaign";
+import { cn } from "@/lib/utils";
 
 const LOCALES = [
   { value: "pt-PT", label: "Português (Portugal)" },
@@ -18,8 +29,6 @@ const LOCALES = [
 ];
 
 const TIMEZONES = ["Europe/Lisbon", "Atlantic/Azores", "UTC"];
-
-const SELECT_CLASS = "h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm";
 
 export default async function ProjectInfoStepPage({
   params,
@@ -62,123 +71,149 @@ export default async function ProjectInfoStepPage({
   const hasParticipations = campaign.hasParticipations;
   const slugLocked = Boolean(campaign.publishedAt);
 
-  return (
-    <div className="max-w-2xl">
-      <h2 className="text-lg font-bold text-caetano-anthracite">Informações do projeto</h2>
-      <p className="mt-1 text-sm text-caetano-anthracite-80">
-        Dados internos de organização da campanha. O tipo de jogo (
-        {CAMPAIGN_TYPE_LABELS[campaign.type]}) é definido na criação e não pode ser alterado
-        {hasParticipations ? " — esta campanha já tem participações reais." : "."}
-      </p>
 
-      <AutoSaveForm action={updateProjectInfoAction} className="mt-6 space-y-4">
+  return (
+    <div className={STEP_CONTENT_CLASS}>
+      <StepHeader
+        title="Informações do projeto"
+        description={
+          <>
+            Dados internos de organização da campanha. O tipo de jogo (
+            {CAMPAIGN_TYPE_LABELS[campaign.type]}) é definido na criação e não pode ser alterado
+            {hasParticipations ? " — esta campanha já tem participações reais." : "."}
+          </>
+        }
+      />
+
+      <AutoSaveForm action={updateProjectInfoAction} className={cn(STEP_CARD_CLASS, "space-y-6")}>
         <input type="hidden" name="campaignId" value={campaign.id} />
 
-        <div>
-          <Label htmlFor="internalName">Nome interno</Label>
-          <Input
-            id="internalName"
-            name="internalName"
-            maxLength={PROJECT_INFO_LIMITS.internalName}
-            defaultValue={campaign.internalName}
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="publicTitle">Título público</Label>
-          <Input
-            id="publicTitle"
-            name="publicTitle"
-            maxLength={PROJECT_INFO_LIMITS.publicTitle}
-            defaultValue={campaign.publicTitle ?? ""}
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="internalReference">Referência interna</Label>
-          <Input
-            id="internalReference"
-            name="internalReference"
-            maxLength={PROJECT_INFO_LIMITS.internalReference}
-            defaultValue={campaign.internalReference ?? ""}
-          />
-        </div>
-
-        <WorkspaceFolderFields
-          variant="editor"
-          workspaces={workspaces}
-          defaultWorkspaceId={campaign.workspaceId}
-          defaultFolderId={campaign.folderId}
-        />
-
-        <div>
-          <Label htmlFor="tags">Etiquetas (separadas por vírgula)</Label>
-          <Input id="tags" name="tags" maxLength={PROJECT_INFO_LIMITS.tags} defaultValue={campaign.tags.join(", ")} />
-        </div>
-
-        <div>
-          <Label htmlFor="description">Descrição</Label>
-          <textarea
-            id="description"
-            name="description"
-            maxLength={PROJECT_INFO_LIMITS.description}
-            defaultValue={campaign.description ?? ""}
-            rows={3}
-            className="w-full rounded-lg border border-caetano-medium-gray px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FieldGroup title="Identificação">
           <div>
-            <Label htmlFor="locale">Idioma</Label>
-            <SyncedSelect id="locale" name="locale" defaultValue={campaign.locale} className={SELECT_CLASS}>
-              {locales.map((locale) => (
-                <option key={locale.value} value={locale.value}>
-                  {locale.label}
-                </option>
-              ))}
-            </SyncedSelect>
+            <Label htmlFor="internalName">Nome interno</Label>
+            <Input
+              id="internalName"
+              name="internalName"
+              maxLength={PROJECT_INFO_LIMITS.internalName}
+              defaultValue={campaign.internalName}
+              required
+            />
           </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="publicTitle">Título público</Label>
+              <Input
+                id="publicTitle"
+                name="publicTitle"
+                maxLength={PROJECT_INFO_LIMITS.publicTitle}
+                defaultValue={campaign.publicTitle ?? ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="internalReference">Referência interna</Label>
+              <Input
+                id="internalReference"
+                name="internalReference"
+                maxLength={PROJECT_INFO_LIMITS.internalReference}
+                defaultValue={campaign.internalReference ?? ""}
+              />
+            </div>
+          </div>
+        </FieldGroup>
+
+        <FieldGroup title="Organização">
+          <WorkspaceFolderFields
+            variant="editor"
+            workspaces={workspaces}
+            defaultWorkspaceId={campaign.workspaceId}
+            defaultFolderId={campaign.folderId}
+          />
+
           <div>
-            <Label htmlFor="timezone">Fuso horário</Label>
-            <SyncedSelect
-              id="timezone"
-              name="timezone"
-              defaultValue={campaign.timezone}
-              aria-describedby="timezone-help"
-              className={SELECT_CLASS}
-            >
-              {timezones.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </SyncedSelect>
-            <p id="timezone-help" className="mt-1 text-xs text-caetano-anthracite-80">
-              As horas da agenda são lidas neste fuso.
+            <Label htmlFor="tags">Etiquetas (separadas por vírgula)</Label>
+            <Input id="tags" name="tags" maxLength={PROJECT_INFO_LIMITS.tags} defaultValue={campaign.tags.join(", ")} />
+          </div>
+
+          <div>
+            <Label htmlFor="description">Descrição</Label>
+            <textarea
+              id="description"
+              name="description"
+              maxLength={PROJECT_INFO_LIMITS.description}
+              defaultValue={campaign.description ?? ""}
+              rows={3}
+              className={TEXTAREA_CLASS}
+            />
+          </div>
+        </FieldGroup>
+
+        <FieldGroup title="Idioma e endereço público">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="locale">Idioma</Label>
+              <SelectShell>
+                <SyncedSelect id="locale" name="locale" defaultValue={campaign.locale} className={SELECT_CLASS}>
+                  {locales.map((locale) => (
+                    <option key={locale.value} value={locale.value}>
+                      {locale.label}
+                    </option>
+                  ))}
+                </SyncedSelect>
+              </SelectShell>
+            </div>
+            <div>
+              <Label htmlFor="timezone">Fuso horário</Label>
+              <SelectShell>
+                <SyncedSelect
+                  id="timezone"
+                  name="timezone"
+                  defaultValue={campaign.timezone}
+                  aria-describedby="timezone-help"
+                  className={SELECT_CLASS}
+                >
+                  {timezones.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </SyncedSelect>
+              </SelectShell>
+              <p id="timezone-help" className={HELP_CLASS}>
+                As horas da agenda são lidas neste fuso.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="slug">Endereço público (slug)</Label>
+            {/* Desativado depois de publicar: não vai no envio e o servidor mantém-no. */}
+            <div className="flex min-w-0 items-stretch">
+              <span
+                aria-hidden="true"
+                className="flex shrink-0 items-center rounded-l-lg border border-r-0 border-caetano-anthracite-60 bg-caetano-medium-gray-20 px-3 text-sm text-caetano-anthracite-80"
+              >
+                /play/
+              </span>
+              <Input
+                id="slug"
+                name="slug"
+                maxLength={PROJECT_INFO_LIMITS.slug}
+                defaultValue={campaign.slug}
+                disabled={slugLocked}
+                aria-describedby="slug-help"
+                className="min-w-0 rounded-l-none"
+              />
+            </div>
+            <p id="slug-help" className={HELP_CLASS}>
+              URL pública: /play/{campaign.slug}
+              {slugLocked
+                ? " — já não pode ser alterado depois de publicado (partia o link e o QR code já partilhados)."
+                : " — letras minúsculas, números e hífenes."}
             </p>
           </div>
-        </div>
-
-        <div>
-          <Label htmlFor="slug">Endereço público (slug)</Label>
-          {/* Desativado depois de publicar: não vai no envio e o servidor mantém-no. */}
-          <Input
-            id="slug"
-            name="slug"
-            maxLength={PROJECT_INFO_LIMITS.slug}
-            defaultValue={campaign.slug}
-            disabled={slugLocked}
-            aria-describedby="slug-help"
-          />
-          <p id="slug-help" className="mt-1 text-xs text-caetano-anthracite-80">
-            URL pública: /play/{campaign.slug}
-            {slugLocked
-              ? " — já não pode ser alterado depois de publicado (partia o link e o QR code já partilhados)."
-              : " — letras minúsculas, números e hífenes."}
-          </p>
-        </div>
+        </FieldGroup>
       </AutoSaveForm>
     </div>
   );

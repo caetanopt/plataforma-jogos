@@ -7,6 +7,8 @@ import {
   type QuizPlayerSubmission,
 } from "@/components/public-game/quiz-game-player";
 import { computeQuizScore, matchResultProfile } from "@/features/quiz-game/scoring";
+import { CircleHelp } from "lucide-react";
+import { PreviewEmpty } from "@/components/public-game/game-ui";
 
 interface PreviewQuestion extends QuizPlayerQuestion {
   points: number;
@@ -41,7 +43,9 @@ export function QuizGamePreview({
 }) {
   if (questions.length === 0) {
     return (
-      <p className="text-sm text-game-muted">Adicione pelo menos uma pergunta para pré-visualizar o quiz.</p>
+      <PreviewEmpty icon={<CircleHelp className="size-6" />}>
+        Adicione pelo menos uma pergunta para pré-visualizar o quiz.
+      </PreviewEmpty>
     );
   }
 

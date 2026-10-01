@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown, ExternalLink as ExternalLinkIcon } from "lucide-react";
 import type { PublicLegalInfo, PublicLegalLink } from "@/features/play/types";
+
+// Alvo de pelo menos 24 px (WCAG 2.2, 2.5.8) e o foco na cor de destaque.
+const legalLinkClass =
+  "inline-flex min-h-6 items-center gap-1 rounded-sm underline decoration-1 underline-offset-4 transition-colors duration-150 hover:text-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent";
 
 function ExternalLink({ link }: { link: PublicLegalLink }) {
   return (
@@ -9,9 +14,10 @@ function ExternalLink({ link }: { link: PublicLegalLink }) {
       href={link.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
+      className={legalLinkClass}
     >
       {link.label}
+      <ExternalLinkIcon aria-hidden="true" className="size-3 shrink-0" />
       <span className="sr-only"> (abre numa nova janela)</span>
     </a>
   );
@@ -21,10 +27,7 @@ function PrivacyContact({ email }: { email: string }) {
   return (
     <p>
       Contacto de privacidade:{" "}
-      <a
-        href={`mailto:${email}`}
-        className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
-      >
+      <a href={`mailto:${email}`} className={legalLinkClass}>
         {email}
       </a>
     </p>
@@ -41,11 +44,17 @@ export function PrivacyNotice({ legal }: { legal: PublicLegalInfo }) {
   if (!legal.legalText && !privacyPolicy && !legal.privacyContactEmail) return null;
 
   return (
-    <div className="space-y-1.5 text-xs text-game-muted">
+    <div className="space-y-1.5 border-t border-game-border pt-4 text-xs leading-relaxed text-game-muted">
       {legal.legalText && (
-        <details>
-          <summary className="cursor-pointer underline">Informação legal sobre o tratamento dos dados</summary>
-          <p className="mt-1 whitespace-pre-line">{legal.legalText}</p>
+        <details className="group">
+          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-1 rounded-sm underline decoration-1 underline-offset-4 hover:text-game-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent [&::-webkit-details-marker]:hidden">
+            Informação legal sobre o tratamento dos dados
+            <ChevronDown
+              aria-hidden="true"
+              className="size-3.5 shrink-0 transition-[rotate] duration-200 ease-(--ease-out-expo) group-open:rotate-180"
+            />
+          </summary>
+          <p className="mt-1.5 whitespace-pre-line motion-safe:animate-fade-in">{legal.legalText}</p>
         </details>
       )}
       {privacyPolicy && (
@@ -65,9 +74,9 @@ export function LegalFooter({ legal, regulationText }: { legal: PublicLegalInfo;
 
   return (
     // Com fundo próprio: sobre uma imagem de fundo, o texto tem de se ler.
-    <footer className="space-y-2 rounded-game bg-game-surface px-4 py-3 text-center text-xs text-game-muted">
+    <footer className="space-y-1.5 rounded-game-lg border border-game-border bg-game-surface px-4 py-3 text-center text-xs text-game-muted shadow-(--game-elevation-sm)">
       <nav aria-label="Informação legal">
-        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+        <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
           {legal.links.map((link) => (
             <li key={link.key}>
               <ExternalLink link={link} />
@@ -80,9 +89,13 @@ export function LegalFooter({ legal, regulationText }: { legal: PublicLegalInfo;
                 onClick={() => setShowRegulation((value) => !value)}
                 aria-expanded={showRegulation}
                 aria-controls="regulation-text"
-                className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent"
+                className={`${legalLinkClass} cursor-pointer`}
               >
                 Regulamento
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-3.5 shrink-0 transition-[rotate] duration-200 ease-(--ease-out-expo) ${showRegulation ? "rotate-180" : ""}`}
+                />
               </button>
             </li>
           )}
@@ -90,7 +103,10 @@ export function LegalFooter({ legal, regulationText }: { legal: PublicLegalInfo;
       </nav>
       {legal.privacyContactEmail && <PrivacyContact email={legal.privacyContactEmail} />}
       {regulationText && showRegulation && (
-        <p id="regulation-text" className="whitespace-pre-line rounded-game bg-game-subtle p-3 text-left text-game-subtle-text">
+        <p
+          id="regulation-text"
+          className="whitespace-pre-line rounded-game bg-game-subtle p-4 text-left leading-relaxed text-game-subtle-text motion-safe:animate-fade-in"
+        >
           {regulationText}
         </p>
       )}

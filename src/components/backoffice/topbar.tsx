@@ -1,12 +1,6 @@
 import { LogOut } from "lucide-react";
+import { initials } from "@/lib/utils";
 import { MobileNav } from "@/components/backoffice/mobile-nav";
-
-/** As iniciais do nome (duas no máximo), para o círculo do utilizador. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.length > 1 ? [parts[0]![0], parts[parts.length - 1]![0]] : [parts[0]?.[0]];
-  return letters.filter(Boolean).join("").toUpperCase();
-}
 
 export function Topbar({
   organizationName,
@@ -42,7 +36,8 @@ export function Topbar({
             className="flex min-h-10 cursor-pointer touch-manipulation items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
           >
             <LogOut size={16} aria-hidden="true" />
-            <span className="hidden sm:inline">Sair</span>
+            {/* No telemóvel só o ícone à vista, mas o botão continua a chamar-se "Sair". */}
+            <span className="sr-only sm:not-sr-only">Sair</span>
           </button>
         </form>
       </div>

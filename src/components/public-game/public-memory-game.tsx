@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { CircleAlert, Hourglass, RotateCcw, Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Burst, ForwardArrow, gameButtonClass, gameCardClass, ResultBadge, Spinner } from "@/components/public-game/game-ui";
 import { MemoryGamePlayer, type MemoryPlayerConfig, type MemoryPlayerPair } from "@/components/public-game/memory-game-player";
 
 export function PublicMemoryGame({
@@ -37,7 +40,13 @@ export function PublicMemoryGame({
 
   if (phase === "submitting") {
     return (
-      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center text-sm text-game-muted">
+      <div
+        className={cn(
+          "flex items-center justify-center gap-3 px-6 py-10 text-center text-sm font-medium text-game-muted motion-safe:animate-fade-in",
+          gameCardClass,
+        )}
+      >
+        <Spinner className="size-5 text-game-accent" />
         A calcular o resultado…
       </div>
     );
@@ -45,15 +54,20 @@ export function PublicMemoryGame({
 
   if (phase === "error") {
     return (
-      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
-        <p className="text-sm text-game-danger" role="alert">
+      <div className={cn("p-6 text-center sm:p-8", gameCardClass, "motion-safe:animate-scale-in")}>
+        <p
+          className="flex items-start justify-center gap-2 text-sm text-game-danger"
+          role="alert"
+        >
+          <CircleAlert aria-hidden="true" className="mt-px size-4 shrink-0" />
           Não foi possível calcular o resultado. Tente novamente.
         </p>
         <button
           type="button"
           onClick={() => lastRaw && handleComplete(lastRaw)}
-          className="mt-4 w-full rounded-game bg-game-button px-4 py-2.5 font-medium text-game-button-text"
+          className={gameButtonClass({ size: "lg", className: "mt-5 w-full" })}
         >
+          <RotateCcw aria-hidden="true" className="size-4 shrink-0" />
           Tentar novamente
         </button>
       </div>
@@ -63,18 +77,37 @@ export function PublicMemoryGame({
   if (phase === "done" && result) {
     return (
       <div className="space-y-4">
-        <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center" aria-live="polite">
-          <p className="text-lg font-bold text-game-text">
+        <div
+          className={cn(
+            "relative isolate overflow-hidden px-6 py-9 text-center sm:px-10",
+            gameCardClass,
+            "motion-safe:animate-scale-in",
+          )}
+          aria-live="polite"
+        >
+          {result.completed && <Burst className="top-16" />}
+          <ResultBadge tone={result.completed ? "win" : "neutral"}>
+            {result.completed ? <Trophy className="size-7" /> : <Hourglass className="size-7" />}
+          </ResultBadge>
+          <p className="text-balance text-2xl font-bold tracking-tight text-game-text sm:text-3xl">
             {result.completed ? "Jogo concluído!" : "Tempo esgotado"}
           </p>
-          <p className="mt-1 text-game-muted">Pontuação: {result.score}</p>
+          <p className="mt-4 text-game-muted">
+            <span className="block text-xs font-medium uppercase tracking-[0.14em]">
+              Pontuação<span className="sr-only">:</span>
+            </span>{" "}
+            <span className="mt-1 block text-5xl font-bold tabular-nums tracking-tight text-game-text">
+              {result.score}
+            </span>
+          </p>
         </div>
         <button
           type="button"
           onClick={onContinue}
-          className="w-full rounded-game bg-game-button px-4 py-2.5 font-medium text-game-button-text"
+          className={gameButtonClass({ size: "lg", className: "group w-full" })}
         >
           Continuar
+          <ForwardArrow />
         </button>
       </div>
     );

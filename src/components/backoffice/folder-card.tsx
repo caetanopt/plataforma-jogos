@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { Folder as FolderIcon } from "lucide-react";
 import {
   archiveFolderAction,
@@ -9,7 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
-import { DetailsMenu, menuItemClass } from "@/components/ui/details-menu";
+import { DetailsMenu } from "@/components/ui/details-menu";
+import { menuItemClass } from "@/components/ui/menu-classes";
 import type { FolderSort, FolderTab } from "@/features/folders/view-params";
 
 export function FolderCard({
@@ -121,7 +123,7 @@ export function FolderCard({
                   confirmMessage={`Eliminar a pasta "${name}"? Só é possível se estiver vazia.`}
                   variant="ghost"
                   size="sm"
-                  className={`${menuItemClass} text-danger`}
+                  className={cn(menuItemClass, "text-danger hover:bg-danger-surface")}
                 >
                   Eliminar
                 </ConfirmSubmitButton>

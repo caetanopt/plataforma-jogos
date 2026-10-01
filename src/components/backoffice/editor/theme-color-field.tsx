@@ -35,7 +35,7 @@ export function ThemeColorField({
   return (
     <div>
       <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <SyncedInput
           type="color"
           id={id}
@@ -43,9 +43,10 @@ export function ThemeColorField({
           defaultValue={defaultValue}
           onChange={(event) => setValue(event.currentTarget.value)}
           aria-describedby={codeId}
-          className="h-10 w-14 cursor-pointer rounded-lg border border-caetano-medium-gray"
+          // shrink-0: numa grelha estreita encolhia até 8 px (alvo abaixo dos 24 px).
+          className="h-10 w-14 shrink-0 cursor-pointer rounded-lg border border-caetano-anthracite-60 bg-white p-1 shadow-xs"
         />
-        <span id={codeId} className="font-mono text-sm uppercase text-caetano-anthracite-80">
+        <span id={codeId} className="min-w-0 truncate font-mono text-sm uppercase text-caetano-anthracite-80">
           {value}
         </span>
       </div>

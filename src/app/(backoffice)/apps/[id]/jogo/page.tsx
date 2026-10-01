@@ -31,18 +31,20 @@ export default async function GameConfigStepPage({
     LIVE_STATUSES.includes(campaign.status as (typeof LIVE_STATUSES)[number]) &&
     (await prisma.participation.findFirst({ where: { campaignId: id, isTest: false }, select: { id: true } })) !== null;
 
+  const notice = hasRealParticipations ? (
+    <Alert variant="info">
+      Esta campanha já tem participações reais e está ativa. Alterar a configuração do jogo
+      (pesos, prémios, respostas corretas, pares) aplica-se de imediato a novas participações,
+      sem criar uma nova versão publicada.
+    </Alert>
+  ) : null;
+
+  // O aviso vai para dentro da etapa, por baixo do título dela.
   return (
-    <div className="space-y-4">
-      {hasRealParticipations && (
-        <Alert variant="info">
-          Esta campanha já tem participações reais e está ativa. Alterar a configuração do jogo
-          (pesos, prémios, respostas corretas, pares) aplica-se de imediato a novas participações,
-          sem criar uma nova versão publicada.
-        </Alert>
-      )}
-      {campaign.type === "MEMORY" && <MemoryGameStep campaignId={id} />}
-      {campaign.type === "WHEEL" && <WheelGameStep campaignId={id} />}
-      {campaign.type === "QUIZ" && <QuizGameStep campaignId={id} />}
-    </div>
+    <>
+      {campaign.type === "MEMORY" && <MemoryGameStep campaignId={id} notice={notice} />}
+      {campaign.type === "WHEEL" && <WheelGameStep campaignId={id} notice={notice} />}
+      {campaign.type === "QUIZ" && <QuizGameStep campaignId={id} notice={notice} />}
+    </>
   );
 }

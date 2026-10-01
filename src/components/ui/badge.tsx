@@ -10,7 +10,8 @@ type BadgeTone = "neutral" | "success" | "warning" | "info" | "danger";
   distinção passa a vir do fundo e da borda, não do texto.
 */
 const toneClasses: Record<BadgeTone, string> = {
-  neutral: "bg-caetano-medium-gray-20 text-caetano-anthracite",
+  // Com a linha: sobre uma linha de tabela em hover (o mesmo cinza) não perde a forma.
+  neutral: "bg-caetano-medium-gray-20 text-caetano-anthracite ring-1 ring-caetano-medium-gray-40",
   success: "bg-caetano-eco-green-20 text-caetano-anthracite ring-1 ring-caetano-eco-green-40",
   warning: "bg-caetano-dynamic-orange-20 text-caetano-anthracite ring-1 ring-caetano-dynamic-orange-40",
   info: "bg-caetano-cyan-20 text-caetano-deep-blue ring-1 ring-caetano-cyan-40",

@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { ImageUp } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useFormAction } from "@/components/forms/form-action-context";
 import type { MediaKind } from "@/generated/prisma/client";
 
@@ -137,22 +140,30 @@ export function MediaUploadField({
       {previewUrl && (
         <div className="mb-2">
           {kind === "VIDEO" ? (
-            <video src={previewUrl} controls className="h-32 rounded-lg border border-caetano-medium-gray-40" />
+            <video src={previewUrl} controls className="h-32 rounded-xl border border-caetano-medium-gray-40 shadow-xs" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
               alt={`Pré-visualização de ${label}`}
-              className="h-32 rounded-lg border border-caetano-medium-gray-40 object-contain"
+              // Num fundo cinza claro: um logótipo branco ou transparente continua a ver-se.
+              className="h-32 rounded-xl border border-caetano-medium-gray-40 bg-caetano-medium-gray-20 object-contain p-2 shadow-xs"
             />
           )}
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* O input fica visualmente escondido mas focável (com `hidden` não se
             chegava lá pelo teclado), e o nome inclui o do campo. */}
-        <label className="cursor-pointer rounded-lg border border-caetano-medium-gray px-3 py-1.5 text-sm text-caetano-anthracite hover:bg-caetano-medium-gray-20 focus-within:ring-2 focus-within:ring-caetano-cyan">
+        <label
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            // O anel do foco é o do input escondido lá dentro.
+            "focus-within:ring-2 focus-within:ring-caetano-cyan focus-within:ring-offset-2",
+          )}
+        >
+          <ImageUp size={16} aria-hidden="true" />
           <span id={`${uploadId}-action`}>{previewUrl ? "Substituir" : "Carregar ficheiro"}</span>
           <input
             type="file"
@@ -168,7 +179,7 @@ export function MediaUploadField({
             type="button"
             onClick={handleRemove}
             aria-label={`Remover ${label}`}
-            className="text-sm text-danger hover:underline"
+            className="min-h-10 cursor-pointer rounded-lg px-3 text-sm font-medium text-danger transition-colors hover:bg-danger-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan"
           >
             Remover
           </button>

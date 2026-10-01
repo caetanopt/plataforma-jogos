@@ -4,8 +4,9 @@ import { SyncedInput, SyncedSelect } from "@/components/forms/synced-fields";
 import { Label } from "@/components/ui/label";
 import { Alert } from "@/components/ui/alert";
 import { controlClass } from "@/components/ui/input";
+import { selectClass, SelectShell } from "@/components/ui/select";
+import { FieldGroup } from "@/components/backoffice/editor/editor-ui";
 import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
 import { BRAND_THEME_LIMITS } from "@/lib/validation/brand";
 import { LEGAL_LINK_KEYS, LEGAL_LINK_LABELS, readLegalLinks } from "@/features/brand/legal-links";
 import { themeContrastWarnings } from "@/features/brand/public-theme";
@@ -15,17 +16,6 @@ const FONT_OPTIONS = ["Montserrat", "Inter", "Roboto", "Open Sans", "Arial"];
 
 const FIELD_CLASS = cn("w-full", controlClass);
 
-/** Um grupo do tema, com o título do grupo e uma linha a separá-lo do anterior. */
-function ThemeGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <fieldset className="space-y-4 border-t border-caetano-medium-gray-40 pt-5 first:border-t-0 first:pt-0">
-      <legend className="float-left mb-4 w-full text-xs font-bold uppercase tracking-[0.12em] text-caetano-deep-blue-80">
-        {title}
-      </legend>
-      {children}
-    </fieldset>
-  );
-}
 
 export interface ThemeFieldsetValues {
   logoMediaId: string | null;
@@ -87,7 +77,7 @@ export function ThemeFieldset({
 
   return (
     <div className="space-y-6">
-      <ThemeGroup title="Logótipo e imagens">
+      <FieldGroup title="Logótipo e imagens">
         <MediaUploadField
           name="logoMediaId"
           label="Logótipo"
@@ -128,9 +118,9 @@ export function ThemeFieldset({
           defaultKind={media.background?.kind}
           accept="image/jpeg,image/png,image/webp"
         />
-      </ThemeGroup>
+      </FieldGroup>
 
-      <ThemeGroup title="Cores">
+      <FieldGroup title="Cores">
         <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 sm:grid-cols-3">
           {COLOR_FIELDS.map(([name, label]) => (
             <ThemeColorField
@@ -153,24 +143,26 @@ export function ThemeFieldset({
             </ul>
           </Alert>
         )}
-      </ThemeGroup>
+      </FieldGroup>
 
-      <ThemeGroup title="Tipografia e forma">
+      <FieldGroup title="Tipografia e forma">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor={fieldId("fontFamily")}>Tipografia</Label>
-            <SyncedSelect
-              id={fieldId("fontFamily")}
-              name="fontFamily"
-              defaultValue={theme.fontFamily}
-              className={FIELD_CLASS}
-            >
-              {fontOptions.map((font) => (
-                <option key={font} value={font}>
-                  {font}
-                </option>
-              ))}
-            </SyncedSelect>
+            <SelectShell>
+              <SyncedSelect
+                id={fieldId("fontFamily")}
+                name="fontFamily"
+                defaultValue={theme.fontFamily}
+                className={selectClass}
+              >
+                {fontOptions.map((font) => (
+                  <option key={font} value={font}>
+                    {font}
+                  </option>
+                ))}
+              </SyncedSelect>
+            </SelectShell>
           </div>
           <div>
             <Label htmlFor={fieldId("borderRadiusPx")}>Border radius (px)</Label>
@@ -200,9 +192,9 @@ export function ThemeFieldset({
           />
           Aplicar sombras nos elementos
         </label>
-      </ThemeGroup>
+      </FieldGroup>
 
-      <ThemeGroup title="Links legais">
+      <FieldGroup title="Links legais">
         <p id={fieldId("legalLinks-help")} className="text-xs text-caetano-anthracite-80">
           Aparecem no jogo, junto ao formulário de leads e no rodapé. Endereços completos, a começar
           por https://.
@@ -223,7 +215,7 @@ export function ThemeFieldset({
             />
           </div>
         ))}
-      </ThemeGroup>
+      </FieldGroup>
     </div>
   );
 }

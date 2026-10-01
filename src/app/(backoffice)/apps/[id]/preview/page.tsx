@@ -5,6 +5,8 @@ import { MemoryGamePreview } from "@/components/public-game/memory-game-preview"
 import { WheelGamePreview } from "@/components/public-game/wheel-game-preview";
 import { QuizGamePreview } from "@/components/public-game/quiz-game-preview";
 import { GameThemeShell } from "@/components/public-game/game-theme-shell";
+import { PreviewDeviceFrame } from "@/components/backoffice/editor/preview-device-frame";
+import { FlaskConical } from "lucide-react";
 
 export default async function CampaignPreviewPage({
   params,
@@ -59,102 +61,108 @@ export default async function CampaignPreviewPage({
   const prizeById = new Map(campaign.prizes.map((p) => [p.id, p]));
 
   return (
-    <div className="mx-auto max-w-xl">
-      <div className="mb-4 rounded-lg border border-caetano-cyan-40 bg-caetano-cyan-20 px-4 py-2 text-center text-sm text-caetano-deep-blue">
-        Pré-visualização — simulação local, não afeta estatísticas nem participações.
+    <div className="space-y-5 sm:space-y-6">
+      {/* O título da página fica no botão aceso do cabeçalho; aqui só para leitores de ecrã. */}
+      <h2 className="sr-only">Pré-visualização</h2>
+      <div className="mx-auto flex max-w-2xl items-start gap-2.5 rounded-xl border border-caetano-cyan-40 bg-caetano-cyan-20 px-4 py-2.5 text-sm text-caetano-deep-blue sm:items-center sm:justify-center">
+        <FlaskConical size={16} aria-hidden="true" className="mt-0.5 shrink-0 sm:mt-0" />
+        <span>Pré-visualização — simulação local, não afeta estatísticas nem participações.</span>
       </div>
 
-      <GameThemeShell
-        theme={campaign.theme}
-        backgroundImageUrl={
-          campaign.theme?.backgroundImageMediaId ? mediaById.get(campaign.theme.backgroundImageMediaId)?.url : undefined
-        }
-        className="rounded-xl p-4"
-      >
-        {campaign.type === "MEMORY" && campaign.memoryConfig ? (
-          <MemoryGamePreview
-            pairs={campaign.memoryConfig.pairs.map((pair) => ({
-              id: pair.id,
-              cardAMediaUrl: pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined,
-              cardAText: pair.cardAText,
-              cardAAlt: pair.cardAAltText,
-              cardBMediaUrl: pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined,
-              cardBText: pair.cardBText,
-              cardBAlt: pair.cardBAltText,
-            }))}
-            config={{
-              columns: campaign.memoryConfig.columns,
-              randomizeOrder: campaign.memoryConfig.randomizeOrder,
-              cardGapPx: campaign.memoryConfig.cardGapPx,
-              timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
-              maxAttempts: campaign.memoryConfig.maxAttempts,
-              previewSeconds: campaign.memoryConfig.previewSeconds,
-              cardBackUrl: campaign.memoryConfig.cardBackMediaId
-                ? mediaById.get(campaign.memoryConfig.cardBackMediaId)?.url
-                : undefined,
-            }}
-            scoringConfig={{
-              pointsPerPair: campaign.memoryConfig.pointsPerPair,
-              penaltyPerMistake: campaign.memoryConfig.penaltyPerMistake,
-              speedBonusEnabled: campaign.memoryConfig.speedBonusEnabled,
-              timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
-              maxAttempts: campaign.memoryConfig.maxAttempts,
-            }}
-          />
-        ) : campaign.type === "WHEEL" && campaign.wheelConfig ? (
-          <WheelGamePreview
-            segments={campaign.wheelConfig.segments
-              .filter((segment) => segment.isActive)
-              .map((segment) => ({
-                id: segment.id,
-                name: segment.name,
-                colorHex: segment.colorHex,
-                weight: segment.weight,
-                outcome: segment.outcome,
-                message: segment.message,
-                prizeName: segment.prizeId ? (prizeById.get(segment.prizeId)?.publicName ?? null) : null,
+      {/* O tema da campanha preenche o ecrã de cada aparelho, com o jogo ao centro. */}
+      <PreviewDeviceFrame address={`/play/${campaign.slug}`}>
+        <GameThemeShell
+          theme={campaign.theme}
+          backgroundImageUrl={
+            campaign.theme?.backgroundImageMediaId ? mediaById.get(campaign.theme.backgroundImageMediaId)?.url : undefined
+          }
+          className="flex flex-col justify-center p-4 sm:p-6"
+        >
+          {campaign.type === "MEMORY" && campaign.memoryConfig ? (
+            <MemoryGamePreview
+              pairs={campaign.memoryConfig.pairs.map((pair) => ({
+                id: pair.id,
+                cardAMediaUrl: pair.cardAMediaId ? mediaById.get(pair.cardAMediaId)?.url : undefined,
+                cardAText: pair.cardAText,
+                cardAAlt: pair.cardAAltText,
+                cardBMediaUrl: pair.cardBMediaId ? mediaById.get(pair.cardBMediaId)?.url : undefined,
+                cardBText: pair.cardBText,
+                cardBAlt: pair.cardBAltText,
               }))}
-          />
-        ) : campaign.type === "QUIZ" && campaign.quizConfig ? (
-          <QuizGamePreview
-            questions={campaign.quizConfig.questions.map((question) => ({
-              id: question.id,
-              type: question.type,
-              title: question.title,
-              supportText: question.supportText,
-              imageUrl: question.imageMediaId ? mediaById.get(question.imageMediaId)?.url : undefined,
-              points: question.points,
-              correctAnswerIds: question.answers.filter((a) => a.isCorrect).map((a) => a.id),
-              answers: question.answers.map((answer) => ({
-                id: answer.id,
-                text: answer.text,
-                imageUrl: answer.imageMediaId ? mediaById.get(answer.imageMediaId)?.url : undefined,
-              })),
-            }))}
-            resultProfiles={campaign.quizConfig.resultProfiles.map((profile) => ({
-              id: profile.id,
-              minPercentage: profile.minPercentage,
-              maxPercentage: profile.maxPercentage,
-              title: profile.title,
-              description: profile.description,
-              ctaLabel: profile.ctaLabel,
-              ctaUrl: profile.ctaUrl,
-            }))}
-            config={{
-              allowGoBack: campaign.quizConfig.allowGoBack,
-              showProgress: campaign.quizConfig.showProgress,
-              totalTimeLimitSeconds: campaign.quizConfig.totalTimeLimitSeconds,
-              penaltyPerWrong: campaign.quizConfig.penaltyPerWrong,
-              speedBonusEnabled: campaign.quizConfig.speedBonusEnabled,
-              minPassPercentage: campaign.quizConfig.minPassPercentage,
-            }}
-          />
-        ) : (
-          <p className="text-center text-sm text-game-muted">
-            Pré-visualização ainda não disponível para este tipo de jogo.
-          </p>
-        )}
-      </GameThemeShell>
+              config={{
+                columns: campaign.memoryConfig.columns,
+                randomizeOrder: campaign.memoryConfig.randomizeOrder,
+                cardGapPx: campaign.memoryConfig.cardGapPx,
+                timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
+                maxAttempts: campaign.memoryConfig.maxAttempts,
+                previewSeconds: campaign.memoryConfig.previewSeconds,
+                cardBackUrl: campaign.memoryConfig.cardBackMediaId
+                  ? mediaById.get(campaign.memoryConfig.cardBackMediaId)?.url
+                  : undefined,
+              }}
+              scoringConfig={{
+                pointsPerPair: campaign.memoryConfig.pointsPerPair,
+                penaltyPerMistake: campaign.memoryConfig.penaltyPerMistake,
+                speedBonusEnabled: campaign.memoryConfig.speedBonusEnabled,
+                timeLimitSeconds: campaign.memoryConfig.timeLimitSeconds,
+                maxAttempts: campaign.memoryConfig.maxAttempts,
+              }}
+            />
+          ) : campaign.type === "WHEEL" && campaign.wheelConfig ? (
+            <WheelGamePreview
+              segments={campaign.wheelConfig.segments
+                .filter((segment) => segment.isActive)
+                .map((segment) => ({
+                  id: segment.id,
+                  name: segment.name,
+                  colorHex: segment.colorHex,
+                  weight: segment.weight,
+                  outcome: segment.outcome,
+                  message: segment.message,
+                  prizeName: segment.prizeId ? (prizeById.get(segment.prizeId)?.publicName ?? null) : null,
+                }))}
+            />
+          ) : campaign.type === "QUIZ" && campaign.quizConfig ? (
+            <QuizGamePreview
+              questions={campaign.quizConfig.questions.map((question) => ({
+                id: question.id,
+                type: question.type,
+                title: question.title,
+                supportText: question.supportText,
+                imageUrl: question.imageMediaId ? mediaById.get(question.imageMediaId)?.url : undefined,
+                points: question.points,
+                correctAnswerIds: question.answers.filter((a) => a.isCorrect).map((a) => a.id),
+                answers: question.answers.map((answer) => ({
+                  id: answer.id,
+                  text: answer.text,
+                  imageUrl: answer.imageMediaId ? mediaById.get(answer.imageMediaId)?.url : undefined,
+                })),
+              }))}
+              resultProfiles={campaign.quizConfig.resultProfiles.map((profile) => ({
+                id: profile.id,
+                minPercentage: profile.minPercentage,
+                maxPercentage: profile.maxPercentage,
+                title: profile.title,
+                description: profile.description,
+                ctaLabel: profile.ctaLabel,
+                ctaUrl: profile.ctaUrl,
+              }))}
+              config={{
+                allowGoBack: campaign.quizConfig.allowGoBack,
+                showProgress: campaign.quizConfig.showProgress,
+                totalTimeLimitSeconds: campaign.quizConfig.totalTimeLimitSeconds,
+                penaltyPerWrong: campaign.quizConfig.penaltyPerWrong,
+                speedBonusEnabled: campaign.quizConfig.speedBonusEnabled,
+                minPassPercentage: campaign.quizConfig.minPassPercentage,
+              }}
+            />
+          ) : (
+            <p className="text-center text-sm text-game-muted">
+              Pré-visualização ainda não disponível para este tipo de jogo.
+            </p>
+          )}
+        </GameThemeShell>
+      </PreviewDeviceFrame>
     </div>
   );
 }

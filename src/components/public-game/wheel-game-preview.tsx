@@ -1,6 +1,8 @@
 "use client";
 
+import { PieChart } from "lucide-react";
 import { WheelGamePlayer, type WheelPlayerSegment, type WheelSpinResult } from "@/components/public-game/wheel-game-player";
+import { PreviewEmpty } from "@/components/public-game/game-ui";
 
 interface PreviewSegment extends WheelPlayerSegment {
   weight: number;
@@ -33,9 +35,9 @@ function simulateSpin(segments: PreviewSegment[]): WheelSpinResult {
 export function WheelGamePreview({ segments }: { segments: PreviewSegment[] }) {
   if (segments.length === 0) {
     return (
-      <p className="text-sm text-game-muted">
+      <PreviewEmpty icon={<PieChart className="size-6" />}>
         Adicione pelo menos um segmento para pré-visualizar a roda.
-      </p>
+      </PreviewEmpty>
     );
   }
 

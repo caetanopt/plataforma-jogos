@@ -4,6 +4,8 @@ import { useId, useState, type ChangeEvent } from "react";
 import { flushSync } from "react-dom";
 import { Label } from "@/components/ui/label";
 import { SyncedSelect } from "@/components/forms/synced-fields";
+import { cn } from "@/lib/utils";
+import { selectClass, SelectShell } from "@/components/ui/select";
 
 interface FolderOption {
   id: string;
@@ -15,6 +17,9 @@ interface WorkspaceOption {
   name: string;
   folders: FolderOption[];
 }
+
+// `font-normal`: no formulário de criação o select fica dentro do label (Medium).
+const selectClassName = cn(selectClass, "font-normal");
 
 /**
  * Os selects de espaço de trabalho e pasta têm de reagir um ao outro no
@@ -64,44 +69,50 @@ export function WorkspaceFolderFields({
   };
 
   const editor = variant === "editor";
-  const selectClassName = `${editor ? "" : "mt-1 "}h-10 w-full rounded-lg border border-caetano-medium-gray bg-white px-3 text-sm`;
+  // No formulário de criação o label envolve o select: a distância ao texto
+  // é a mesma do `Label` (mb-1.5).
+  const shellClassName = editor ? undefined : "mt-1.5";
   const workspaceFieldId = `${idPrefix}-workspaceId`;
   const folderFieldId = `${idPrefix}-folderId`;
 
   const workspaceSelect = (
-    <select
-      id={workspaceFieldId}
-      name="workspaceId"
-      required
-      value={workspaceId}
-      onChange={handleWorkspaceChange}
-      className={selectClassName}
-    >
-      {workspaces.map((workspace) => (
-        <option key={workspace.id} value={workspace.id}>
-          {workspace.name}
-        </option>
-      ))}
-    </select>
+    <SelectShell className={shellClassName}>
+      <select
+        id={workspaceFieldId}
+        name="workspaceId"
+        required
+        value={workspaceId}
+        onChange={handleWorkspaceChange}
+        className={selectClassName}
+      >
+        {workspaces.map((workspace) => (
+          <option key={workspace.id} value={workspace.id}>
+            {workspace.name}
+          </option>
+        ))}
+      </select>
+    </SelectShell>
   );
 
   // `key`: as opções mudam com o espaço, e o `defaultValue` de um select já
   // montado não volta a ser aplicado.
   const folderSelect = (
-    <SyncedSelect
-      key={workspaceId}
-      id={folderFieldId}
-      name="folderId"
-      defaultValue={folderDefault}
-      className={selectClassName}
-    >
-      <option value="">Sem pasta</option>
-      {folders.map((folder) => (
-        <option key={folder.id} value={folder.id}>
-          {folder.name}
-        </option>
-      ))}
-    </SyncedSelect>
+    <SelectShell className={shellClassName}>
+      <SyncedSelect
+        key={workspaceId}
+        id={folderFieldId}
+        name="folderId"
+        defaultValue={folderDefault}
+        className={selectClassName}
+      >
+        <option value="">Sem pasta</option>
+        {folders.map((folder) => (
+          <option key={folder.id} value={folder.id}>
+            {folder.name}
+          </option>
+        ))}
+      </SyncedSelect>
+    </SelectShell>
   );
 
   if (editor) {
@@ -124,13 +135,13 @@ export function WorkspaceFolderFields({
       {singleWorkspaceId ? (
         <input type="hidden" name="workspaceId" value={singleWorkspaceId} />
       ) : (
-        <label className="mt-3 block text-sm">
+        <label className="mt-3 block text-sm font-medium text-caetano-anthracite">
           Espaço de trabalho
           {workspaceSelect}
         </label>
       )}
 
-      <label className="mt-3 block text-sm">
+      <label className="mt-3 block text-sm font-medium text-caetano-anthracite">
         Pasta (opcional)
         {folderSelect}
       </label>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Download, ShieldCheck } from "lucide-react";
 import { requirePagePermission } from "@/server/auth/page-guard";
-import { firstValues } from "@/lib/forms/search-params";
+import { firstValues, pageParam } from "@/lib/forms/search-params";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { countLeadsToAnonymize, listLeads } from "@/features/leads/queries";
@@ -13,13 +13,17 @@ import { RETENTION_WARNING_DAYS } from "@/features/privacy/retention-policy";
 import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { AnonymizeSelectionButton, SelectAllCheckbox } from "@/components/backoffice/leads/selection";
+import {
+  AnonymizeSelectionButton,
+  SelectAllCheckbox,
+} from "@/components/backoffice/leads/selection";
 import { SubjectExportButton } from "@/components/backoffice/leads/subject-export-button";
 import { Alert } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
 import { controlClass, Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { selectClass, SelectShell } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +80,7 @@ export default async function LeadsPage({
   const params: LeadsSearchParams = firstValues(await searchParams);
   const context = await requirePagePermission("leads:view");
   const { range, filters } = leadsFiltersFromParams(params);
-  const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+  const page = pageParam(params.page);
   const excludeTest = filters.excludeTest !== false;
   const marketingConsent = filters.marketingConsent;
   const canManagePrivacy = can(context, "privacy:manage");
@@ -88,7 +92,9 @@ export default async function LeadsPage({
       orderBy: { internalName: "asc" },
     }),
     listLeads(context.organizationId, range, { ...filters, page }),
-    canManagePrivacy ? countLeadsToAnonymize(context.organizationId, range, filters) : Promise.resolve(0),
+    canManagePrivacy
+      ? countLeadsToAnonymize(context.organizationId, range, filters)
+      : Promise.resolve(0),
     // Aviso antes da anonimização (§24): o que o prazo vai levar em breve.
     retentionOutlook(context.organizationId, { campaignId: filters.campaignId }),
   ]);
@@ -124,7 +130,10 @@ export default async function LeadsPage({
         description="Participações e leads angariados nas suas campanhas."
         actions={
           canExport && (
-            <a href={`/api/leads/export?${exportQuery}`} className={buttonVariants({ variant: "outline" })}>
+            <a
+              href={`/api/leads/export?${exportQuery}`}
+              className={buttonVariants({ variant: "outline" })}
+            >
               <Download size={16} aria-hidden="true" />
               Exportar CSV
             </a>
@@ -136,8 +145,10 @@ export default async function LeadsPage({
         <div className="mb-6">
           <Alert variant="warning" live={false}>
             <p>
-              {upcomingTotal === 1 ? "1 lead vai ser anonimizada" : `${upcomingTotal} leads vão ser anonimizadas`} nos
-              próximos {RETENTION_WARNING_DAYS} dias, por fim do prazo de conservação.
+              {upcomingTotal === 1
+                ? "1 lead vai ser anonimizada"
+                : `${upcomingTotal} leads vão ser anonimizadas`}{" "}
+              nos próximos {RETENTION_WARNING_DAYS} dias, por fim do prazo de conservação.
               {canExport ? " Exporte antes as de que precisar." : ""}
             </p>
             <ul className="mt-2 list-disc space-y-0.5 pl-5">
@@ -169,56 +180,79 @@ export default async function LeadsPage({
       >
         <div>
           <Label htmlFor="campaignId">Campanha</Label>
-          <select
-            id="campaignId"
-            name="campaignId"
-            defaultValue={params.campaignId ?? ""}
-            className={cn("w-full", controlClass)}
-          >
-            <option value="">Todas</option>
-            {campaigns.map((campaign) => (
-              <option key={campaign.id} value={campaign.id}>
-                {campaign.internalName}
-              </option>
-            ))}
-          </select>
+          <SelectShell>
+            <select
+              id="campaignId"
+              name="campaignId"
+              defaultValue={params.campaignId ?? ""}
+              className={selectClass}
+            >
+              <option value="">Todas</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.id}>
+                  {campaign.internalName}
+                </option>
+              ))}
+            </select>
+          </SelectShell>
         </div>
         <div>
           <Label htmlFor="search">Pesquisar</Label>
-          <Input id="search" name="search" placeholder="Nome, e-mail ou telefone" defaultValue={params.search ?? ""} />
+          <Input
+            id="search"
+            name="search"
+            placeholder="Nome, e-mail ou telefone"
+            defaultValue={params.search ?? ""}
+          />
         </div>
         <div>
           <Label htmlFor="period">Período</Label>
-          <select id="period" name="period" defaultValue={range.preset} className={cn("w-full", controlClass)}>
-            <option value="today">Hoje</option>
-            <option value="7d">Últimos 7 dias</option>
-            <option value="30d">Últimos 30 dias</option>
-            <option value="90d">Últimos 90 dias</option>
-            <option value="all">Todo o período</option>
-            <option value="custom">Personalizado</option>
-          </select>
+          <SelectShell>
+            <select id="period" name="period" defaultValue={range.preset} className={selectClass}>
+              <option value="today">Hoje</option>
+              <option value="7d">Últimos 7 dias</option>
+              <option value="30d">Últimos 30 dias</option>
+              <option value="90d">Últimos 90 dias</option>
+              <option value="all">Todo o período</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </SelectShell>
         </div>
         <div>
           <Label htmlFor="from">De</Label>
-          <input id="from" type="date" name="from" defaultValue={params.from} className={cn("w-full", controlClass)} />
+          <input
+            id="from"
+            type="date"
+            name="from"
+            defaultValue={params.from}
+            className={cn("w-full", controlClass)}
+          />
         </div>
         <div>
           <Label htmlFor="to">Até</Label>
-          <input id="to" type="date" name="to" defaultValue={params.to} className={cn("w-full", controlClass)} />
+          <input
+            id="to"
+            type="date"
+            name="to"
+            defaultValue={params.to}
+            className={cn("w-full", controlClass)}
+          />
         </div>
         <div>
           <Label htmlFor="marketingConsent">Consentimento de marketing</Label>
-          <select
-            id="marketingConsent"
-            name="marketingConsent"
-            defaultValue={marketingConsent ?? ""}
-            className={cn("w-full", controlClass)}
-          >
-            <option value="">Todos</option>
-            {/* "Com" inclui as leads «Parcial» (aceitaram pelo menos um). */}
-            <option value="granted">Com consentimento aceite</option>
-            <option value="not_granted">Sem consentimento aceite</option>
-          </select>
+          <SelectShell>
+            <select
+              id="marketingConsent"
+              name="marketingConsent"
+              defaultValue={marketingConsent ?? ""}
+              className={selectClass}
+            >
+              <option value="">Todos</option>
+              {/* "Com" inclui as leads «Parcial» (aceitaram pelo menos um). */}
+              <option value="granted">Com consentimento aceite</option>
+              <option value="not_granted">Sem consentimento aceite</option>
+            </select>
+          </SelectShell>
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 sm:col-span-2 lg:col-span-5">
           <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-caetano-anthracite">
@@ -264,7 +298,10 @@ export default async function LeadsPage({
             >
               <ShieldCheck size={18} />
             </span>
-            <h2 id="privacy-actions-heading" className="text-base font-bold text-caetano-deep-blue sm:text-lg">
+            <h2
+              id="privacy-actions-heading"
+              className="text-base font-bold text-caetano-deep-blue sm:text-lg"
+            >
               Dados pessoais
             </h2>
           </div>
@@ -278,11 +315,20 @@ export default async function LeadsPage({
               messageClassName="max-w-md"
             >
               <input type="hidden" name="scope" value="selection" />
-              <AnonymizeSelectionButton formId={SELECTION_FORM_ID} name="participationId" message={ANONYMIZE_WARNING} />
+              <AnonymizeSelectionButton
+                formId={SELECTION_FORM_ID}
+                name="participationId"
+                message={ANONYMIZE_WARNING}
+              />
             </ActionForm>
             {/* Sempre montado: a resposta fica visível mesmo quando já não
                 sobra nenhuma lead por anonimizar. */}
-            <ActionForm action={anonymizeLeadsAction} resetOnSuccess={false} className="flex flex-col gap-1" messageClassName="max-w-md">
+            <ActionForm
+              action={anonymizeLeadsAction}
+              resetOnSuccess={false}
+              className="flex flex-col gap-1"
+              messageClassName="max-w-md"
+            >
               <input type="hidden" name="scope" value="filters" />
               {Object.entries(filterParams).map(([name, value]) => (
                 <input key={name} type="hidden" name={name} value={value} />
@@ -291,16 +337,21 @@ export default async function LeadsPage({
               <input type="hidden" name="expected" value={toAnonymize} />
               <ConfirmSubmitButton
                 disabled={toAnonymize === 0 || Boolean(filters.search)}
-                confirmTitle={toAnonymize === 1 ? "Anonimizar 1 lead?" : `Anonimizar ${toAnonymize} leads?`}
+                confirmTitle={
+                  toAnonymize === 1 ? "Anonimizar 1 lead?" : `Anonimizar ${toAnonymize} leads?`
+                }
                 confirmMessage={`Todas as leads dos filtros aplicados, em todas as páginas: ${filterSummary}. ${ANONYMIZE_WARNING}`}
                 confirmLabel="Anonimizar"
                 variant="outline"
               >
-                {toAnonymize === 1 ? "Anonimizar a lead dos filtros" : `Anonimizar as ${toAnonymize} leads dos filtros`}
+                {toAnonymize === 1
+                  ? "Anonimizar a lead dos filtros"
+                  : `Anonimizar as ${toAnonymize} leads dos filtros`}
               </ConfirmSubmitButton>
               {filters.search && (
                 <p className="max-w-md text-xs text-caetano-anthracite-80">
-                  A pesquisa procura partes do texto e apanharia outras pessoas: para um titular, use o pedido abaixo.
+                  A pesquisa procura partes do texto e apanharia outras pessoas: para um titular,
+                  use o pedido abaixo.
                 </p>
               )}
             </ActionForm>
@@ -342,12 +393,12 @@ export default async function LeadsPage({
               Anonimizar os dados do titular
             </ConfirmSubmitButton>
             <p id="subject-help" className="basis-full text-xs text-caetano-anthracite-80">
-              Só o e-mail ou o telefone exatos (não partes do texto), em todas as campanhas. «Procurar» diz
-              quantas participações e menções encontra; «Exportar os dados do titular» descarrega um ficheiro
-              (JSON) com os dados dele, para lhe enviar (pedido de acesso). Nenhum dos dois apaga nada. Uma
-              menção é a participação de outra pessoa em que este e-mail ou telefone aparece numa resposta ao
-              formulário: o ficheiro leva só essa resposta, e «Anonimizar os dados do titular» apaga só essa
-              resposta.
+              Só o e-mail ou o telefone exatos (não partes do texto), em todas as campanhas.
+              «Procurar» diz quantas participações e menções encontra; «Exportar os dados do
+              titular» descarrega um ficheiro (JSON) com os dados dele, para lhe enviar (pedido de
+              acesso). Nenhum dos dois apaga nada. Uma menção é a participação de outra pessoa em
+              que este e-mail ou telefone aparece numa resposta ao formulário: o ficheiro leva só
+              essa resposta, e «Anonimizar os dados do titular» apaga só essa resposta.
             </p>
           </ActionForm>
         </section>
@@ -365,24 +416,49 @@ export default async function LeadsPage({
             <tr className="border-b border-caetano-medium-gray-40 text-left text-xs uppercase tracking-[0.08em] text-caetano-anthracite-80">
               {canManagePrivacy && (
                 <th scope="col" className="px-4 py-3">
-                  <SelectAllCheckbox formId={SELECTION_FORM_ID} name="participationId" label="Selecionar todas as leads desta página" />
+                  <SelectAllCheckbox
+                    formId={SELECTION_FORM_ID}
+                    name="participationId"
+                    label="Selecionar todas as leads desta página"
+                  />
                 </th>
               )}
-              <th scope="col" className="px-4 py-3">Data</th>
-              <th scope="col" className="px-4 py-3">Campanha</th>
-              <th scope="col" className="px-4 py-3">Nome</th>
-              <th scope="col" className="px-4 py-3">Contacto</th>
-              <th scope="col" className="px-4 py-3">Estado</th>
-              <th scope="col" className="px-4 py-3">Resultado</th>
-              <th scope="col" className="px-4 py-3">Prémio</th>
-              <th scope="col" className="px-4 py-3">Marketing</th>
-              <th scope="col" className="px-4 py-3">Origem</th>
+              <th scope="col" className="px-4 py-3">
+                Data
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Campanha
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Nome
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Contacto
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Estado
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Resultado
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Prémio
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Marketing
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Origem
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-caetano-medium-gray-40">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={canManagePrivacy ? 10 : 9} className="px-4 py-8 text-center text-caetano-anthracite-80">
+                <td
+                  colSpan={canManagePrivacy ? 10 : 9}
+                  className="px-4 py-8 text-center text-caetano-anthracite-80"
+                >
                   Nenhuma participação encontrada para os filtros atuais.
                 </td>
               </tr>
@@ -412,7 +488,8 @@ export default async function LeadsPage({
                       {row.campaignName}
                     </Link>
                     <span className="ml-1 text-xs text-caetano-anthracite-80">
-                      ({CAMPAIGN_TYPE_LABELS[row.campaignType as keyof typeof CAMPAIGN_TYPE_LABELS]})
+                      ({CAMPAIGN_TYPE_LABELS[row.campaignType as keyof typeof CAMPAIGN_TYPE_LABELS]}
+                      )
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -434,11 +511,11 @@ export default async function LeadsPage({
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={row.status === "COMPLETED" ? "success" : "neutral"}>
-                      {PARTICIPATION_STATUS_LABELS[row.status as keyof typeof PARTICIPATION_STATUS_LABELS] ?? row.status}
+                      {PARTICIPATION_STATUS_LABELS[
+                        row.status as keyof typeof PARTICIPATION_STATUS_LABELS
+                      ] ?? row.status}
                     </Badge>
-                    {row.isTest && (
-                      <Badge tone="warning">Teste</Badge>
-                    )}
+                    {row.isTest && <Badge tone="warning">Teste</Badge>}
                   </td>
                   <td className="px-4 py-3 text-caetano-anthracite-80">
                     {row.result} {row.score && `· ${row.score}`}
@@ -452,12 +529,16 @@ export default async function LeadsPage({
                   </td>
                   <td className="px-4 py-3">
                     {row.marketingConsent ? (
-                      <Badge tone={MARKETING_TONES[row.marketingConsent] ?? "neutral"}>{row.marketingConsent}</Badge>
+                      <Badge tone={MARKETING_TONES[row.marketingConsent] ?? "neutral"}>
+                        {row.marketingConsent}
+                      </Badge>
                     ) : (
                       <span className="text-caetano-anthracite-80">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-caetano-anthracite-80">{row.source || row.utmSource || "—"}</td>
+                  <td className="px-4 py-3 text-caetano-anthracite-80">
+                    {row.source || row.utmSource || "—"}
+                  </td>
                 </tr>
               ))
             )}
@@ -470,7 +551,9 @@ export default async function LeadsPage({
         pageCount={leads.pageCount}
         total={leads.total}
         label="Paginação de leads"
-        buildHref={(target) => `/leads?${new URLSearchParams({ ...filterParams, page: String(target) }).toString()}`}
+        buildHref={(target) =>
+          `/leads?${new URLSearchParams({ ...filterParams, page: String(target) }).toString()}`
+        }
       />
     </div>
   );

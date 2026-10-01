@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Hourglass, Layers, RotateCcw, Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Burst, gameButtonClass, gameCardClass, PreviewEmpty, ResultBadge } from "@/components/public-game/game-ui";
 import { MemoryGamePlayer, type MemoryPlayerConfig, type MemoryPlayerPair } from "@/components/public-game/memory-game-player";
 import { computeMemoryScore, type MemoryScoringConfig } from "@/features/memory-game/scoring";
 
@@ -19,9 +22,9 @@ export function MemoryGamePreview({
 
   if (pairs.length === 0) {
     return (
-      <p className="text-sm text-game-muted">
+      <PreviewEmpty icon={<Layers className="size-6" />}>
         Adicione pelo menos um par de cartas para pré-visualizar o jogo.
-      </p>
+      </PreviewEmpty>
     );
   }
 
@@ -34,18 +37,23 @@ export function MemoryGamePreview({
       config: scoringConfig,
     });
     return (
-      <div className="rounded-game-lg border border-game-border bg-game-surface shadow-(--game-shadow) p-6 text-center">
-        <p className="text-lg font-bold text-game-text">
+      <div className={cn("relative isolate overflow-hidden px-6 py-9 text-center", gameCardClass, "motion-safe:animate-scale-in")}>
+        {score.completed && <Burst className="top-16" />}
+        <ResultBadge tone={score.completed ? "win" : "neutral"}>
+          {score.completed ? <Trophy className="size-7" /> : <Hourglass className="size-7" />}
+        </ResultBadge>
+        <p className="text-balance text-2xl font-bold tracking-tight text-game-text">
           {score.completed ? "Jogo concluído!" : "Simulação terminada"}
         </p>
-        <p className="mt-2 text-game-muted">
+        <p className="mt-2 text-sm tabular-nums text-game-muted">
           Pontuação: {score.score} · Tentativas: {result.attempts} · Tempo: {result.timeSeconds}s
         </p>
         <button
           type="button"
           onClick={() => setResult(null)}
-          className="mt-4 rounded-game border border-game-border-strong px-4 py-2 text-sm text-game-text hover:bg-game-subtle hover:text-game-subtle-text"
+          className={gameButtonClass({ variant: "secondary", size: "md", className: "mt-6" })}
         >
+          <RotateCcw aria-hidden="true" className="size-4 shrink-0" />
           Jogar novamente
         </button>
       </div>

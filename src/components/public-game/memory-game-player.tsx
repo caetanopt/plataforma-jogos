@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Eye } from "lucide-react";
 import { shuffle } from "@/lib/random/shuffle";
 import { cn } from "@/lib/utils";
+import styles from "@/components/public-game/public-game.module.css";
 
 export interface MemoryPlayerPair {
   id: string;
@@ -144,7 +146,11 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
     <div>
       {previewing && (
         // Com fundo próprio: pode estar sobre a imagem de fundo do tema.
-        <p className="mx-auto mb-3 w-fit rounded-game bg-game-surface px-3 py-1 text-center text-sm text-game-muted" aria-live="polite">
+        <p
+          className="mx-auto mb-4 flex w-fit items-center gap-2 rounded-full border border-game-border bg-game-surface px-4 py-2 text-center text-sm font-medium text-game-text shadow-(--game-elevation-md) motion-safe:animate-fade-in"
+          aria-live="polite"
+        >
+          <Eye aria-hidden="true" className="size-4 shrink-0 text-game-accent" />
           Memorize as cartas…
         </p>
       )}
@@ -175,45 +181,102 @@ export function MemoryGamePlayer({ pairs, config, onComplete }: MemoryGamePlayer
                 faceUp ? tile.alt ?? tile.text ?? "revelada" : "virada para baixo"
               }${isMatched ? ", par encontrado" : ""}`}
               className={cn(
-                "flex aspect-square cursor-pointer touch-manipulation items-center justify-center overflow-hidden rounded-game border border-game-border bg-game-surface p-1",
-                "transition-[transform,border-color] duration-150",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2",
-                !locked && "motion-safe:active:scale-[0.96]",
-                // Tom do verde eco sobre o fundo do tema, com texto que se lê
-                // nele (num tema Caetano, os tons oficiais -40 e -20).
-                isMatched && "border-game-success-border bg-game-success-tint text-game-success-text",
+                "relative aspect-square cursor-pointer touch-manipulation rounded-game",
+                "transition-[translate,scale,box-shadow] duration-200 ease-(--ease-out-expo)",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-game-accent focus-visible:ring-offset-2 focus-visible:ring-offset-game-surface",
+                "shadow-(--game-elevation-sm)",
+                !locked &&
+                  "hover:shadow-(--game-elevation-md) motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.96]",
+                isMatched && styles.matchPop,
                 locked && "cursor-default",
               )}
             >
-              {faceUp ? (
-                tile.mediaUrl ? (
+              {/*
+                Vira em 3D: cada face roda sobre si (de costas, fica escondida).
+                A face à vista não tem transformação nenhuma, para o texto
+                ficar nítido. Com movimento reduzido não há rotação: mostra-se
+                só a face certa.
+              */}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute inset-0 overflow-hidden rounded-game backface-hidden transition-transform duration-500 ease-(--ease-out-expo)",
+                  !config.cardBackUrl && styles.cardBack,
+                  faceUp && "motion-safe:[transform:perspective(700px)_rotateY(-180deg)] motion-reduce:invisible",
+                )}
+              >
+                {config.cardBackUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={tile.mediaUrl} alt={tile.alt ?? ""} className="h-full w-full object-contain" />
-                ) : (
-                  <span className={cn("text-center text-sm font-medium", isMatched ? "text-game-success-text" : "text-game-text")}>
-                    {tile.text}
+                  <img src={config.cardBackUrl} alt="" className="h-full w-full object-cover" />
+                )}
+              </span>
+              <span
+                className={cn(
+                  "absolute inset-0 flex items-center justify-center overflow-hidden rounded-game border p-1.5 backface-hidden",
+                  "transition-[transform,background-color,border-color] duration-500 ease-(--ease-out-expo)",
+                  isMatched
+                    ? // Tom do verde eco sobre o fundo do tema, com texto que se lê
+                      // nele (num tema Caetano, os tons oficiais -40 e -20).
+                      "border-game-success-border bg-game-success-tint text-game-success-text"
+                    : "border-game-border bg-game-surface text-game-text",
+                  !faceUp && "motion-safe:[transform:perspective(700px)_rotateY(180deg)] motion-reduce:invisible",
+                )}
+              >
+                {/*
+                  A face fica montada para se ver enquanto a carta volta a
+                  fechar, mas escondida (fora da pesquisa da página e dos
+                  leitores de ecrã) assim que fica de costas.
+                */}
+                <span
+                  className={cn(
+                    "flex h-full w-full items-center justify-center transition-[visibility] duration-0",
+                    faceUp ? "visible delay-0" : "invisible delay-300 motion-reduce:delay-0",
+                  )}
+                >
+                  {tile.mediaUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={tile.mediaUrl} alt={tile.alt ?? ""} className="h-full w-full rounded-[inherit] object-contain" />
+                  ) : (
+                    <span
+                      lang="pt"
+                      // Nas cartas estreitas (telemóvel de 320 px) a palavra
+                      // parte-se em vez de sair da carta.
+                      className={cn(
+                        "min-w-0 max-w-full hyphens-auto wrap-anywhere text-center text-[0.6875rem] font-medium leading-tight min-[400px]:text-xs sm:text-sm",
+                        isMatched ? "text-game-success-text" : "text-game-text",
+                      )}
+                    >
+                      {tile.text}
+                    </span>
+                  )}
+                </span>
+                {isMatched && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-game-success-border text-game-success-text motion-safe:animate-scale-in sm:right-1.5 sm:top-1.5 sm:size-5"
+                  >
+                    <Check className="size-3" strokeWidth={3} />
                   </span>
-                )
-              ) : config.cardBackUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={config.cardBackUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="h-full w-full rounded-game bg-game-primary" />
-              )}
+                )}
+              </span>
             </button>
           );
         })}
       </div>
 
-      <div className="mx-auto mt-4 flex w-fit flex-wrap justify-center gap-x-6 gap-y-1 rounded-game bg-game-surface px-4 py-1.5 text-sm text-game-muted">
+      <div className="mx-auto mt-5 grid w-full max-w-md grid-cols-3 divide-x divide-game-border rounded-full border border-game-border bg-game-surface py-2 text-center text-xs font-medium tabular-nums text-game-text shadow-(--game-elevation-sm) sm:text-sm">
         {/*
           O tempo muda a cada segundo: dentro de um aria-live fazia o leitor de
           ecrã falar sem parar. Fica fora; o que é anunciado são as tentativas
           e os pares, que só mudam quando o jogador joga.
         */}
-        <span aria-live="polite">Tentativas: {attempts}</span>
-        <span aria-hidden="true">Tempo: {timeSeconds}s</span>
-        <span aria-live="polite">
+        <span aria-live="polite" className="px-2">
+          Tentativas: {attempts}
+        </span>
+        <span aria-hidden="true" className="px-2">
+          Tempo: {timeSeconds}s
+        </span>
+        <span aria-live="polite" className="px-2">
           Pares: {matched.size}/{pairs.length}
         </span>
       </div>

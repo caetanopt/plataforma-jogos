@@ -1,0 +1,351 @@
+/*
+  Jogo público: a decoração e o movimento que as classes do Tailwind não
+  fazem sozinhas (keyframes próprios, gradientes com as cores do tema).
+
+  Só cores do tema da campanha (--game-*, definidas pelo GameThemeShell a
+  partir do brand kit), nunca as da Caetano diretamente: o jogo veste a marca
+  de cada campanha. No tema por omissão, as contas dão os valores oficiais.
+
+  As transparências daqui são luz e sombra decorativas, nunca a cor de uma
+  superfície ou de um texto. Tudo o que se move pára com
+  prefers-reduced-motion (no fim, e também pela regra global).
+*/
+
+/*
+  Elevação: sombras tingidas da cor primária, com as mesmas opacidades das
+  sombras do backoffice (globals.css). No tema Caetano a primária é o azul
+  profundo e as sombras ficam iguais às do resto da plataforma. Com as
+  sombras desligadas no tema (Marca e design), nenhuma — e uma sombra
+  válida, não "none", para não invalidar o anel de foco composto do Tailwind.
+*/
+.shell {
+  --game-elevation-sm:
+    0 1px 2px color-mix(in srgb, var(--game-primary) 6%, transparent),
+    0 2px 6px color-mix(in srgb, var(--game-primary) 6%, transparent);
+  --game-elevation-md:
+    0 2px 4px color-mix(in srgb, var(--game-primary) 6%, transparent),
+    0 8px 20px -4px color-mix(in srgb, var(--game-primary) 12%, transparent);
+  --game-elevation-lg:
+    0 4px 8px color-mix(in srgb, var(--game-primary) 6%, transparent),
+    0 20px 40px -12px color-mix(in srgb, var(--game-primary) 22%, transparent);
+  --game-glow: var(--game-secondary, var(--game-highlight));
+}
+
+.shell[data-shadows="off"] {
+  --game-elevation-sm: 0 0 #0000;
+  --game-elevation-md: 0 0 #0000;
+  --game-elevation-lg: 0 0 #0000;
+}
+
+/*
+  Luz ambiente no topo da página, no tom claro da cor secundária. Só sem
+  imagem de fundo: a imagem do tema, quando existe, substitui-a (style).
+*/
+.ambient {
+  background-image: radial-gradient(90% 420px at 50% 0%, var(--game-highlight), transparent 75%);
+  background-repeat: no-repeat;
+}
+
+/*
+  Superfície de marca do jogo (cabeçalho dos ecrãs): a cor dos botões, cujo
+  texto o tema garante legível, com a luz da cor secundária nos cantos — no
+  tema Caetano, o azul profundo com o brilho do azul cyan do Brand Book. A
+  luz fica longe do centro, onde está o texto.
+*/
+.brandSurface {
+  background-color: var(--game-button);
+  background-image:
+    radial-gradient(
+      60% 85% at 100% 0%,
+      color-mix(in srgb, var(--game-glow) 45%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 70% at 0% 100%,
+      color-mix(in srgb, var(--game-glow) 22%, transparent),
+      transparent 70%
+    );
+  color: var(--game-button-text);
+}
+
+/* Luz que passa devagar sobre a superfície de marca: decorativa. */
+.aurora {
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(
+    30% 40% at 65% 35%,
+    color-mix(in srgb, var(--game-glow) 30%, transparent),
+    transparent 70%
+  );
+  animation: aurora 16s var(--ease-in-out-soft) infinite;
+  pointer-events: none;
+}
+
+@keyframes aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-10%, 8%, 0) scale(1.12);
+  }
+}
+
+/* ---------------------------------------------------------------- Memória */
+
+/*
+  Verso das cartas: a cor primária com a luz da secundária, uma moldura fina
+  e um losango ao centro. Com uma imagem de verso no tema, a imagem.
+*/
+.cardBack {
+  background-color: var(--game-primary);
+  background-image:
+    radial-gradient(
+      110% 80% at 100% 0%,
+      color-mix(in srgb, var(--game-glow) 50%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      80% 60% at 0% 100%,
+      color-mix(in srgb, var(--game-glow) 22%, transparent),
+      transparent 70%
+    );
+}
+
+.cardBack::before {
+  content: "";
+  position: absolute;
+  inset: 9%;
+  border-radius: calc(var(--game-radius) * 0.7);
+  border: 1.5px solid color-mix(in srgb, var(--game-surface) 28%, transparent);
+}
+
+.cardBack::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  border: 2px solid color-mix(in srgb, var(--game-surface) 55%, transparent);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* Par encontrado: a carta cresce e assenta, uma vez. */
+.matchPop {
+  animation: match-pop 480ms var(--ease-out-expo);
+}
+
+@keyframes match-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.07);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------------------- Roda */
+
+/* Halo por baixo da roda, na luz da cor secundária. */
+.wheelGlow {
+  position: absolute;
+  inset: -9%;
+  border-radius: 9999px;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--game-glow) 32%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* Aro: a primária com um reflexo em cima, como uma peça de metal pintado. */
+.wheelRim {
+  background-color: var(--game-primary);
+  background-image: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--game-surface) 22%, transparent),
+    transparent 45%,
+    color-mix(in srgb, var(--game-glow) 25%, transparent)
+  );
+}
+
+/* Sombra interior da face da roda: dá profundidade aos segmentos. */
+.wheelFace {
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--game-surface) 35%, transparent),
+    inset 0 6px 18px color-mix(in srgb, var(--game-text) 22%, transparent);
+}
+
+.bulb {
+  background: var(--game-surface);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--game-surface) 60%, transparent);
+}
+
+/* Enquanto roda, as luzes do aro piscam em sequência. */
+.bulbsSpinning .bulb {
+  animation: twinkle 640ms ease-in-out infinite;
+  animation-delay: calc(var(--i) * 40ms);
+}
+
+@keyframes twinkle {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* O ponteiro estremece ao parar, como se tocasse no último pino. */
+.pointerSettle {
+  animation: pointer-settle 720ms var(--ease-out-expo);
+  transform-origin: 50% 15%;
+}
+
+@keyframes pointer-settle {
+  0% {
+    rotate: 0deg;
+  }
+  20% {
+    rotate: -16deg;
+  }
+  45% {
+    rotate: 9deg;
+  }
+  70% {
+    rotate: -4deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}
+
+.pointer {
+  filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--game-text) 35%, transparent));
+}
+
+/* ------------------------------------------------------------------- Quiz */
+
+/* Anel de resultado: enche do zero até à percentagem. */
+.ringFill {
+  animation: ring-fill 1200ms var(--ease-out-expo) 150ms backwards;
+}
+
+@keyframes ring-fill {
+  from {
+    stroke-dashoffset: var(--ring-length);
+  }
+}
+
+/* ----------------------------------------------------------- Celebração */
+
+/*
+  Explosão de confettis ao ganhar: só CSS, nas cores do tema. Cada peça parte
+  do centro numa direção (--angle) e uma distância (--distance) próprias.
+*/
+.burst {
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.burstPiece {
+  position: absolute;
+  left: -4px;
+  top: -6px;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--piece-color);
+  opacity: 0;
+  animation: burst 1300ms var(--ease-out-expo) var(--piece-delay, 0ms) both;
+}
+
+.burstPiece[data-shape="dot"] {
+  width: 8px;
+  height: 8px;
+  top: -4px;
+  border-radius: 9999px;
+}
+
+@keyframes burst {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(0) scale(0.3);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(calc(var(--distance) * -1)) rotate(var(--spin))
+      scale(0.9);
+  }
+}
+
+.burstRing {
+  position: absolute;
+  left: -70px;
+  top: -70px;
+  width: 140px;
+  height: 140px;
+  border-radius: 9999px;
+  border: 2px solid var(--game-glow);
+  opacity: 0;
+  animation: burst-ring 900ms var(--ease-out-expo) both;
+}
+
+@keyframes burst-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* Talão do prémio: os entalhes laterais têm a cor do cartão onde assenta. */
+.ticket {
+  position: relative;
+}
+
+.ticket::before,
+.ticket::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 9999px;
+  background: var(--game-surface);
+}
+
+.ticket::before {
+  left: -9px;
+}
+
+.ticket::after {
+  right: -9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora,
+  .bulbsSpinning .bulb,
+  .matchPop,
+  .pointerSettle,
+  .ringFill {
+    animation: none;
+  }
+
+  .burst {
+    display: none;
+  }
+}

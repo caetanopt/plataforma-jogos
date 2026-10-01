@@ -35,7 +35,7 @@ import { getCampaignStats, type CampaignStatsFilters } from "@/features/analytic
 import { getCampaignAlerts } from "@/features/analytics/campaign-alerts";
 import { StatCard } from "@/components/backoffice/stat-card";
 import { BarList, type BarListItem } from "@/components/backoffice/analytics/bar-list";
-import { FilterSelect } from "@/components/backoffice/analytics/filter-select";
+import { Select } from "@/components/ui/select";
 import { MetricTile } from "@/components/backoffice/analytics/metric-tile";
 import { ParticipationTimelineChart } from "@/components/charts/participation-timeline-chart-lazy";
 import { PageHeader } from "@/components/ui/page-header";
@@ -172,57 +172,57 @@ export default async function AnalyticsPage({
           <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-4 lg:grid-cols-4">
             <div className="col-span-2 sm:col-span-1">
               <Label htmlFor="campaignId">Campanha</Label>
-              <FilterSelect id="campaignId" name="campaignId" defaultValue={params.campaignId ?? ""}>
+              <Select id="campaignId" name="campaignId" defaultValue={params.campaignId ?? ""}>
                 <option value="">Todas</option>
                 {campaigns.map((campaign) => (
                   <option key={campaign.id} value={campaign.id}>
                     {campaign.internalName}
                   </option>
                 ))}
-              </FilterSelect>
+              </Select>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <Label htmlFor="workspaceId">Espaço de trabalho</Label>
-              <FilterSelect id="workspaceId" name="workspaceId" defaultValue={params.workspaceId ?? ""}>
+              <Select id="workspaceId" name="workspaceId" defaultValue={params.workspaceId ?? ""}>
                 <option value="">Todos</option>
                 {workspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>
                     {workspace.name}
                   </option>
                 ))}
-              </FilterSelect>
+              </Select>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <Label htmlFor="folderId">Pasta / marca</Label>
-              <FilterSelect id="folderId" name="folderId" defaultValue={params.folderId ?? ""}>
+              <Select id="folderId" name="folderId" defaultValue={params.folderId ?? ""}>
                 <option value="">Todas</option>
                 {folders.map((folder) => (
                   <option key={folder.id} value={folder.id}>
                     {folder.name}
                   </option>
                 ))}
-              </FilterSelect>
+              </Select>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <Label htmlFor="type">Tipo de jogo</Label>
-              <FilterSelect id="type" name="type" defaultValue={params.type ?? ""}>
+              <Select id="type" name="type" defaultValue={params.type ?? ""}>
                 <option value="">Todos</option>
                 {Object.entries(CAMPAIGN_TYPE_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </FilterSelect>
+              </Select>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <Label htmlFor="period">Período</Label>
-              <FilterSelect id="period" name="period" defaultValue={range.preset}>
+              <Select id="period" name="period" defaultValue={range.preset}>
                 {PERIOD_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </FilterSelect>
+              </Select>
             </div>
             <div>
               <Label htmlFor="from">De</Label>
