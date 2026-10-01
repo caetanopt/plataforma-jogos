@@ -91,10 +91,11 @@ A página inicial do backoffice (`/folders`) é a grelha de pastas: é para lá 
 `/` redirecionam. Não há página de dashboard — os alertas de fim de campanha e de stock, e as
 contagens por estado, vivem em Estatísticas (`/analytics`); `/dashboard` redireciona para lá.
 
-Inclui também a conservação e anonimização dos dados (§24, ver abaixo).
+Inclui também a conservação e anonimização dos dados e a exportação dos dados de um titular
+(§24, ver abaixo).
 
 Ficam para uma iteração seguinte (não bloqueiam este âmbito): exportação XLSX, importação CSV
-em massa de códigos/vouchers, exportação dos dados do titular, allowlist de domínios de embed,
+em massa de códigos/vouchers, allowlist de domínios de embed,
 CAPTCHA, interface multilingue e suite Playwright completa (ficam incluídos apenas os smoke
 tests essenciais de cada jogo).
 
@@ -230,6 +231,20 @@ para "desmarcada" se distinguir de "ausente".
   - **pedido de um titular**: o e-mail ou o telefone exatos, em todas as campanhas e períodos,
     também nas respostas ao formulário (um segundo campo de e-mail) e nos dados antigos dos
     participantes. «Procurar» diz quantas participações encontra, sem apagar nada.
+- **Exportação dos dados de um titular** (pedido de acesso, RGPD art. 15.º, e portabilidade, art.
+  20.º): no mesmo pedido de um titular, «Exportar os dados do titular» descarrega um ficheiro JSON
+  com tudo o que a organização guarda sobre esse e-mail ou telefone exatos: as mesmas participações
+  que a anonimização do titular apanha (todas as campanhas e períodos, também as de teste), cada uma
+  com a identificação, as respostas ao formulário com o nome de cada campo, os consentimentos
+  (texto, versão, resposta, data e origem), o resultado (no quiz, cada pergunta com as respostas
+  escolhidas), o prémio e o código atribuído, a origem e as UTM, o dispositivo, o IP e a sessão, e
+  quando vai ser anonimizada; os dados antigos de participante; e, por campanha, os links legais e
+  o prazo de conservação. As chaves estão em português, para o titular ler o ficheiro. Não saem o
+  token da participação nem o cookie do browser (são chaves de acesso ao jogo), nem as
+  estatísticas, que não têm dados pessoais. Só administradores (`privacy:manage`). O
+  identificador vai no corpo de um POST (`/api/privacy/subject-export`), nunca no URL, e só da
+  própria página (Origin e JSON); a auditoria regista a exportação ao começar e no fim, só com
+  contagens e o tipo de identificador.
 - A lista pode ocultar as anonimizadas, e o CSV tem uma coluna nova, "Anonimizada em", sempre a
   última (depois das colunas por consentimento de uma exportação de campanha).
 - Tudo fica na auditoria como operação de privacidade, só com contagens (nunca o e-mail, o

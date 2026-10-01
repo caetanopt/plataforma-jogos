@@ -1,7 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
 import { retryOnDeadlock } from "@/lib/db/transaction-retry";
-import type { SubjectIdentifier } from "@/features/leads/queries";
+import { subjectParticipantCondition, type SubjectIdentifier } from "@/features/leads/queries";
 
 /**
  * Anonimização de participações (§21, §24): o que se retira e o que fica.
@@ -205,12 +205,8 @@ export async function clearSubjectFromParticipants(
   subject: SubjectIdentifier,
   now: Date = new Date(),
 ): Promise<number> {
-  const matches =
-    subject.kind === "email"
-      ? Prisma.sql`lower(btrim("email")) = ${subject.email}`
-      : Prisma.sql`regexp_replace(coalesce("phone", ''), '[^0-9]', '', 'g') = ${subject.digits}`;
   return prisma.$executeRaw`
     UPDATE "Participant"
     SET "email" = NULL, "phone" = NULL, "firstName" = NULL, "lastName" = NULL, "anonymizedAt" = ${now}
-    WHERE "organizationId" = ${organizationId} AND ${matches}`;
+    WHERE "organizationId" = ${organizationId} AND ${subjectParticipantCondition(subject)}`;
 }

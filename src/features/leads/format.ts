@@ -139,13 +139,24 @@ const RELEASE_LABELS: Record<string, string> = {
   BOT: "Não atribuído (bot)",
 };
 
+/** O que a lista e as exportações precisam de um PrizeAward. */
+export interface DisplayedPrizeAward {
+  status: string;
+  reservationExpiresAt: Date | null;
+  releaseReason: string | null;
+  prize: { publicName: string };
+  prizeCode: { code: string } | null;
+}
+
 /**
  * Prémio e código só quando o prémio foi mesmo atribuído. O código de uma
  * reserva (ativa ou libertada) nunca aparece nem é exportado: pode vir a
  * ser entregue a outra pessoa.
  */
-function prizeColumns(p: LeadParticipation, now: Date): Pick<LeadRow, "prize" | "code" | "prizeStatus"> {
-  const award = p.prizeAward;
+export function describePrizeAward(
+  award: DisplayedPrizeAward | null,
+  now: Date,
+): Pick<LeadRow, "prize" | "code" | "prizeStatus"> {
   if (!award) return { prize: "", code: "", prizeStatus: "" };
   if (award.status === "CONFIRMED") {
     return { prize: award.prize.publicName, code: award.prizeCode?.code ?? "", prizeStatus: "Atribuído" };
@@ -177,7 +188,7 @@ export function toLeadRow(p: LeadParticipation, now: Date = new Date()): LeadRow
     result,
     score,
     timeSeconds,
-    ...prizeColumns(p, now),
+    ...describePrizeAward(p.prizeAward, now),
     source: p.source ?? "",
     utmSource: p.utmSource ?? "",
     utmMedium: p.utmMedium ?? "",

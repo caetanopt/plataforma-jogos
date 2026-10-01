@@ -88,7 +88,7 @@ export function countLeadsToAnonymize(
 export type SubjectIdentifier = { kind: "email"; email: string } | { kind: "phone"; phone: string; digits: string };
 
 /**
- * As participações de um titular (pedido de eliminação, §24), por igualdade
+ * As participações de um titular (pedido de acesso ou de eliminação, §24), por igualdade
  * exata do e-mail ou do telefone — nunca por "contém", que apanhava a joana
  * quando o pedido era da ana. Procura também nas respostas ao formulário:
  * um segundo campo de e-mail, ou dados antigos que não passaram para as
@@ -115,11 +115,32 @@ export function findSubjectParticipations(organizationId: string, subject: Subje
             WHERE regexp_replace(kv.value, '[^0-9]', '', 'g') = ${subject.digits}
           )
         )`;
-  return prisma.$queryRaw<Array<{ id: string; campaignId: string }>>`
-    SELECT p."id", p."campaignId"
+  return prisma.$queryRaw<Array<{ id: string; campaignId: string; createdAt: Date }>>`
+    SELECT p."id", p."campaignId", p."createdAt"
     FROM "Participation" p
     JOIN "Campaign" c ON c."id" = p."campaignId"
     WHERE c."organizationId" = ${organizationId} AND p."anonymizedAt" IS NULL AND ${matches}`;
+}
+
+/**
+ * Os Participant da organização com o e-mail ou o telefone do titular nos
+ * dados antigos (de antes de a identidade passar para a participação). A
+ * mesma condição na exportação e na eliminação.
+ */
+export function subjectParticipantCondition(subject: SubjectIdentifier): Prisma.Sql {
+  return subject.kind === "email"
+    ? Prisma.sql`lower(btrim("email")) = ${subject.email}`
+    : Prisma.sql`regexp_replace(coalesce("phone", ''), '[^0-9]', '', 'g') = ${subject.digits}`;
+}
+
+export function findSubjectLegacyParticipants(organizationId: string, subject: SubjectIdentifier) {
+  return prisma.$queryRaw<
+    Array<{ email: string | null; phone: string | null; firstName: string | null; lastName: string | null; createdAt: Date }>
+  >`
+    SELECT "email", "phone", "firstName", "lastName", "createdAt"
+    FROM "Participant"
+    WHERE "organizationId" = ${organizationId} AND ${subjectParticipantCondition(subject)}
+    ORDER BY "createdAt", "id"`;
 }
 
 export async function listLeads(organizationId: string, range: DateRange, filters: LeadsFilters) {

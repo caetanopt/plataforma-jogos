@@ -13,13 +13,14 @@ import { ActionForm } from "@/components/backoffice/editor/action-form";
 import { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { AnonymizeSelectionButton, SelectAllCheckbox } from "@/components/backoffice/leads/selection";
+import { SubjectExportButton } from "@/components/backoffice/leads/subject-export-button";
 import { Alert } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Pagination } from "@/components/ui/pagination";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CAMPAIGN_TYPE_LABELS } from "@/lib/labels";
+import { CAMPAIGN_TYPE_LABELS, PARTICIPATION_STATUS_LABELS } from "@/lib/labels";
 
 export const metadata = { title: "Leads" };
 
@@ -62,13 +63,6 @@ const MARKETING_TONES: Record<string, "success" | "neutral" | "warning"> = {
   Concedido: "success",
   Recusado: "neutral",
   Parcial: "warning",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  STARTED: "Iniciada",
-  COMPLETED: "Concluída",
-  ABANDONED: "Abandonada",
-  BLOCKED: "Bloqueada",
 };
 
 export default async function LeadsPage({
@@ -246,7 +240,7 @@ export default async function LeadsPage({
           className="mb-3 space-y-3 rounded-xl border border-caetano-medium-gray-40 bg-white p-4"
         >
           <h2 id="privacy-actions-heading" className="text-sm font-bold text-caetano-anthracite">
-            Anonimizar dados pessoais
+            Dados pessoais
           </h2>
           <div className="flex flex-wrap items-start gap-3">
             {/* As caixas de cada linha pertencem a este formulário (form="…"). */}
@@ -301,6 +295,7 @@ export default async function LeadsPage({
             <SubmitButton variant="outline" name="intent" value="preview">
               Procurar
             </SubmitButton>
+            <SubjectExportButton inputName="subject" />
             <ConfirmSubmitButton
               name="intent"
               value="anonymize"
@@ -312,8 +307,9 @@ export default async function LeadsPage({
               Anonimizar os dados do titular
             </ConfirmSubmitButton>
             <p id="subject-help" className="basis-full text-xs text-caetano-anthracite-80">
-              Só o e-mail ou o telefone exatos (não partes do texto), em todas as campanhas: «Procurar» diz
-              quantas participações encontra, sem apagar nada.
+              Só o e-mail ou o telefone exatos (não partes do texto), em todas as campanhas. «Procurar» diz
+              quantas participações encontra; «Exportar» descarrega um ficheiro (JSON) com todos os dados do
+              titular, para lhe enviar (pedido de acesso). Nenhum dos dois apaga nada.
             </p>
           </ActionForm>
         </section>
@@ -400,7 +396,7 @@ export default async function LeadsPage({
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={row.status === "COMPLETED" ? "success" : "neutral"}>
-                      {STATUS_LABELS[row.status] ?? row.status}
+                      {PARTICIPATION_STATUS_LABELS[row.status as keyof typeof PARTICIPATION_STATUS_LABELS] ?? row.status}
                     </Badge>
                     {row.isTest && (
                       <Badge tone="warning">Teste</Badge>

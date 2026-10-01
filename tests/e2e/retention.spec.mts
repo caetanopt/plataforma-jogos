@@ -59,6 +59,49 @@ test.describe("conservação e anonimização dos dados", () => {
     expect(saved.anonymizedAt).not.toBeNull();
   });
 
+  test("exportar os dados de um titular a partir da lista de leads", async ({ page }) => {
+    const prisma = await getPrisma();
+    await loginAsAdmin(page);
+    const campaignId = await createCampaign(page, "MEMORY");
+    const campaign = await prisma.campaign.findUniqueOrThrow({ where: { id: campaignId } });
+    const version = await prisma.campaignVersion.create({
+      data: { campaignId, versionNumber: 1, snapshot: {}, publishedById: campaign.ownerId },
+    });
+    const email = `acesso-${uniqueSuffix()}@example.com`;
+    const participation = await prisma.participation.create({
+      data: {
+        campaignId,
+        campaignVersionId: version.id,
+        idempotencyKey: randomUUID(),
+        status: "COMPLETED",
+        email,
+        firstName: "Titular",
+        leadFormResponse: { email },
+      },
+    });
+
+    await page.goto("/leads");
+    await page.waitForLoadState("networkidle");
+    const exportButton = page.getByRole("button", { name: "Exportar os dados do titular" });
+    // Sem identificador, a validação do browser trava o pedido.
+    await exportButton.click();
+    await expect(page.getByLabel("Pedido de um titular: e-mail ou telefone")).toBeFocused();
+
+    await page.getByLabel("Pedido de um titular: e-mail ou telefone").fill(email.toUpperCase());
+    const [download] = await Promise.all([page.waitForEvent("download"), exportButton.click()]);
+    expect(download.suggestedFilename()).toMatch(/^dados-titular-\d{4}-\d{2}-\d{2}\.json$/);
+    const fs = await import("node:fs/promises");
+    const file = JSON.parse(await fs.readFile((await download.path())!, "utf-8"));
+    expect(file["Participações"]).toHaveLength(1);
+    expect(file["Participações"][0]).toMatchObject({
+      ID: participation.id,
+      Identificação: { Nome: "Titular", "E-mail": email },
+    });
+    await expect(page.getByText("Ficheiro descarregado: 1 participação.")).toBeVisible();
+    // A exportação não apaga nada.
+    expect((await prisma.participation.findUniqueOrThrow({ where: { id: participation.id } })).email).toBe(email);
+  });
+
   test("definir o prazo de conservação da organização", async ({ page }) => {
     const prisma = await getPrisma();
     await loginAsAdmin(page);

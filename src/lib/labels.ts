@@ -7,6 +7,7 @@ import type {
   LeadFormPosition,
   MembershipRole,
   ParticipationLimitType,
+  ParticipationStatus,
   PrizeCodeStatus,
 } from "@/generated/prisma/client";
 
@@ -104,6 +105,13 @@ export const MEMBERSHIP_ROLE_LABELS: Record<MembershipRole, string> = {
   EDITOR: "Editor",
   ANALYST: "Analista",
   VIEWER: "Visualizador",
+};
+
+export const PARTICIPATION_STATUS_LABELS: Record<ParticipationStatus, string> = {
+  STARTED: "Iniciada",
+  COMPLETED: "Concluída",
+  ABANDONED: "Abandonada",
+  BLOCKED: "Bloqueada",
 };
 
 export const PARTICIPATION_LIMIT_TYPE_LABELS: Record<ParticipationLimitType, string> = {
