@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { prisma } from "@/server/db/client";
+import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -12,6 +12,29 @@ import { slugify } from "@/lib/random/slug";
 import { emptyToNull, readOptional } from "@/lib/forms/form-data";
 import { parsePartial, rejectField } from "@/lib/forms/parse-partial";
 import { partialResult, type ActionResult } from "@/lib/forms/action-result";
+import { sameWallClockIn } from "@/lib/dates/timezone";
+
+/**
+ * Muda o fuso da campanha. A data de anonimização (§24) foi escolhida como
+ * um dia no fuso da campanha ("Numa data": 00:00 desse dia): continua a ser
+ * esse dia no fuso novo, em vez de o editor passar a mostrar a véspera (ou o
+ * dia seguinte) e de a anonimização mudar de dia. Com a campanha bloqueada,
+ * como a gravação do prazo (privacy/actions.ts): nenhuma das duas lê o fuso
+ * ou a data antes de a outra acabar.
+ */
+async function moveCampaignTimezone(campaignId: string, timezone: string) {
+  return prisma.$transaction(
+    async (tx) => {
+      const [current] = await tx.$queryRaw<Array<{ timezone: string; dataRetentionUntil: Date | null }>>`
+        SELECT "timezone", "dataRetentionUntil" FROM "Campaign" WHERE "id" = ${campaignId} FOR NO KEY UPDATE`;
+      if (!current || current.timezone === timezone) return null;
+      const until = current.dataRetentionUntil ? sameWallClockIn(current.dataRetentionUntil, current.timezone, timezone) : null;
+      await tx.campaign.update({ where: { id: campaignId }, data: { timezone, ...(until ? { dataRetentionUntil: until } : {}) } });
+      return { timezoneBefore: current.timezone, untilBefore: current.dataRetentionUntil, untilAfter: until };
+    },
+    { maxWait: TRANSACTION_MAX_WAIT_MS, timeout: 15_000 },
+  );
+}
 
 export async function updateProjectInfoAction(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
   return runAction("updateProjectInfo", async () => {
@@ -21,7 +44,7 @@ export async function updateProjectInfoAction(_previous: ActionResult, formData:
     const campaignId = readOptional(formData, "campaignId") ?? "";
     const campaign = await prisma.campaign.findFirst({
       where: { id: campaignId, organizationId: context.organizationId },
-      select: { id: true, slug: true, publishedAt: true, workspaceId: true, folderId: true },
+      select: { id: true, slug: true, publishedAt: true, workspaceId: true, folderId: true, timezone: true },
     });
     if (!campaign) notFound();
 
@@ -102,11 +125,11 @@ export async function updateProjectInfoAction(_previous: ActionResult, formData:
       tags,
       description: emptyToNull(data.description),
       locale: data.locale,
-      timezone: data.timezone,
       slug,
     };
     const hasValues = () => Object.values(update).some((value) => value !== undefined);
     let savedSomething = hasValues();
+    const timezoneChange = data.timezone !== undefined && data.timezone !== campaign.timezone ? data.timezone : null;
 
     if (savedSomething) {
       try {
@@ -121,6 +144,9 @@ export async function updateProjectInfoAction(_previous: ActionResult, formData:
         if (savedSomething) await prisma.campaign.update({ where: { id: campaign.id }, data: update });
       }
     }
+    // O fuso à parte, com a data de anonimização que depende dele.
+    const moved = timezoneChange ? await moveCampaignTimezone(campaign.id, timezoneChange) : null;
+    if (moved) savedSomething = true;
 
     if (savedSomething) {
       await logAudit({
@@ -139,11 +165,20 @@ export async function updateProjectInfoAction(_previous: ActionResult, formData:
               workspaceBefore: campaign.workspaceId,
               workspaceAfter: update.workspaceId,
             }),
+          ...(moved && {
+            timezoneBefore: moved.timezoneBefore,
+            timezoneAfter: timezoneChange,
+            ...(moved.untilAfter && {
+              dataRetentionUntilBefore: moved.untilBefore?.toISOString() ?? null,
+              dataRetentionUntilAfter: moved.untilAfter.toISOString(),
+            }),
+          }),
         },
       });
 
       revalidatePath(`/apps/${campaign.id}/informacoes`);
       revalidatePath(`/apps/${campaign.id}`);
+      if (moved?.untilAfter) revalidatePath(`/apps/${campaign.id}/formulario`);
     }
 
     return partialResult(fieldErrors, savedSomething);

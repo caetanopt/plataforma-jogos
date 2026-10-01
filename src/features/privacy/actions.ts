@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { prisma } from "@/server/db/client";
+import { prisma, TRANSACTION_MAX_WAIT_MS } from "@/server/db/client";
 import { requireOrgContext, type OrgContext } from "@/server/auth/session";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
@@ -86,11 +86,11 @@ export async function updateCampaignRetentionAction(_previous: ActionResult, for
     const context = await requireOrgContext();
     assertCan(context, "privacy:manage");
 
-    const campaign = await prisma.campaign.findFirst({
+    const owned = await prisma.campaign.findFirst({
       where: { id: getField(formData, "campaignId"), organizationId: context.organizationId },
-      select: { id: true, timezone: true, dataRetentionDays: true, dataRetentionUntil: true },
+      select: { id: true },
     });
-    if (!campaign) notFound();
+    if (!owned) notFound();
 
     const parsed = campaignRetentionSchema.safeParse(
       campaignRetentionFromForm(getField(formData, "retention"), getField(formData, "retentionUntil")),
@@ -101,32 +101,50 @@ export async function updateCampaignRetentionAction(_previous: ActionResult, for
         ...(errors.date ? { retentionUntil: errors.date } : { retention: "Prazo de conservação: opção inválida." }),
       });
     }
+    const input = parsed.data;
 
-    let data: { dataRetentionDays: number | null; dataRetentionUntil: Date | null };
-    if (parsed.data.mode === "until") {
-      const until = zonedDateTimeToUtc(`${parsed.data.date}T00:00`, campaign.timezone);
-      // Uma data próxima anonimizava tudo sem o aviso de 7 dias (e uma já
-      // passada, na execução seguinte): para isso há a anonimização manual,
-      // na lista de leads, que pede confirmação.
-      if (!until || until.getTime() < Date.now() + RETENTION_WARNING_DAYS * DAY_MS) {
-        return fail("O prazo não foi guardado.", {
-          retentionUntil: `Data de anonimização: pelo menos ${RETENTION_WARNING_DAYS} dias depois de hoje, para dar tempo de exportar.`,
+    // O fuso lido e a data gravada com a campanha bloqueada: uma mudança de
+    // fuso ao mesmo tempo (Informações do projeto) espera, e passa a data
+    // para o fuso novo depois desta (ver moveCampaignTimezone).
+    const saved = await prisma.$transaction(
+      async (tx) => {
+        const [campaign] = await tx.$queryRaw<
+          Array<{ id: string; timezone: string; dataRetentionDays: number | null; dataRetentionUntil: Date | null }>
+        >`SELECT "id", "timezone", "dataRetentionDays", "dataRetentionUntil" FROM "Campaign" WHERE "id" = ${owned.id} FOR NO KEY UPDATE`;
+        if (!campaign) return null;
+
+        let data: { dataRetentionDays: number | null; dataRetentionUntil: Date | null };
+        if (input.mode === "until") {
+          const until = zonedDateTimeToUtc(`${input.date}T00:00`, campaign.timezone);
+          // Uma data próxima anonimizava tudo sem o aviso de 7 dias (e uma já
+          // passada, na execução seguinte): para isso há a anonimização manual,
+          // na lista de leads, que pede confirmação.
+          if (!until || until.getTime() < Date.now() + RETENTION_WARNING_DAYS * DAY_MS) return { tooSoon: true as const };
+          data = { dataRetentionDays: null, dataRetentionUntil: until };
+        } else if (input.mode === "days") {
+          data = { dataRetentionDays: input.days, dataRetentionUntil: null };
+        } else {
+          data = { dataRetentionDays: null, dataRetentionUntil: null };
+        }
+
+        const changed =
+          data.dataRetentionDays !== campaign.dataRetentionDays ||
+          data.dataRetentionUntil?.getTime() !== campaign.dataRetentionUntil?.getTime();
+        await tx.campaign.update({
+          where: { id: campaign.id },
+          data: { ...data, ...(changed ? { dataRetentionChangedAt: new Date() } : {}) },
         });
-      }
-      data = { dataRetentionDays: null, dataRetentionUntil: until };
-    } else if (parsed.data.mode === "days") {
-      data = { dataRetentionDays: parsed.data.days, dataRetentionUntil: null };
-    } else {
-      data = { dataRetentionDays: null, dataRetentionUntil: null };
+        return { tooSoon: false as const, campaign, data, changed };
+      },
+      { maxWait: TRANSACTION_MAX_WAIT_MS, timeout: 15_000 },
+    );
+    if (!saved) notFound();
+    if (saved.tooSoon) {
+      return fail("O prazo não foi guardado.", {
+        retentionUntil: `Data de anonimização: pelo menos ${RETENTION_WARNING_DAYS} dias depois de hoje, para dar tempo de exportar.`,
+      });
     }
-
-    const changed =
-      data.dataRetentionDays !== campaign.dataRetentionDays ||
-      data.dataRetentionUntil?.getTime() !== campaign.dataRetentionUntil?.getTime();
-    await prisma.campaign.update({
-      where: { id: campaign.id },
-      data: { ...data, ...(changed ? { dataRetentionChangedAt: new Date() } : {}) },
-    });
+    const { campaign, data, changed } = saved;
     await logAudit({
       organizationId: context.organizationId,
       userId: context.userId,
@@ -144,7 +162,7 @@ export async function updateCampaignRetentionAction(_previous: ActionResult, for
     revalidatePath(`/apps/${campaign.id}/formulario`);
     revalidatePath("/leads");
     return ok(
-      changed && parsed.data.mode !== "inherit"
+      changed && input.mode !== "inherit"
         ? `Prazo guardado. A anonimização por este prazo começa daqui a ${RETENTION_WARNING_DAYS} dias.`
         : undefined,
     );

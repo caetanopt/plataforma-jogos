@@ -1,6 +1,8 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // Índices parciais (@@index com `where`): o das participações por anonimizar.
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -600,6 +602,11 @@ model Participation {
   // Controlo de duplicados por e-mail/telefone dentro da campanha (secção 11).
   @@index([campaignId, email])
   @@index([campaignId, phone])
+  // As que ainda têm dados pessoais, por campanha e data (§24): a tarefa
+  // diária lê as mais antigas primeiro. Pelo índice (campaignId, createdAt,
+  // id), passava por todas as já anonimizadas (as mais antigas) antes de
+  // chegar a uma por anonimizar, em cada lote e em cada dia.
+  @@index([campaignId, createdAt, id], map: "Participation_pending_anonymization_idx", where: raw("\"anonymizedAt\" IS NULL"))
 }
 
 enum ConsentStatus {

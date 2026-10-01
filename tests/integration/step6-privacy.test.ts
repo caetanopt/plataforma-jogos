@@ -236,6 +236,26 @@ describe("tema e informação legal na página pública", () => {
     expect(logoImage).toMatchObject({ src: logo.url, alt: "Marca Exemplo" });
   });
 
+  it("o logótipo de um brand kit leva o nome da marca, ou o texto alternativo gravado", async () => {
+    const { campaign, theme } = await createCampaign(a);
+    // Sem texto alternativo gravado (como sai hoje do upload).
+    const logo = await media(a, "logo-kit");
+    const organization = await prisma.organization.findUniqueOrThrow({ where: { id: a.id } });
+    const kit = await prisma.campaignTheme.create({
+      data: { organizationId: a.id, name: "Toyota", isBrandKit: true, logoMediaId: logo.id },
+    });
+    await prisma.campaignTheme.update({ where: { id: theme.id }, data: { logoMediaId: logo.id, sourceBrandKitId: kit.id } });
+    const alt = async () => findProps<{ src: string; alt: string }>(await renderPlay(campaign.slug), "src")?.alt;
+
+    // A campanha é da Toyota, feita pela organização: não o nome desta.
+    expect(await alt()).toBe("Toyota");
+    // O kit mudou de logótipo: este já não é o da marca do kit.
+    await prisma.campaignTheme.update({ where: { id: kit.id }, data: { logoMediaId: null } });
+    expect(await alt()).toBe(organization.name);
+    await prisma.mediaAsset.update({ where: { id: logo.id }, data: { altText: "Toyota Caetano Portugal" } });
+    expect(await alt()).toBe("Toyota Caetano Portugal");
+  });
+
   it("o jogo recebe o texto legal, os links legais e o contacto de privacidade", async () => {
     await prisma.organization.update({ where: { id: a.id }, data: { privacyContactEmail: "privacidade@marca.pt" } });
     const { campaign } = await createCampaign(a);

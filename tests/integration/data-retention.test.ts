@@ -30,6 +30,8 @@ const { anonymizeLeadsAction, updateCampaignRetentionAction, updateOrganizationR
   "@/features/privacy/actions"
 );
 const { retentionOutlook, retentionJobStatus } = await import("@/features/privacy/retention-queries");
+const { updateProjectInfoAction } = await import("@/features/campaigns/steps/project-info-actions");
+const { utcToZonedDateTimeLocal } = await import("@/lib/dates/timezone");
 const { getCampaignStats } = await import("@/features/analytics/campaign-stats");
 const { listLeads } = await import("@/features/leads/queries");
 const { resolveDateRange } = await import("@/lib/dates/range");
@@ -658,6 +660,49 @@ describe("configuração do prazo", () => {
 
     expect((await save("inherit")).status).toBe("success");
     expect(await stored()).toEqual({ dataRetentionDays: null, dataRetentionUntil: null });
+  });
+
+  it("mudar o fuso da campanha mantém o dia da anonimização, sem reiniciar o aviso", async () => {
+    const { campaign } = await createCampaign(a, { timezone: "Europe/Lisbon" });
+    state.current = a.contexts.ORG_ADMIN;
+    const nextYear = new Date().getUTCFullYear() + 1;
+    await updateCampaignRetentionAction(IDLE, form({ campaignId: campaign.id, retention: "until", retentionUntil: `${nextYear}-01-15` }));
+    const before = await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
+    // 00:00 em Lisboa no inverno é 00:00 UTC.
+    expect(before.dataRetentionUntil).toEqual(new Date(`${nextYear}-01-15T00:00:00Z`));
+
+    const result = await updateProjectInfoAction(IDLE, form({ campaignId: campaign.id, timezone: "America/Sao_Paulo" }));
+    expect(result.status).toBe("success");
+    const after = await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } });
+    // 00:00 em São Paulo (UTC-3) do mesmo dia: o editor continua a mostrar 15.
+    expect(after).toMatchObject({ timezone: "America/Sao_Paulo", dataRetentionUntil: new Date(`${nextYear}-01-15T03:00:00Z`) });
+    expect(utcToZonedDateTimeLocal(after.dataRetentionUntil!, after.timezone)).toBe(`${nextYear}-01-15T00:00`);
+    // O dia não mudou: não é uma alteração do prazo (o aviso de 7 dias não recomeça).
+    expect(after.dataRetentionChangedAt).toEqual(before.dataRetentionChangedAt);
+    const audit = await prisma.auditLog.findFirst({
+      where: { organizationId: a.id, entityId: campaign.id, action: "UPDATE", metadata: { path: ["step"], equals: "informacoes" } },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit?.metadata).toMatchObject({
+      timezoneBefore: "Europe/Lisbon",
+      timezoneAfter: "America/Sao_Paulo",
+      dataRetentionUntilAfter: `${nextYear}-01-15T03:00:00.000Z`,
+    });
+
+    // O mesmo fuso outra vez (o autosave manda tudo): nada muda.
+    await updateProjectInfoAction(IDLE, form({ campaignId: campaign.id, timezone: "America/Sao_Paulo" }));
+    expect((await prisma.campaign.findUniqueOrThrow({ where: { id: campaign.id } })).dataRetentionUntil).toEqual(
+      after.dataRetentionUntil,
+    );
+
+    // Sem data de anonimização, só o fuso muda.
+    const other = await createCampaign(a, { timezone: "Europe/Lisbon", dataRetentionDays: 90 });
+    await updateProjectInfoAction(IDLE, form({ campaignId: other.campaign.id, timezone: "Asia/Tokyo" }));
+    expect(await prisma.campaign.findUniqueOrThrow({ where: { id: other.campaign.id } })).toMatchObject({
+      timezone: "Asia/Tokyo",
+      dataRetentionDays: 90,
+      dataRetentionUntil: null,
+    });
   });
 
   it("não muda o prazo de uma campanha de outra organização", async () => {

@@ -331,6 +331,11 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_participantId_idx" ON "Pa
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignVersionId_idx" ON "Participation"("campaignVersionId");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_ipAddress_idx" ON "Participation"("campaignId", "ipAddress");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_campaignId_sessionId_idx" ON "Participation"("campaignId", "sessionId");
+-- O das participações por anonimizar (20261001090000_pending_anonymization_index) precisa da
+-- coluna da migração 20260930213627_data_retention, que é idempotente: criá-la antes não a
+-- estraga (o ADD COLUMN é instantâneo, sem valor por omissão).
+ALTER TABLE "Participation" ADD COLUMN IF NOT EXISTS "anonymizedAt" TIMESTAMP(3);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Participation_pending_anonymization_idx" ON "Participation"("campaignId", "createdAt", "id") WHERE ("anonymizedAt" IS NULL);
 
 -- Tem de vir vazio. Um índice interrompido fica inválido: apagá-lo
 -- (DROP INDEX CONCURRENTLY "<nome>";) e voltar a criá-lo.
@@ -339,8 +344,8 @@ SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
 
 Se um índice inválido escapar, a migração falha com o nome dele em vez de passar por ele.
 
-As migrações `20260930165124_performance_indexes` e `20260930180000_drop_duplicate_unique_indexes`
-desistem se não conseguirem um bloqueio em 5 s (uma transação longa a usar a tabela), em vez de
+As migrações `20260930165124_performance_indexes`, `20260930180000_drop_duplicate_unique_indexes`
+e `20261001090000_pending_anonymization_index` desistem se não conseguirem um bloqueio em 5 s (uma transação longa a usar a tabela), em vez de
 porem as outras queries em fila. Se o deploy falhar numa migração (o erro do Prisma diz qual),
 marcá-la como revertida e voltar a correr o workflow:
 
@@ -362,6 +367,21 @@ normalizar. A migração é idempotente, por isso volte a corrê-la depois do ar
 ```bash
 npx prisma db execute --file prisma/migrations/20260929230000_normalize_participation_phone/migration.sql
 ```
+
+Os dados pessoais antigos dos participantes (nome, e-mail e telefone de antes da migração
+`20260928115347_participation_identity`, que os copiou para cada participação) já não são
+escritos nem lidos, mas continuam na base de dados. Depois de confirmar na lista de leads de
+produção que as leads antigas mostram a identidade certa, apagá-los (irreversível; imprime só
+contagens):
+
+```bash
+npm run privacy:clear-legacy                    # simulação: quantos e de que organizações
+npm run privacy:clear-legacy -- --apply         # apaga; fica na auditoria de cada organização
+```
+
+A limpeza recusa enquanto a migração não tiver corrido e enquanto houver leads com a identidade
+só no participante (formulários que a cópia não conseguiu mapear): a simulação diz quantas.
+Para as perder na mesma, `--apply --accept-loss`. Com `--organization <id>`, só uma organização.
 
 ## Estrutura
 

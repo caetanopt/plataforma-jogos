@@ -67,3 +67,13 @@ export function utcToZonedDateTimeLocal(date: Date, timeZone: string): string {
   const hour = parts.hour === "24" ? "00" : parts.hour;
   return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}`;
 }
+
+/**
+ * O mesmo dia e a mesma hora de parede noutro fuso: uma data escolhida como
+ * "1 de dezembro, 00:00" continua a ser essa quando a campanha muda de fuso
+ * (o instante UTC muda). Os segundos não contam: as datas do editor são ao
+ * minuto.
+ */
+export function sameWallClockIn(date: Date, fromTimeZone: string, toTimeZone: string): Date {
+  return zonedDateTimeToUtc(utcToZonedDateTimeLocal(date, fromTimeZone), toTimeZone) ?? date;
+}

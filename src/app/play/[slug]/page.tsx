@@ -110,6 +110,20 @@ export default async function PublicPlayPage({
 
   // O tema da campanha (Marca e design): cores, tipografia, fundo e logótipo.
   const brandLogo = theme?.logoMediaId ? mediaById.get(theme.logoMediaId) : undefined;
+  // Sem texto alternativo gravado: o nome do brand kit de onde veio o
+  // logótipo (a marca que aparece, que pode não ser a da organização — uma
+  // campanha da Toyota feita pela Caetano); só sem kit, o da organização.
+  const brandKit =
+    brandLogo && !brandLogo.altText && theme?.sourceBrandKitId
+      ? await prisma.campaignTheme.findFirst({
+          where: { id: theme.sourceBrandKitId, organizationId: campaign.organizationId, isBrandKit: true },
+          select: { name: true, logoMediaId: true },
+        })
+      : null;
+  const brandLogoAlt =
+    brandLogo?.altText?.trim() ||
+    (brandKit?.logoMediaId === theme?.logoMediaId ? brandKit?.name.trim() : "") ||
+    campaign.organization.name;
   // O jogo marca o seu próprio <main>, para o rodapé legal ficar fora dele
   // (PublicGameFlow, `landmarks`); as mensagens de estado vão num <main> aqui.
   const shell = (children: React.ReactNode, { main = true }: { main?: boolean } = {}) => (
@@ -133,9 +147,8 @@ export default async function PublicPlayPage({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={brandLogo.url}
-            // Sem texto alternativo gravado, o nome da organização: "Logótipo"
-            // não diz de quem é.
-            alt={brandLogo.altText || campaign.organization.name}
+            // "Logótipo" não diz de quem é: o nome da marca (acima).
+            alt={brandLogoAlt}
             className="h-10 max-w-[60%] object-contain"
           />
         </header>
