@@ -97,15 +97,19 @@ describe.runIf(LOGIN_DISABLED_IN_PRODUCTION)("auth() com o login desligado em pr
 
   it("um superadmin sem membership fica na organização mais antiga, em vez de sem nenhuma", async () => {
     const { user } = await superAdmin(false);
-    const oldest = await prisma.organization.findFirstOrThrow({
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
+    // A base do CI não tem seed e as outras suites criam e apagam organizações
+    // em paralelo: a "mais antiga" vem de um stub, não do que lá estiver.
+    const oldestOrganization = vi
+      .spyOn(prisma.organization, "findFirst")
+      .mockResolvedValueOnce({ id: "org-mais-antiga" } as never);
     requestTo(PRODUCTION_DOMAIN);
 
     const session = await auth();
 
-    expect(session?.user).toMatchObject({ id: user.id, activeOrganizationId: oldest.id });
+    expect(oldestOrganization).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: "asc" } }),
+    );
+    expect(session?.user).toMatchObject({ id: user.id, activeOrganizationId: "org-mais-antiga" });
   });
 
   it("pelo URL próprio de um deploy, usa a sessão real (pede login)", async () => {

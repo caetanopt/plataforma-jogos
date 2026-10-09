@@ -54,13 +54,13 @@ superadmin). Só vale no deploy de produção do Vercel e para pedidos ao domín
 deploy continuam a pedir login. Enquanto estiver assim, o backoffice mostra um aviso permanente e
 a gestão de utilizadores fica só para consulta.
 
-Para voltar a exigir login:
+Para voltar a exigir login (só está de volta depois do passo 2):
 
 1. Pôr `false`, publicar no branch de desenvolvimento e no `main`, e confirmar que o domínio de
    produção pede login.
-2. No Vercel, nunca fazer Instant Rollback nem Promote para um deploy feito enquanto estava `true`
-   (cada deploy congela o valor e voltava a abrir o domínio). O mais seguro é apagá-los em
-   *Deployments*.
+2. No Vercel, apagar em *Deployments* todos os deploys feitos enquanto estava `true`. Cada deploy
+   congela o valor, e o Vercel ainda pode encaminhar pedidos do domínio de produção para um deploy
+   anterior (Instant Rollback, Promote, Skew Protection, Rolling Releases).
 3. Rever na auditoria o que se fez nesse período: tudo aparece em nome do superadmin.
 
 Sem Docker, o storage pode ser substituído pelo mock s3rver, na mesma porta:

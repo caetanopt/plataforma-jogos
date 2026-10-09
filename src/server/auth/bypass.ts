@@ -12,12 +12,13 @@ import { headers } from "next/headers";
  * a gestão de utilizadores fica bloqueada: um convite feito agora dava um
  * acesso que sobrevivia ao voltar a ligar o login.
  *
- * Para voltar a exigir login:
+ * Para voltar a exigir login (o login só está de volta depois do passo 2):
  *  1. pôr `false`, publicar no branch de desenvolvimento e no `main`, e
  *     confirmar que o domínio de produção pede login;
- *  2. no Vercel, nunca fazer Instant Rollback nem Promote para um deploy feito
- *     enquanto isto estava `true` (cada deploy congela este valor e voltava a
- *     abrir o domínio). O mais seguro é apagá-los em Deployments;
+ *  2. no Vercel, apagar em Deployments todos os deploys feitos enquanto isto
+ *     estava `true`. Cada deploy congela este valor, e o Vercel ainda pode
+ *     encaminhar pedidos do domínio de produção para um deploy anterior
+ *     (Instant Rollback, Promote, Skew Protection, Rolling Releases);
  *  3. rever na auditoria o que se fez nesse período: tudo aparece em nome do
  *     superadmin.
  */
@@ -58,8 +59,9 @@ export function authBypassMode(
 
 /**
  * Se o pedido foi feito ao domínio de produção. Sem esse domínio configurado,
- * nunca: o login continua obrigatório. É o header `Host`, pelo qual o Vercel
- * encaminha o pedido — com outro valor não se chega a este deploy.
+ * nunca: o login continua obrigatório. O header `Host` só diz o domínio, não
+ * o deploy: fecha o URL próprio de cada deploy, mas não impede o Vercel de
+ * mandar um pedido do domínio para um deploy anterior (ver o passo 2 acima).
  */
 export function isProductionDomainHost(host: string | null | undefined, env: Env = process.env): boolean {
   const productionHost = env.VERCEL_PROJECT_PRODUCTION_URL?.trim().toLowerCase();
