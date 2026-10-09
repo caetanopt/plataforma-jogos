@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/client";
 import { requireOrgContext } from "@/server/auth/session";
+import { isLoginBypassed } from "@/server/auth/bypass";
 import { assertCan } from "@/server/permissions";
 import { logAudit } from "@/server/audit/log";
 import { hashPassword } from "@/lib/security/password";
@@ -18,9 +19,20 @@ const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 class LastAdminError extends Error {}
 
+/**
+ * Com o login desligado não se gerem utilizadores: um convite ou um papel
+ * mudado agora continuava a valer depois de o login voltar, e quem os fizesse
+ * era qualquer pessoa com o link. O formulário nem aparece; isto trava um
+ * pedido feito à mão.
+ */
+async function refuseWhileLoginBypassed(): Promise<void> {
+  if (await isLoginBypassed()) redirect("/users?error=login_disabled");
+}
+
 export async function inviteUserAction(formData: FormData): Promise<void> {
   const context = await requireOrgContext();
   assertCan(context, "user:manage");
+  await refuseWhileLoginBypassed();
 
   const parsed = inviteUserSchema.safeParse({
     name: getField(formData, "name"),
@@ -133,6 +145,7 @@ export async function inviteUserAction(formData: FormData): Promise<void> {
 export async function updateMembershipAction(formData: FormData): Promise<void> {
   const context = await requireOrgContext();
   assertCan(context, "user:manage");
+  await refuseWhileLoginBypassed();
 
   const membershipId = getField(formData, "membershipId");
   const membership = await prisma.membership.findFirst({
@@ -191,6 +204,7 @@ export async function updateMembershipAction(formData: FormData): Promise<void> 
 export async function removeMembershipAction(formData: FormData): Promise<void> {
   const context = await requireOrgContext();
   assertCan(context, "user:manage");
+  await refuseWhileLoginBypassed();
 
   const membershipId = getField(formData, "membershipId");
   const membership = await prisma.membership.findFirst({

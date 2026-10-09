@@ -45,6 +45,24 @@ Para substituir a password do superadmin em produção (por exemplo, se tiver si
 A reposição invalida os links de recuperação pendentes e fica registada na auditoria. As
 sessões já abertas continuam válidas até expirarem (8 horas).
 
+### Produção: login desligado (desde 9 de outubro de 2026, a pedido)
+
+Com `LOGIN_DISABLED_IN_PRODUCTION = true` (`src/server/auth/bypass.ts`), quem abrir o
+backoffice no domínio de produção entra sem password, como o utilizador ativo mais antigo (o
+superadmin). Só vale no deploy de produção do Vercel e para pedidos ao domínio de produção
+(`VERCEL_PROJECT_PRODUCTION_URL`); os previews, o desenvolvimento local e o URL próprio de cada
+deploy continuam a pedir login. Enquanto estiver assim, o backoffice mostra um aviso permanente e
+a gestão de utilizadores fica só para consulta.
+
+Para voltar a exigir login:
+
+1. Pôr `false`, publicar no branch de desenvolvimento e no `main`, e confirmar que o domínio de
+   produção pede login.
+2. No Vercel, nunca fazer Instant Rollback nem Promote para um deploy feito enquanto estava `true`
+   (cada deploy congela o valor e voltava a abrir o domínio). O mais seguro é apagá-los em
+   *Deployments*.
+3. Rever na auditoria o que se fez nesse período: tudo aparece em nome do superadmin.
+
 Sem Docker, o storage pode ser substituído pelo mock s3rver, na mesma porta:
 
 ```bash

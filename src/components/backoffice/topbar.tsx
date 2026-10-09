@@ -7,11 +7,14 @@ export function Topbar({
   userName,
   visibleHrefs,
   logoUrl,
+  showLogout = true,
 }: {
   organizationName: string;
   userName: string;
   visibleHrefs: string[];
   logoUrl?: string | null;
+  /** Falso com o login desligado: sair não terminava nada. */
+  showLogout?: boolean;
 }) {
   return (
     // Fixa ao fazer scroll, opaca: o conteúdo passa por baixo sem se ver.
@@ -30,16 +33,18 @@ export function Topbar({
           </span>
           <span className="text-sm text-caetano-anthracite">{userName}</span>
         </span>
-        <form action="/api/logout" method="post">
-          <button
-            type="submit"
-            className="flex min-h-10 cursor-pointer touch-manipulation items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
-          >
-            <LogOut size={16} aria-hidden="true" />
-            {/* No telemóvel só o ícone à vista, mas o botão continua a chamar-se "Sair". */}
-            <span className="sr-only sm:not-sr-only">Sair</span>
-          </button>
-        </form>
+        {showLogout && (
+          <form action="/api/logout" method="post">
+            <button
+              type="submit"
+              className="flex min-h-10 cursor-pointer touch-manipulation items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm text-caetano-anthracite transition-colors hover:bg-caetano-medium-gray-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caetano-cyan active:bg-caetano-medium-gray-40"
+            >
+              <LogOut size={16} aria-hidden="true" />
+              {/* No telemóvel só o ícone à vista, mas o botão continua a chamar-se "Sair". */}
+              <span className="sr-only sm:not-sr-only">Sair</span>
+            </button>
+          </form>
+        )}
       </div>
     </header>
   );

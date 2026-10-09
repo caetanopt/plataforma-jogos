@@ -1,6 +1,7 @@
 import { ChevronDown, UserPlus, Users } from "lucide-react";
 import { pageParam } from "@/lib/forms/search-params";
 import { requirePagePermission } from "@/server/auth/page-guard";
+import { isLoginBypassed } from "@/server/auth/bypass";
 import { can } from "@/server/permissions";
 import { prisma } from "@/server/db/client";
 import { inviteUserAction, removeMembershipAction, updateMembershipAction } from "@/features/users/actions";
@@ -31,6 +32,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   validation: "Verifique os dados do convite.",
   already_member: "Este utilizador já pertence à organização.",
   last_admin: "Tem de existir pelo menos um administrador na organização.",
+  login_disabled: "Com o login desligado não é possível convidar utilizadores nem mudar papéis.",
 };
 
 /* A caixa inteira é a área clicável da opção (≥ 40 px), não só o quadrado. */
@@ -57,6 +59,8 @@ export default async function UsersPage({
 }) {
   const context = await requirePagePermission("user:manage");
   const search = await searchParams;
+  // Com o login desligado, a lista fica só para consulta (ver features/users/actions.ts).
+  const canManage = can(context, "user:manage") && !(await isLoginBypassed());
 
   const page = pageParam(search.page);
   const where = { organizationId: context.organizationId };
@@ -83,6 +87,15 @@ export default async function UsersPage({
       {search.error && (
         <div className="mb-6">
           <Alert variant="error">{ERROR_MESSAGES[search.error] ?? "Não foi possível concluir a operação."}</Alert>
+        </div>
+      )}
+
+      {!canManage && (
+        <div className="mb-6">
+          <Alert variant="info" live={false}>
+            Com o login desligado, os utilizadores ficam só para consulta: um convite ou um papel mudado agora
+            continuava a valer depois de o login voltar.
+          </Alert>
         </div>
       )}
 
@@ -121,7 +134,11 @@ export default async function UsersPage({
                   <th scope="col" className="hidden whitespace-nowrap px-4 py-3 font-medium xl:table-cell">
                     Permissões extra
                   </th>
-                  <th scope="col" className="px-4 py-3 font-medium sm:px-5">Ações</th>
+                  {canManage && (
+                    <th scope="col" className="px-4 py-3 font-medium sm:px-5">
+                      Ações
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-caetano-medium-gray-40">
@@ -178,87 +195,89 @@ export default async function UsersPage({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 sm:px-5">
-                      <details className="group/edit pt-0.5">
-                        <summary
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                            "list-none [&::-webkit-details-marker]:hidden group-open/edit:border-caetano-deep-blue-80 group-open/edit:bg-caetano-medium-gray-20",
-                          )}
-                        >
-                          Editar
-                          <ChevronDown
-                            size={14}
-                            aria-hidden="true"
-                            className="transition-transform duration-200 ease-(--ease-out-expo) group-open/edit:rotate-180"
-                          />
-                        </summary>
-                        {/*
-                          O painel abre para a esquerda, por baixo do papel (a linha cresce,
-                          esse espaço fica vazio): com a margem negativa só conta ~96 px para a
-                          largura da coluna, e a tabela não passa a deslizar ao editar.
-                        */}
-                        <div className="relative mt-2 -ml-48 w-72 origin-top-right rounded-xl border border-caetano-medium-gray-40 bg-white p-3 shadow-md motion-safe:animate-scale-in">
-                          <form action={updateMembershipAction} className="space-y-2">
-                            <input type="hidden" name="membershipId" value={membership.id} />
-                            {/* O nome acessível começa pelo texto visível e diz de quem é (WCAG 2.5.3). */}
-                            <Label htmlFor={`membership-${membership.id}-role`} className="mb-1 text-xs">
-                              Papel
-                            </Label>
-                            <Select
-                              id={`membership-${membership.id}-role`}
-                              name="role"
-                              defaultValue={membership.role}
-                              aria-label={`Papel de ${membership.user.name}`}
-                              className="h-9"
-                            >
-                              {Object.entries(MEMBERSHIP_ROLE_LABELS).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                  {label}
-                                </option>
-                              ))}
-                            </Select>
-                            <div>
-                              <label className={checkboxLabelClass}>
-                                <input
-                                  type="checkbox"
-                                  name="canPublish"
-                                  defaultChecked={membership.canPublish}
-                                  className={checkboxClass}
-                                />
-                                Pode publicar (Editor)
-                              </label>
-                              <label className={checkboxLabelClass}>
-                                <input
-                                  type="checkbox"
-                                  name="canExportLeads"
-                                  defaultChecked={membership.canExportLeads}
-                                  className={checkboxClass}
-                                />
-                                Pode exportar leads (Analista)
-                              </label>
-                            </div>
-                            <SubmitButton pendingLabel="A guardar…" size="sm" className="w-full">
-                              Guardar
-                            </SubmitButton>
-                          </form>
-                          <form
-                            action={removeMembershipAction}
-                            className="mt-3 border-t border-caetano-medium-gray-40 pt-3"
+                    {canManage && (
+                      <td className="px-4 py-3 sm:px-5">
+                        <details className="group/edit pt-0.5">
+                          <summary
+                            className={cn(
+                              buttonVariants({ variant: "outline", size: "sm" }),
+                              "list-none [&::-webkit-details-marker]:hidden group-open/edit:border-caetano-deep-blue-80 group-open/edit:bg-caetano-medium-gray-20",
+                            )}
                           >
-                            <input type="hidden" name="membershipId" value={membership.id} />
-                            <ConfirmSubmitButton
-                              confirmMessage={`Remover ${membership.user.name} da organização?`}
-                              size="sm"
-                              variant="ghost"
-                              className="w-full text-danger-strong hover:bg-danger-surface active:bg-danger-surface"
+                            Editar
+                            <ChevronDown
+                              size={14}
+                              aria-hidden="true"
+                              className="transition-transform duration-200 ease-(--ease-out-expo) group-open/edit:rotate-180"
+                            />
+                          </summary>
+                          {/*
+                            O painel abre para a esquerda, por baixo do papel (a linha cresce,
+                            esse espaço fica vazio): com a margem negativa só conta ~96 px para a
+                            largura da coluna, e a tabela não passa a deslizar ao editar.
+                          */}
+                          <div className="relative mt-2 -ml-48 w-72 origin-top-right rounded-xl border border-caetano-medium-gray-40 bg-white p-3 shadow-md motion-safe:animate-scale-in">
+                            <form action={updateMembershipAction} className="space-y-2">
+                              <input type="hidden" name="membershipId" value={membership.id} />
+                              {/* O nome acessível começa pelo texto visível e diz de quem é (WCAG 2.5.3). */}
+                              <Label htmlFor={`membership-${membership.id}-role`} className="mb-1 text-xs">
+                                Papel
+                              </Label>
+                              <Select
+                                id={`membership-${membership.id}-role`}
+                                name="role"
+                                defaultValue={membership.role}
+                                aria-label={`Papel de ${membership.user.name}`}
+                                className="h-9"
+                              >
+                                {Object.entries(MEMBERSHIP_ROLE_LABELS).map(([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </Select>
+                              <div>
+                                <label className={checkboxLabelClass}>
+                                  <input
+                                    type="checkbox"
+                                    name="canPublish"
+                                    defaultChecked={membership.canPublish}
+                                    className={checkboxClass}
+                                  />
+                                  Pode publicar (Editor)
+                                </label>
+                                <label className={checkboxLabelClass}>
+                                  <input
+                                    type="checkbox"
+                                    name="canExportLeads"
+                                    defaultChecked={membership.canExportLeads}
+                                    className={checkboxClass}
+                                  />
+                                  Pode exportar leads (Analista)
+                                </label>
+                              </div>
+                              <SubmitButton pendingLabel="A guardar…" size="sm" className="w-full">
+                                Guardar
+                              </SubmitButton>
+                            </form>
+                            <form
+                              action={removeMembershipAction}
+                              className="mt-3 border-t border-caetano-medium-gray-40 pt-3"
                             >
-                              Remover
-                            </ConfirmSubmitButton>
-                          </form>
-                        </div>
-                      </details>
-                    </td>
+                              <input type="hidden" name="membershipId" value={membership.id} />
+                              <ConfirmSubmitButton
+                                confirmMessage={`Remover ${membership.user.name} da organização?`}
+                                size="sm"
+                                variant="ghost"
+                                className="w-full text-danger-strong hover:bg-danger-surface active:bg-danger-surface"
+                              >
+                                Remover
+                              </ConfirmSubmitButton>
+                            </form>
+                          </div>
+                        </details>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -275,7 +294,7 @@ export default async function UsersPage({
         />
       </section>
 
-      {can(context, "user:manage") && (
+      {canManage && (
         <div className="mt-8 sm:mt-10">
           <BrandFormPanel
             headingId="invite-heading"
